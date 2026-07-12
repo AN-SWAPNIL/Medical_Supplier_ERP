@@ -1,4 +1,4 @@
-import type { EntityRecord, FieldConfig, Role } from "../../types";
+import type { EntityRecord, FieldConfig, Role } from "../../types/index.js";
 
 const salesSensitiveFields = new Set([
   "purchasePrice",

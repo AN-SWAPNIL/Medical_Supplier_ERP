@@ -1,4 +1,4 @@
-import type { AiRecommendation, DashboardSummary, EntityRecord, Role, User } from "../types";
+import type { AiRecommendation, DashboardSummary, EntityRecord, Role, User } from "../types/index.js";
 
 export const demoUsers: User[] = [
   {

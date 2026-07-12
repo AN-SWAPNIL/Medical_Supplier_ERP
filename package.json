@@ -9,7 +9,8 @@
     "dev:server": "npm run dev:api",
     "server": "tsx server/index.ts",
     "dev:web": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && npm run typecheck:api && vite build",
+    "typecheck:api": "tsc --noEmit --ignoreConfig --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck api/index.ts \"api/[...path].ts\" server/index.ts",
     "lint": "eslint .",
     "smoke": "node scripts/smoke.mjs",
     "preview": "vite preview --host 0.0.0.0"

@@ -1,8 +1,8 @@
 import cors from "cors";
 import express, { type Request } from "express";
-import { aiRecommendations, collections as seedCollections, dashboardSummary, demoUsers, passwordByEmail } from "../src/data/seed";
-import { canDeleteRecordForRole, canEditRecordForRole, sanitizeRecordForRole, sanitizeRecordsForRole } from "../src/lib/permissions/dataVisibility";
-import type { AiChatResponse, AiRecommendation, ApiResponse, DashboardSummary, EntityRecord, Role, Session, User } from "../src/types";
+import { aiRecommendations, collections as seedCollections, dashboardSummary, demoUsers, passwordByEmail } from "../src/data/seed.js";
+import { canDeleteRecordForRole, canEditRecordForRole, sanitizeRecordForRole, sanitizeRecordsForRole } from "../src/lib/permissions/dataVisibility.js";
+import type { AiChatResponse, AiRecommendation, ApiResponse, DashboardSummary, EntityRecord, Role, Session, User } from "../src/types/index.js";
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 4174);

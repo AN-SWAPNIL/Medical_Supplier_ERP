@@ -111,6 +111,8 @@ Recommended Vercel settings:
 - Install Command: `npm install`
 - Environment Variables: none required for same-project mock API
 
+Do not set `VITE_API_BASE_URL` on Vercel for this prototype. The frontend should call relative `/api/*` routes in the same Vercel project. If `VITE_API_BASE_URL` is set to `http://localhost:4174`, deployed browsers will fail because `localhost` means the visitor's computer, not the Vercel function.
+
 The frontend calls relative `/api/*` routes by default. On Vercel those routes are handled by `api/[...path].ts`, which imports the Express mock app.
 
 CLI deploy:
