@@ -71,7 +71,7 @@ export default function FloatingAIChat() {
   const promptList = rolePrompts[role];
 
   return (
-    <div className={clsx("fixed bottom-4 z-[60]", open ? "right-4" : "right-4 lg:left-5 lg:right-auto")}>
+    <div className="fixed bottom-4 right-4 z-[60]">
       {open ? (
         <section
           className={clsx(
