@@ -19,6 +19,18 @@ companyScopedCollections.forEach((key) => {
 });
 
 app.use(cors());
+app.use((req, _res, next) => {
+  const [path = "/", query] = req.url.split("?");
+  let normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!normalizedPath.startsWith("/api")) {
+    normalizedPath = normalizedPath === "/" ? "/api" : `/api${normalizedPath}`;
+  }
+
+  normalizedPath = normalizedPath.replace(/^\/api\/v1(?=\/|$)/, "/api");
+  req.url = `${normalizedPath}${query ? `?${query}` : ""}`;
+  next();
+});
 app.use(express.json({ limit: "5mb" }));
 app.use((req, _res, next) => {
   if (req.url.startsWith("/api/v1/")) {
