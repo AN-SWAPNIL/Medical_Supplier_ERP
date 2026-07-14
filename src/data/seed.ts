@@ -434,6 +434,245 @@ export const collections: Record<string, EntityRecord[]> = {
   ]
 };
 
+function addRows(key: string, rows: EntityRecord[]) {
+  collections[key] = [...(collections[key] ?? []), ...rows];
+}
+
+addRows("products", [
+  { id: "prd-006", productCode: "Mip006", productName: "Bicarbonate Cartridge", category: "Hemodialysis", unit: "pcs", brand: "Mipro", manufacturer: "Suzhou Biomed Devices", deviceType: "Dialysis Consumable", purchasePrice: 118, salesPrice: 165, reorderLevel: 1200, description: "Dialysis bicarbonate cartridge with lot-level expiry control.", imageUrl: "https://images.unsplash.com/photo-1583912267550-d44c0f78a38f?auto=format&fit=crop&w=900&q=80", status: "Active" },
+  { id: "prd-007", productCode: "Mip007", productName: "Dialysis Catheter Kit", category: "Dialysis Access", unit: "set", brand: "VascuMed", manufacturer: "Shenzhen VascuMed Co.", deviceType: "Sterile Kit", purchasePrice: 520, salesPrice: 760, reorderLevel: 250, description: "Temporary dialysis catheter kit with sterile pack tracking.", imageUrl: "https://images.unsplash.com/photo-1603398938378-e54eab446dde?auto=format&fit=crop&w=900&q=80", status: "Active" },
+  { id: "prd-008", productCode: "Mip008", productName: "Surgical Gloves", category: "Dialysis Consumable", unit: "box", brand: "SafeHand", manufacturer: "Qingdao SafeHand Medical", deviceType: "Consumable", purchasePrice: 410, salesPrice: 550, reorderLevel: 300, description: "Powder-free sterile surgical gloves for hospital supply.", imageUrl: "https://images.unsplash.com/photo-1584744982491-665216d95f8b?auto=format&fit=crop&w=900&q=80", status: "Active" },
+  { id: "prd-009", productCode: "Mip009", productName: "Nebulizer Mask", category: "Respiratory", unit: "pcs", brand: "Respira", manufacturer: "Nanjing Respira Medical", deviceType: "Respiratory Consumable", purchasePrice: 44, salesPrice: 72, reorderLevel: 1500, description: "Adult nebulizer mask with tubing for respiratory care.", imageUrl: "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?auto=format&fit=crop&w=900&q=80", status: "Active" },
+  { id: "prd-010", productCode: "Mip010", productName: "Infusion Pump Set", category: "Infusion", unit: "set", brand: "Kanghua", manufacturer: "Ningbo Kanghua Healthcare", deviceType: "Infusion Consumable", purchasePrice: 145, salesPrice: 210, reorderLevel: 900, description: "Disposable infusion pump set with controlled issue tracking.", imageUrl: "https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=900&q=80", status: "Active" }
+]);
+
+addRows("suppliers", [
+  { id: "sup-004", companyName: "Ningbo Kanghua Healthcare", country: "China", contactPerson: "Zhao Jun", productCategory: "Infusion", paymentTerms: "40% TT + 60% before shipment", rating: 87, status: "Active" },
+  { id: "sup-005", companyName: "Suzhou Biomed Devices", country: "China", contactPerson: "Wang Yue", productCategory: "Hemodialysis", paymentTerms: "LC at sight", rating: 92, status: "Active" },
+  { id: "sup-006", companyName: "Shenzhen VascuMed Co.", country: "China", contactPerson: "Liu Qiang", productCategory: "Dialysis Access", paymentTerms: "30% TT + 70% against BL", rating: 89, status: "Active" },
+  { id: "sup-007", companyName: "Qingdao SafeHand Medical", country: "China", contactPerson: "Sun Mei", productCategory: "Surgical Consumable", paymentTerms: "TT after inspection", rating: 85, status: "Active" }
+]);
+
+addRows("customers", [
+  { id: "cus-006", customerName: "Evercare Hospital Dhaka", type: "Hospital", territory: "Dhaka North", contactPerson: "Mr. Aminul Bari", phone: "+880 1712 666666", email: "procurement@evercarebd.com", address: "Bashundhara R/A, Dhaka", creditLimit: 4600000, openingDue: 390000, assignedSalesExecutive: "Rafiq Ahmed", ownerId: "sales1", status: "Active" },
+  { id: "cus-007", customerName: "National Kidney Foundation", type: "Clinic", territory: "Dhaka South", contactPerson: "Dr. Mahbub Alam", phone: "+880 1712 777777", email: "store@nkf.org.bd", address: "Mirpur, Dhaka", creditLimit: 2200000, openingDue: 185000, assignedSalesExecutive: "Anika Rahman", ownerId: "sales2", status: "Active" },
+  { id: "cus-008", customerName: "Chattogram Medical College Hospital", type: "Hospital", territory: "Chattogram", contactPerson: "Mr. Ahsan Habib", phone: "+880 1712 888888", email: "supply@cmch.gov.bd", address: "Chawkbazar, Chattogram", creditLimit: 3600000, openingDue: 510000, assignedSalesExecutive: "Anika Rahman", ownerId: "sales2", status: "Active" },
+  { id: "cus-009", customerName: "Medicare Dealer Network", type: "Dealer", territory: "Chattogram", contactPerson: "Mr. Rubel Hasan", phone: "+880 1712 999999", email: "orders@medicaredealer.com", address: "Agrabad, Chattogram", creditLimit: 1500000, openingDue: 275000, assignedSalesExecutive: "Rafiq Ahmed", ownerId: "sales1", status: "Active" },
+  { id: "cus-010", customerName: "LifeLine Pharmacy Chain", type: "Pharmacy", territory: "Dhaka North", contactPerson: "Ms. Tania Sultana", phone: "+880 1713 101010", email: "purchase@lifelinepharma.com", address: "Banani, Dhaka", creditLimit: 950000, openingDue: 68000, assignedSalesExecutive: "Rafiq Ahmed", ownerId: "sales1", status: "Active" }
+]);
+
+addRows("supplier-inquiries", [
+  { id: "inq-003", inquiryNo: "INQ-2026-003", supplier: "Suzhou Biomed Devices", product: "Bicarbonate Cartridge", requestedQty: 12000, targetPrice: 110, status: "Negotiation" },
+  { id: "inq-004", inquiryNo: "INQ-2026-004", supplier: "Shenzhen VascuMed Co.", product: "Dialysis Catheter Kit", requestedQty: 800, targetPrice: 490, status: "Quoted" },
+  { id: "inq-005", inquiryNo: "INQ-2026-005", supplier: "Qingdao SafeHand Medical", product: "Surgical Gloves", requestedQty: 900, targetPrice: 395, status: "Pending" },
+  { id: "inq-006", inquiryNo: "INQ-2026-006", supplier: "Nanjing Respira Medical", product: "Nebulizer Mask", requestedQty: 6000, targetPrice: 39, status: "Quoted" }
+]);
+
+addRows("proforma-invoices", [
+  { id: "pi-003", piNumber: "PI-SBD-26072", supplier: "Suzhou Biomed Devices", product: "Bicarbonate Cartridge", amount: 14160, currency: "USD", approvalOwner: "Managing Director", status: "Pending Approval" },
+  { id: "pi-004", piNumber: "PI-SVM-26019", supplier: "Shenzhen VascuMed Co.", product: "Dialysis Catheter Kit", amount: 41600, currency: "USD", approvalOwner: "Managing Director", status: "Approved" },
+  { id: "pi-005", piNumber: "PI-QSH-26088", supplier: "Qingdao SafeHand Medical", product: "Surgical Gloves", amount: 32000, currency: "USD", approvalOwner: "Managing Director", status: "Draft" }
+]);
+
+addRows("purchase-orders", [
+  { id: "po-003", poNumber: "PO-2026-003", supplier: "Suzhou Biomed Devices", date: "2026-07-06", product: "Bicarbonate Cartridge", quantity: 12000, currency: "USD", exchangeRate: 123, totalValue: 14160, status: "Pending Approval" },
+  { id: "po-004", poNumber: "PO-2026-004", supplier: "Shenzhen VascuMed Co.", date: "2026-07-08", product: "Dialysis Catheter Kit", quantity: 800, currency: "USD", exchangeRate: 123, totalValue: 41600, status: "Approved" },
+  { id: "po-005", poNumber: "PO-2026-005", supplier: "Qingdao SafeHand Medical", date: "2026-07-10", product: "Surgical Gloves", quantity: 900, currency: "USD", exchangeRate: 123, totalValue: 32000, status: "Draft" }
+]);
+
+addRows("lc-records", [
+  { id: "lc-003", lcNumber: "LC-CBL-26014", bank: "City Bank PLC", supplier: "Shenzhen VascuMed Co.", amount: 41600, expiryDate: "2026-10-05", shipmentDate: "2026-08-12", status: "Open" },
+  { id: "lc-004", lcNumber: "LC-EBL-26028", bank: "Eastern Bank PLC", supplier: "Suzhou Biomed Devices", amount: 14160, expiryDate: "2026-09-30", shipmentDate: "2026-08-02", status: "Draft" }
+]);
+
+addRows("tt-payments", [
+  { id: "tt-003", ttNumber: "TT-SBD-4120", supplier: "Suzhou Biomed Devices", amount: 4248, swiftCopy: "swift-sbd-4120.pdf", status: "Pending Approval" },
+  { id: "tt-004", ttNumber: "TT-QSH-7311", supplier: "Qingdao SafeHand Medical", amount: 9600, swiftCopy: "swift-qsh-7311.pdf", status: "Draft" }
+]);
+
+addRows("shipments", [
+  { id: "shp-003", blNumber: "BL-NGB-33910", containerNumber: "MSKU-2289101", vesselName: "Maersk Hangzhou", etd: "2026-07-18", eta: "2026-08-05", supplier: "Suzhou Biomed Devices", poReference: "PO-2026-003", status: "Preparing" },
+  { id: "shp-004", blNumber: "BL-SZX-92018", containerNumber: "CAIU-7712450", vesselName: "Ever Glory", etd: "2026-07-22", eta: "2026-08-10", supplier: "Shenzhen VascuMed Co.", poReference: "PO-2026-004", status: "Shipped" },
+  { id: "shp-005", blNumber: "BL-QDO-11872", containerNumber: "TGHU-5539107", vesselName: "SITC Qingdao", etd: "2026-07-28", eta: "2026-08-16", supplier: "Qingdao SafeHand Medical", poReference: "PO-2026-005", status: "Preparing" }
+]);
+
+addRows("customs/landed-cost", [
+  { id: "lcst-004", poNumber: "PO-2026-002", consignmentNumber: "TLLU-7398120", lcTtNumber: "TT-KH-2770", productName: "IV Set", productCode: "Mip005", purchaseUnitFob: 32, seaFreightUnit: 1.4, customsDutyUnit: 4.9, cfCostUnit: 0.9, localTransportUnit: 0.5, bankLcInsuranceUnit: 0.45, totalLandedUnit: 40.15, marginPreview: 16.4, status: "Pending Approval" },
+  { id: "lcst-005", poNumber: "PO-2026-004", consignmentNumber: "CAIU-7712450", lcTtNumber: "LC-CBL-26014", productName: "Dialysis Catheter Kit", productCode: "Mip007", purchaseUnitFob: 520, seaFreightUnit: 11.2, customsDutyUnit: 68.5, cfCostUnit: 3.8, localTransportUnit: 1.4, bankLcInsuranceUnit: 2.1, totalLandedUnit: 607, marginPreview: 20.1, status: "Draft" }
+]);
+
+addRows("grn", [
+  { id: "grn-003", grnNumber: "GRN-2026-003", supplier: "MedSure Global Devices", containerReference: "CN-9982", product: "A.V Fistula Needle", receivedQuantity: 35000, rejectedQuantity: 120, batchNumber: "AVF-26-301", lotNumber: "LOT-AV-731", expiryDate: "2027-05-19", binLocation: "B-05-03", warehouse: "Central Medical Warehouse", receivedBy: "Mahmud Hasan", receivedDate: "2026-06-24", status: "Posted" },
+  { id: "grn-004", grnNumber: "GRN-2026-004", supplier: "Hangzhou Carelink Medical", containerReference: "TLLU-7398120", product: "Foley Catheter", receivedQuantity: 9000, rejectedQuantity: 40, batchNumber: "FOL-26-077", lotNumber: "LOT-FOL-412", expiryDate: "2027-12-02", binLocation: "B-06-01", warehouse: "Central Medical Warehouse", receivedBy: "Mahmud Hasan", receivedDate: "2026-07-08", status: "Posted" },
+  { id: "grn-005", grnNumber: "GRN-2026-005", supplier: "Ningbo Kanghua Healthcare", containerReference: "TLLU-7398120", product: "IV Set", receivedQuantity: 24000, rejectedQuantity: 180, batchNumber: "IVS-26-510", lotNumber: "LOT-IVS-904", expiryDate: "2028-01-10", binLocation: "C-02-02", warehouse: "Chattogram Transit Store", receivedBy: "Mahmud Hasan", receivedDate: "2026-07-09", status: "Draft" }
+]);
+
+addRows("inventory/stock", [
+  { id: "stk-004", productCode: "Mip004", productName: "Foley Catheter", totalReceivedQty: 9000, totalSoldQty: 2450, currentStockInHand: 6550, unitLandedCost: 71, totalStockAssetValue: 465050, warehouse: "Central Medical Warehouse", status: "Normal" },
+  { id: "stk-005", productCode: "Mip005", productName: "IV Set", totalReceivedQty: 24000, totalSoldQty: 21700, currentStockInHand: 2300, unitLandedCost: 40.15, totalStockAssetValue: 92345, warehouse: "Chattogram Transit Store", status: "Low Stock" },
+  { id: "stk-006", productCode: "Mip006", productName: "Bicarbonate Cartridge", totalReceivedQty: 0, totalSoldQty: 0, currentStockInHand: 0, unitLandedCost: 0, totalStockAssetValue: 0, warehouse: "Central Medical Warehouse", status: "Low Stock" },
+  { id: "stk-007", productCode: "Mip008", productName: "Surgical Gloves", totalReceivedQty: 900, totalSoldQty: 260, currentStockInHand: 640, unitLandedCost: 410, totalStockAssetValue: 262400, warehouse: "Central Medical Warehouse", status: "Normal" }
+]);
+
+addRows("inventory/batches", [
+  { id: "bat-004", product: "Foley Catheter", batchNumber: "FOL-26-077", lotNumber: "LOT-FOL-412", expiryDate: "2027-12-02", binLocation: "B-06-01", quantity: 6550, fefoRank: 3, status: "Normal" },
+  { id: "bat-005", product: "IV Set", batchNumber: "IVS-26-510", lotNumber: "LOT-IVS-904", expiryDate: "2028-01-10", binLocation: "C-02-02", quantity: 2300, fefoRank: 4, status: "Normal" },
+  { id: "bat-006", product: "Surgical Gloves", batchNumber: "GLV-25-901", lotNumber: "LOT-GLV-201", expiryDate: "2027-02-15", binLocation: "D-01-04", quantity: 640, fefoRank: 1, status: "1 Month Alert" }
+]);
+
+addRows("inventory/movements", [
+  { id: "mov-003", date: "2026-06-26", product: "Blood Tubing Set", batchNumber: "BTS-26-118", movementType: "Sale", quantity: -3000, reference: "INV-2026-004", warehouseUser: "Mahmud Hasan", status: "Posted" },
+  { id: "mov-004", date: "2026-07-08", product: "Foley Catheter", batchNumber: "FOL-26-077", movementType: "Stock In", quantity: 9000, reference: "GRN-2026-004", warehouseUser: "Mahmud Hasan", status: "Posted" },
+  { id: "mov-005", date: "2026-07-09", product: "IV Set", batchNumber: "IVS-26-510", movementType: "Transfer", quantity: -1200, reference: "TRF-CTG-001", warehouseUser: "Mahmud Hasan", status: "Posted" },
+  { id: "mov-006", date: "2026-07-10", product: "Surgical Gloves", batchNumber: "GLV-25-901", movementType: "Adjustment", quantity: -8, reference: "PHY-2026-003", warehouseUser: "Mahmud Hasan", status: "Draft" }
+]);
+
+addRows("inventory/physical-counts", [
+  { id: "pc-003", countNo: "PHY-2026-003", warehouse: "Central Medical Warehouse", product: "Surgical Gloves", batchNumber: "GLV-25-901", systemQty: 648, countedQty: 640, varianceQty: -8, countedBy: "Mahmud Hasan", countDate: "2026-07-10", status: "Pending Approval" },
+  { id: "pc-004", countNo: "PHY-2026-004", warehouse: "Chattogram Transit Store", product: "IV Set", batchNumber: "IVS-26-510", systemQty: 2300, countedQty: 2315, varianceQty: 15, countedBy: "Mahmud Hasan", countDate: "2026-07-11", status: "Draft" }
+]);
+
+addRows("sales/quotations", [
+  { id: "qt-003", quotationNo: "QT-2026-003", customer: "Evercare Hospital Dhaka", product: "Blood Tubing Set", quantity: 1600, unitPrice: 218, discountPercent: 1, ownerId: "sales1", status: "Approved" },
+  { id: "qt-004", quotationNo: "QT-2026-004", customer: "National Kidney Foundation", product: "Dialysis Catheter Kit", quantity: 120, unitPrice: 760, discountPercent: 3, ownerId: "sales2", status: "Pending Approval" },
+  { id: "qt-005", quotationNo: "QT-2026-005", customer: "Chattogram Medical College Hospital", product: "IV Set", quantity: 2400, unitPrice: 48, discountPercent: 0, ownerId: "sales2", status: "Draft" }
+]);
+
+addRows("sales/orders", [
+  { id: "so-003", orderNo: "SO-2026-003", quotationNo: "QT-2026-003", customer: "Evercare Hospital Dhaka", product: "Blood Tubing Set", quantity: 1600, ownerId: "sales1", amount: 348800, status: "Delivered" },
+  { id: "so-004", orderNo: "SO-2026-004", quotationNo: "QT-2026-004", customer: "National Kidney Foundation", product: "Dialysis Catheter Kit", quantity: 120, ownerId: "sales2", amount: 91200, status: "Sales Order" },
+  { id: "so-005", orderNo: "SO-2026-005", quotationNo: "QT-2026-005", customer: "Chattogram Medical College Hospital", product: "IV Set", quantity: 2400, ownerId: "sales2", amount: 115200, status: "Draft" }
+]);
+
+addRows("sales/challans", [
+  { id: "dc-003", challanNo: "DC-2026-003", orderNo: "SO-2026-003", customer: "Evercare Hospital Dhaka", deliveryDate: "2026-07-03", vehicleNo: "DHA-METRO-13-4455", ownerId: "sales1", status: "Delivered" },
+  { id: "dc-004", challanNo: "DC-2026-004", orderNo: "SO-2026-004", customer: "National Kidney Foundation", deliveryDate: "2026-07-12", vehicleNo: "DHA-METRO-14-9921", ownerId: "sales2", status: "Ready" }
+]);
+
+addRows("sales/invoices", [
+  { id: "inv-004", invoiceNo: "INV-2026-004", salesDate: "2026-07-03", customerName: "Evercare Hospital Dhaka", productName: "Blood Tubing Set", productCode: "Mip002", unitLandedCost: 186.27, qtySold: 1600, unitSalePrice: 218, totalCostAmount: 298032, totalGrossRevenue: 348800, profitMarginUnit: 31.73, totalProfitRealized: 50768, ownerId: "sales1", status: "Posted" },
+  { id: "inv-005", invoiceNo: "INV-2026-005", salesDate: "2026-07-04", customerName: "Square Hospital", productName: "Foley Catheter", productCode: "Mip004", unitLandedCost: 71, qtySold: 2450, unitSalePrice: 104, totalCostAmount: 173950, totalGrossRevenue: 254800, profitMarginUnit: 33, totalProfitRealized: 80850, ownerId: "sales2", status: "Posted" },
+  { id: "inv-006", invoiceNo: "INV-2026-006", salesDate: "2026-07-06", customerName: "LifeLine Pharmacy Chain", productName: "Surgical Gloves", productCode: "Mip008", unitLandedCost: 410, qtySold: 260, unitSalePrice: 550, totalCostAmount: 106600, totalGrossRevenue: 143000, profitMarginUnit: 140, totalProfitRealized: 36400, ownerId: "sales1", status: "Draft" }
+]);
+
+addRows("sales/returns", [
+  { id: "sr-002", returnNo: "RET-2026-002", invoiceNo: "INV-2026-004", customer: "Evercare Hospital Dhaka", product: "Blood Tubing Set", quantity: 8, reason: "Seal damage found during receiving", ownerId: "sales1", status: "Draft" },
+  { id: "sr-003", returnNo: "RET-2026-003", invoiceNo: "INV-2026-005", customer: "Square Hospital", product: "Foley Catheter", quantity: 20, reason: "Size mismatch", ownerId: "sales2", status: "Approved" }
+]);
+
+addRows("sales/collections", [
+  { id: "col-003", receiptNo: "MR-2026-003", invoiceNo: "INV-2026-004", customer: "Evercare Hospital Dhaka", collectionDate: "2026-07-06", amount: 200000, method: "Bank", ownerId: "sales1", status: "Posted" },
+  { id: "col-004", receiptNo: "MR-2026-004", invoiceNo: "INV-2026-005", customer: "Square Hospital", collectionDate: "2026-07-07", amount: 254800, method: "Cheque", ownerId: "sales2", status: "Posted" },
+  { id: "col-005", receiptNo: "MR-2026-005", invoiceNo: "INV-2026-002", customer: "Popular Hospital Uttara", collectionDate: "2026-07-08", amount: 125000, method: "Cash", ownerId: "sales1", status: "Pending Approval" }
+]);
+
+addRows("sales/visits", [
+  { id: "vis-004", visitDate: "2026-07-07", customer: "Evercare Hospital Dhaka", outcome: "Quotation accepted for tubing set", checkInTime: "11:05", gpsLat: 23.8198, gpsLng: 90.4319, accuracyMeter: 14, routeSequence: 4, nextFollowUp: "2026-07-14", ownerId: "sales1", status: "Completed" },
+  { id: "vis-005", visitDate: "2026-07-08", customer: "National Kidney Foundation", outcome: "Requested catheter sample", checkInTime: "13:10", gpsLat: 23.8054, gpsLng: 90.3684, accuracyMeter: 19, routeSequence: 5, nextFollowUp: "2026-07-16", ownerId: "sales2", status: "Follow-up" },
+  { id: "vis-006", visitDate: "2026-07-09", customer: "LifeLine Pharmacy Chain", outcome: "Surgical glove demand confirmed", checkInTime: "16:22", gpsLat: 23.7937, gpsLng: 90.4043, accuracyMeter: 17, routeSequence: 6, nextFollowUp: "2026-07-17", ownerId: "sales1", status: "Completed" },
+  { id: "vis-007", visitDate: "2026-07-10", customer: "Chattogram Medical College Hospital", outcome: "Awaiting tender schedule", checkInTime: "10:30", gpsLat: 22.3569, gpsLng: 91.7832, accuracyMeter: 25, routeSequence: 7, nextFollowUp: "2026-07-20", ownerId: "sales2", status: "Planned" }
+]);
+
+addRows("sales/targets", [
+  { id: "tar-003", salesRep: "Rafiq Ahmed", ownerId: "sales1", territory: "Chattogram Dealer Support", monthlyTarget: 1800000, achieved: 143000, commissionRate: 1.25, status: "Attention" },
+  { id: "tar-004", salesRep: "Anika Rahman", ownerId: "sales2", territory: "Hospital Tender Desk", monthlyTarget: 2600000, achieved: 370000, commissionRate: 1.4, status: "Attention" }
+]);
+
+addRows("accounts/vouchers", [
+  { id: "vch-003", voucherNo: "RV-2026-002", type: "Receipt", party: "Square Hospital", amount: 254800, date: "2026-07-07", status: "Posted" },
+  { id: "vch-004", voucherNo: "JV-2026-003", type: "Journal", party: "Inventory Adjustment", amount: 3280, date: "2026-07-10", status: "Draft" },
+  { id: "vch-005", voucherNo: "PV-2026-002", type: "Payment", party: "Ningbo Kanghua Healthcare", amount: 516600, date: "2026-07-12", status: "Pending Approval" }
+]);
+
+addRows("accounts/receivables", [
+  { id: "ar-003", customer: "Evercare Hospital Dhaka", current: 148800, days30: 0, days60: 0, days90: 390000, totalDue: 538800, status: "Attention" },
+  { id: "ar-004", customer: "Square Hospital", current: 0, days30: 0, days60: 0, days90: 0, totalDue: 0, status: "Normal" },
+  { id: "ar-005", customer: "LifeLine Pharmacy Chain", current: 143000, days30: 0, days60: 0, days90: 68000, totalDue: 211000, status: "Normal" }
+]);
+
+addRows("accounts/payables", [
+  { id: "ap-003", supplier: "Ningbo Kanghua Healthcare", dueDate: "2026-07-28", amount: 516600, currency: "BDT", status: "Scheduled" },
+  { id: "ap-004", supplier: "Shenzhen VascuMed Co.", dueDate: "2026-08-05", amount: 5116800, currency: "BDT", status: "Scheduled" },
+  { id: "ap-005", supplier: "Suzhou Biomed Devices", dueDate: "2026-08-12", amount: 1741680, currency: "BDT", status: "Hold" }
+]);
+
+addRows("accounts/cash-book", [
+  { id: "cash-003", date: "2026-07-06", narration: "Collection MR-2026-003", debit: 200000, credit: 0, balance: 2612500, status: "Posted" },
+  { id: "cash-004", date: "2026-07-08", narration: "Local courier and sample dispatch", debit: 0, credit: 14200, balance: 2598300, status: "Posted" }
+]);
+
+addRows("accounts/bank-book", [
+  { id: "bb-003", bank: "City Bank PLC", accountNo: "CBL-LC-7731", debit: 254800, credit: 0, balance: 5534800, status: "Reconciled" },
+  { id: "bb-004", bank: "Eastern Bank PLC", accountNo: "EBL-IMP-0184", debit: 0, credit: 516600, balance: 7603400, status: "Pending Reconciliation" }
+]);
+
+addRows("accounts/general-ledger", [
+  { id: "gl-003", accountCode: "1102", accountName: "Accounts Receivable", debit: 1234600, credit: 1654800, balance: -420200, status: "Posted" },
+  { id: "gl-004", accountCode: "2101", accountName: "Supplier Payable", debit: 185000, credit: 8374080, balance: -8189080, status: "Draft" },
+  { id: "gl-005", accountCode: "6104", accountName: "Transport Expense", debit: 23800, credit: 0, balance: 23800, status: "Posted" }
+]);
+
+addRows("expenses", [
+  { id: "exp-003", expenseNo: "EXP-2026-003", category: "TA/DA", department: "Sales", amount: 18400, date: "2026-07-05", status: "Approved" },
+  { id: "exp-004", expenseNo: "EXP-2026-004", category: "Maintenance", department: "Warehouse", amount: 42000, date: "2026-07-08", status: "Pending Approval" },
+  { id: "exp-005", expenseNo: "EXP-2026-005", category: "Marketing", department: "Sales", amount: 75000, date: "2026-07-09", status: "Draft" }
+]);
+
+addRows("employees", [
+  { id: "emp-004", employeeName: "Imran Hossain", department: "Import Management", designation: "Import Officer", salary: 69000, status: "Active" },
+  { id: "emp-005", employeeName: "Nusrat Akter", department: "Finance & Accounts", designation: "Accounts Lead", salary: 82000, status: "Active" },
+  { id: "emp-006", employeeName: "Kamal Hossain", department: "Transport", designation: "Driver", salary: 36000, status: "Active" }
+]);
+
+addRows("attendance", [
+  { id: "att-003", employeeName: "Mahmud Hasan", date: "2026-07-06", checkIn: "08:55", checkOut: "18:30", status: "Present" },
+  { id: "att-004", employeeName: "Imran Hossain", date: "2026-07-06", checkIn: "09:42", checkOut: "18:15", status: "Late" },
+  { id: "att-005", employeeName: "Nusrat Akter", date: "2026-07-06", checkIn: "09:05", checkOut: "18:10", status: "Present" }
+]);
+
+addRows("hr/leave-advances", [
+  { id: "hla-003", employeeName: "Anika Rahman", requestType: "Salary Advance", fromDate: "2026-07-12", toDate: "2026-07-12", amount: 12000, reason: "Medical family expense", status: "Draft" },
+  { id: "hla-004", employeeName: "Imran Hossain", requestType: "Leave", fromDate: "2026-07-21", toDate: "2026-07-22", amount: 0, reason: "Port document travel recovery", status: "Pending Approval" }
+]);
+
+addRows("payroll", [
+  { id: "pay-003", payslipNo: "PAY-2026-003", employeeName: "Anika Rahman", grossSalary: 54000, bonus: 4500, deductions: 900, netPay: 57600, status: "Ready" },
+  { id: "pay-004", payslipNo: "PAY-2026-004", employeeName: "Nusrat Akter", grossSalary: 82000, bonus: 7000, deductions: 2200, netPay: 86800, status: "Draft" },
+  { id: "pay-005", payslipNo: "PAY-2026-005", employeeName: "Kamal Hossain", grossSalary: 36000, bonus: 2500, deductions: 500, netPay: 38000, status: "Ready" }
+]);
+
+addRows("trips", [
+  { id: "trip-003", tripNo: "TRP-2026-003", vehicleNo: "DHA-METRO-13-4455", driver: "Kamal Hossain", customer: "Evercare Hospital Dhaka", fuelCost: 6200, deliveryCost: 9800, status: "Completed" },
+  { id: "trip-004", tripNo: "TRP-2026-004", vehicleNo: "DHA-METRO-14-9921", driver: "Jamal Uddin", customer: "National Kidney Foundation", fuelCost: 5400, deliveryCost: 8500, status: "Scheduled" },
+  { id: "trip-005", tripNo: "TRP-2026-005", vehicleNo: "DHA-METRO-13-4455", driver: "Kamal Hossain", customer: "LifeLine Pharmacy Chain", fuelCost: 3900, deliveryCost: 6100, status: "Completed" }
+]);
+
+addRows("audit-logs", [
+  { id: "aud-003", user: "Mahfuz Rahman", role: "Managing Director", action: "Approved purchase order", module: "Purchase Order", recordId: "PO-2026-004", timestamp: "2026-07-08 15:20", ipAddress: "103.74.22.11", device: "Safari / iPad", beforeAfterSummary: "Pending Approval to Approved", status: "Info" },
+  { id: "aud-004", user: "Mahmud Hasan", role: "Warehouse Manager", action: "Posted GRN", module: "Warehouse", recordId: "GRN-2026-004", timestamp: "2026-07-08 17:05", ipAddress: "103.74.22.44", device: "Chrome / Windows", beforeAfterSummary: "Draft to Posted", status: "Info" },
+  { id: "aud-005", user: "Rafiq Ahmed", role: "Sales Executive", action: "Created visit", module: "Sales Visits", recordId: "vis-006", timestamp: "2026-07-09 16:30", ipAddress: "103.74.22.58", device: "Chrome / Android Browser", beforeAfterSummary: "New GPS-ready visit log", status: "Info" }
+]);
+
+addRows("login-activity", [
+  { id: "log-003", user: "Nusrat Akter", role: "Accounts", loginTime: "2026-07-06 09:26", ipAddress: "103.74.22.32", device: "Edge / Windows", status: "Success" },
+  { id: "log-004", user: "Imran Hossain", role: "Import Officer", loginTime: "2026-07-06 10:03", ipAddress: "103.74.22.43", device: "Chrome / Windows", status: "Success" },
+  { id: "log-005", user: "Unknown", role: "Sales Executive", loginTime: "2026-07-06 22:18", ipAddress: "45.9.21.77", device: "Unknown Mobile", status: "Blocked" }
+]);
+
+addRows("approvals", [
+  { id: "apr-003", module: "Landed Cost", recordId: "LCST-004", requestedBy: "Imran Hossain", approver: "Nusrat Akter", status: "Pending Approval" },
+  { id: "apr-004", module: "Physical Count", recordId: "PHY-2026-003", requestedBy: "Mahmud Hasan", approver: "Mahfuz Rahman", status: "Pending Approval" },
+  { id: "apr-005", module: "Sales Return", recordId: "RET-2026-003", requestedBy: "Anika Rahman", approver: "Farhana Islam", status: "Approved" }
+]);
+
+addRows("documents", [
+  { id: "doc-011", documentName: "Swift Copy TT-KH-2770", module: "Import", fileType: "PDF", recordId: "TT-KH-2770", status: "Archived" },
+  { id: "doc-012", documentName: "Insurance Cover Note PO-2026-004", module: "Import", fileType: "PDF", recordId: "PO-2026-004", status: "Archived" },
+  { id: "doc-013", documentName: "GRN Scan GRN-2026-004", module: "Warehouse", fileType: "PDF", recordId: "GRN-2026-004", status: "Archived" },
+  { id: "doc-014", documentName: "Collection Receipt MR-2026-004", module: "Accounts", fileType: "PDF", recordId: "MR-2026-004", status: "Archived" },
+  { id: "doc-015", documentName: "Tender Requirement CMCH July", module: "Sales", fileType: "DOCX", recordId: "cus-008", status: "Archived" }
+]);
+
 export const dashboardSummary: DashboardSummary = {
   role: "Managing Director",
   metrics: [
