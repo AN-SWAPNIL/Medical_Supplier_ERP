@@ -210,7 +210,7 @@ export const navSections: NavSection[] = [
       { label: "Returns", path: "/app/sales/returns", permission: "sales", icon: Receipt },
       { label: "Visits", path: "/app/sales/visits", permission: "sales", icon: Users },
       { label: "Targets", path: "/app/sales/targets", permission: "sales", icon: BarChart3 },
-      { label: "Mobile Sales", path: "/app/sales/mobile-control", permission: "sales", icon: Smartphone },
+      { label: "Sales GPS Map", path: "/app/sales/mobile-control", permission: "sales", icon: Smartphone },
       { label: "Vouchers", path: "/app/accounts/vouchers", permission: "accounts", icon: Landmark },
       { label: "Receivables", path: "/app/accounts/receivables", permission: "accounts", icon: FileBarChart },
       { label: "Payables", path: "/app/accounts/payables", permission: "accounts", icon: FileBarChart },

@@ -673,6 +673,50 @@ addRows("documents", [
   { id: "doc-015", documentName: "Tender Requirement CMCH July", module: "Sales", fileType: "DOCX", recordId: "cus-008", status: "Archived" }
 ]);
 
+addRows("accounts/receivables", [
+  { id: "ar-006", companyId: "cmp-002", customer: "Chattogram Medical College Hospital", current: 115200, days30: 0, days60: 0, days90: 510000, totalDue: 625200, status: "Attention" },
+  { id: "ar-007", companyId: "cmp-002", customer: "Medicare Dealer Network", current: 0, days30: 143000, days60: 0, days90: 275000, totalDue: 418000, status: "Attention" }
+]);
+
+addRows("accounts/cash-book", [
+  { id: "cash-005", companyId: "cmp-002", date: "2026-07-10", narration: "Chattogram dealer collection", debit: 143000, credit: 0, balance: 640000, status: "Posted" }
+]);
+
+addRows("accounts/bank-book", [
+  { id: "bb-005", companyId: "cmp-002", bank: "City Bank PLC", accountNo: "CBL-LC-7731", debit: 143000, credit: 0, balance: 5677800, status: "Pending Reconciliation" }
+]);
+
+const chattogramScopedRecords: Record<string, string[]> = {
+  branches: ["br-002"],
+  warehouses: ["wh-002"],
+  customers: ["cus-008", "cus-009"],
+  "supplier-inquiries": ["inq-005", "inq-006"],
+  "purchase-orders": ["po-005"],
+  shipments: ["shp-005"],
+  grn: ["grn-005"],
+  "inventory/stock": ["stk-005"],
+  "inventory/batches": ["bat-005"],
+  "inventory/movements": ["mov-005"],
+  "inventory/physical-counts": ["pc-004"],
+  "sales/quotations": ["qt-005"],
+  "sales/orders": ["so-005"],
+  "sales/visits": ["vis-007"],
+  "sales/targets": ["tar-003"],
+  "accounts/receivables": ["ar-006", "ar-007"],
+  "accounts/cash-book": ["cash-005"],
+  "accounts/bank-book": ["bb-005"],
+  trips: ["trip-002"]
+};
+
+Object.entries(chattogramScopedRecords).forEach(([key, ids]) => {
+  const scopedIds = new Set(ids);
+  collections[key]?.forEach((row) => {
+    if (scopedIds.has(String(row.id))) {
+      row.companyId = "cmp-002";
+    }
+  });
+});
+
 export const dashboardSummary: DashboardSummary = {
   role: "Managing Director",
   metrics: [

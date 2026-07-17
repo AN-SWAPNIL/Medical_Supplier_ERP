@@ -110,22 +110,26 @@ export default function AppLayout() {
             </div>
 
             {["Super Admin", "Managing Director", "Accounts"].includes(role) ? (
-              <select
-                value={companyId}
-                onChange={(event) => {
-                  setCompanyId(event.target.value);
-                  setStoredCompanyId(event.target.value);
-                  queryClient.invalidateQueries();
-                }}
-                className="hidden h-10 max-w-56 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 lg:block"
-                aria-label="Company scope"
-              >
-                {demoCompanies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
+              <label className="hidden min-w-[250px] lg:block">
+                <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Company Scope</span>
+                <select
+                  value={companyId}
+                  onChange={(event) => {
+                    setCompanyId(event.target.value);
+                    setStoredCompanyId(event.target.value);
+                    queryClient.invalidateQueries();
+                  }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"
+                  aria-label="Company scope"
+                  title="Company or branch data scope"
+                >
+                  {demoCompanies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
 
             <span className="hidden rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700 sm:inline-flex">{role}</span>

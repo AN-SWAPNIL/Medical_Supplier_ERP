@@ -73,9 +73,9 @@ export default function MobileSalesControlPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Mobile Sales"
-        title="Mobile Sales Control"
-        subtitle="Frontend prototype for the future field-sales app: GPS check-in, visit plan, order entry, collection posting, offline sync and manager oversight."
+        eyebrow="Mobile Sales / GPS Map"
+        title="Sales GPS Location Map"
+        subtitle="Open this page to show field-staff locations: GPS check-in, OpenStreetMap route view, visit plan, order entry, collection posting, offline sync and manager oversight."
         actions={
           <span className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700">
             <Smartphone className="h-4 w-4" />
@@ -164,7 +164,7 @@ export default function MobileSalesControlPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">Live Field Tracking Map</h2>
+                  <h2 className="text-lg font-bold text-slate-950">Live Location Map</h2>
                   <p className="text-sm text-slate-500">OpenStreetMap embed for route review, GPS check-in proof and manager visibility.</p>
                 </div>
                 <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">

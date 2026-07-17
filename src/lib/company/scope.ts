@@ -8,7 +8,7 @@ export const demoCompanies = [
   },
   {
     id: "cmp-002",
-    name: "Mipro Chattogram Port Office",
+    name: "Chattogram Port Office",
     note: "Separate company/branch ledger scope"
   }
 ];
