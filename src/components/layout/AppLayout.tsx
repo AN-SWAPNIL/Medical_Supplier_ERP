@@ -6,7 +6,6 @@ import {
   ChevronsRight,
   LogOut,
   Menu,
-  ShieldCheck,
   UserRound,
   X
 } from "lucide-react";
@@ -41,12 +40,12 @@ export default function AppLayout() {
     <aside className={clsx("flex h-full flex-col border-r border-slate-200 bg-white transition-[width]", collapsed ? "w-[72px]" : "w-[248px]")}>
       <div className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-3">
         <button
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-blue-950 text-white shadow-sm"
+          className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-slate-200"
           type="button"
           onClick={() => navigate("/app/dashboard")}
           aria-label="Open dashboard"
         >
-          <ShieldCheck className="h-5 w-5" />
+          <img className="h-7 w-auto max-w-none" src="/favicon.png" alt="" />
         </button>
         {!collapsed ? (
           <div className="min-w-0 leading-tight">
@@ -92,7 +91,7 @@ export default function AppLayout() {
 
       <div className="border-t border-slate-200 p-2">
         <div className={clsx("rounded-md bg-slate-50 p-2", collapsed ? "text-center" : "flex items-center gap-2")}>
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded bg-slate-900 text-[10px] font-bold text-white">MH</span>
+          <span className="flex h-7 w-7 shrink-0 items-center overflow-hidden rounded bg-white"><img className="h-full w-auto max-w-none" src="/favicon.png" alt="" /></span>
           {!collapsed ? (
             <div className="min-w-0">
               <strong className="block truncate text-xs text-slate-800">MIPRO HealthCare</strong>

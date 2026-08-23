@@ -297,8 +297,8 @@ export const costPresets: CostPreset[] = [
 export const printConfiguration: PrintConfiguration = {
   defaultIdentityId: "mipro",
   identities: [
-    { id: "mipro", displayName: "MIPRO Healthcare", companyName: "MIPRO HEALTHCARE CORPORATION", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.svg", backgroundImageUrl: "/mipro-letterhead.png", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } },
-    { id: "led-trackers", displayName: "LED Trackers", companyName: "LED TRACKERS", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.svg", backgroundImageUrl: "/led-letterhead.png", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } }
+    { id: "mipro", displayName: "MIPRO Healthcare", companyName: "MIPRO HEALTHCARE CORPORATION", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.png", backgroundImageUrl: "/mipro-letterhead.jpg", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } },
+    { id: "led-trackers", displayName: "LED Trackers", companyName: "LED TRACKERS", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.png", backgroundImageUrl: "/led-letterhead.jpg", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } }
   ],
   defaultLetterheadMode: "Digital"
 };

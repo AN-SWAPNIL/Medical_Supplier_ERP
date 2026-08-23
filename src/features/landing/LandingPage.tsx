@@ -1,4 +1,4 @@
-import { ArrowRight, Boxes, Calculator, FileText, ShieldCheck, Truck } from "lucide-react";
+import { ArrowRight, Boxes, Calculator, FileText, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 
@@ -15,16 +15,14 @@ export default function LandingPage() {
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-md bg-blue-950 text-white">
-              <ShieldCheck className="h-5 w-5" />
-            </span>
-            <div>
+            <img className="h-9 w-24 object-contain object-left sm:w-32" src="/mipro-logo.png" alt="MIPRO Precision in Healthcare" />
+            <div className="hidden md:block">
               <strong className="block text-slate-950">MIPRO ERP</strong>
               <span className="text-xs text-slate-500">Medical Import & Distribution</span>
             </div>
           </div>
           <div className="flex gap-2">
-            <Link to="/signup">
+            <Link className="hidden sm:block" to="/signup">
               <Button>Request Access</Button>
             </Link>
             <Link to="/login">

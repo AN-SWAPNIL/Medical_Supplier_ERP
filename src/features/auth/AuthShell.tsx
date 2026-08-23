@@ -1,4 +1,3 @@
-import { ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 
 type AuthShellProps = {
@@ -20,9 +19,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
           <div className="absolute inset-0 bg-blue-950/88" />
           <div className="relative">
             <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-md bg-cyan-600 text-white">
-                <ShieldCheck className="h-6 w-6" />
-              </span>
+              <span className="flex h-12 w-40 items-center rounded-md bg-white px-2"><img className="h-auto w-full" src="/mipro-logo.png" alt="MIPRO Precision in Healthcare" /></span>
               <div>
                 <strong className="block text-xl">MIPRO ERP</strong>
                 <span className="text-sm text-slate-300">Medical Import & Distribution</span>
