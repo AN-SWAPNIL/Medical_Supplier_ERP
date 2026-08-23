@@ -4,6 +4,11 @@ import type {
   AccountTransaction,
   AuditEvent,
   BusinessDecision,
+  AIChatResponse,
+  AIContext,
+  AIDocumentExtraction,
+  AIInsight,
+  AIRecommendation,
   CashBankAccount,
   Collection,
   CostPreset,
@@ -12,6 +17,8 @@ import type {
   CustomerOpeningBalance,
   DashboardData,
   Delivery,
+  DocumentRecord,
+  DocumentUpload,
   Expense,
   ImportCase,
   ImportCostLine,
@@ -24,6 +31,7 @@ import type {
   Product,
   Quotation,
   ReportData,
+  SalespersonPerformanceData,
   SalesOrder,
   StockBatch,
   StockMovement,
@@ -36,6 +44,10 @@ import {
   AccountTransactionSchema,
   AuditEventSchema,
   BusinessDecisionSchema,
+  AIChatResponseSchema,
+  AIDocumentExtractionSchema,
+  AIInsightSchema,
+  AIRecommendationSchema,
   CollectionSchema,
   CostPresetSchema,
   CustomerSchema,
@@ -55,6 +67,7 @@ import {
   ProductSchema,
   QuotationSchema,
   ReportSchema,
+  SalespersonPerformanceSchema,
   SalesOrderSchema,
   StockBatchSchema,
   StockMovementSchema,
@@ -115,10 +128,10 @@ export const importService = {
   addItem: (id: string, payload: Omit<ImportItem, "id">) => post<ImportCase>("/api/imports/" + id + "/items", payload, ImportCaseSchema),
   updateItem: (id: string, itemId: string, payload: Partial<ImportItem>) => patch<ImportCase>("/api/imports/" + id + "/items/" + itemId, payload, ImportCaseSchema),
   removeItem: (id: string, itemId: string) => request("/api/imports/" + id + "/items/" + itemId, ImportCaseSchema, { method: "DELETE" }),
-  addCost: (id: string, payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt">) => post<ImportCase>("/api/imports/" + id + "/costs", payload, ImportCaseSchema),
-  updateCost: (id: string, costId: string, payload: Partial<ImportCostLine>) => patch<ImportCase>("/api/imports/" + id + "/costs/" + costId, payload, ImportCaseSchema),
+  addCost: (id: string, payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt"> & { attachmentUpload?: DocumentUpload }) => post<ImportCase>("/api/imports/" + id + "/costs", payload, ImportCaseSchema),
+  updateCost: (id: string, costId: string, payload: Partial<ImportCostLine> & { attachmentUpload?: DocumentUpload }) => patch<ImportCase>("/api/imports/" + id + "/costs/" + costId, payload, ImportCaseSchema),
   removeCost: (id: string, costId: string) => request("/api/imports/" + id + "/costs/" + costId, ImportCaseSchema, { method: "DELETE" }),
-  addDocument: (id: string, payload: Pick<ImportDocument, "type" | "name">) => post<ImportDocument>("/api/imports/" + id + "/documents", payload, ImportDocumentSchema),
+  addDocument: (id: string, payload: Pick<ImportDocument, "type" | "name"> & { upload: DocumentUpload; sensitive?: boolean }) => post<ImportDocument>("/api/imports/" + id + "/documents", payload, ImportDocumentSchema),
   receipts: (id: string) => get<WarehouseReceipt[]>("/api/imports/" + id + "/receipts", z.array(WarehouseReceiptSchema)),
   preview: (id: string) => post<LandedCostPreview>("/api/imports/" + id + "/cost-preview", {}, LandedCostPreviewSchema),
   finalize: (id: string) => post<ImportCase>("/api/imports/" + id + "/finalize", {}, ImportCaseSchema),
@@ -156,7 +169,7 @@ export const salesService = {
 
 export const accountsService = {
   expenses: () => get<Expense[]>("/api/expenses", z.array(ExpenseSchema)),
-  createExpense: (payload: Partial<Expense>) => post<Expense>("/api/expenses", payload, ExpenseSchema),
+  createExpense: (payload: Partial<Expense> & { attachmentUpload?: DocumentUpload }) => post<Expense>("/api/expenses", payload, ExpenseSchema),
   reverseExpense: (id: string, reason: string) => post<Expense>("/api/expenses/" + id + "/reverse", { reason }, ExpenseSchema),
   categories: () => get<ExpenseCategory[]>("/api/expense-categories", z.array(ExpenseCategorySchema)),
   createCategory: (name: string) => post<ExpenseCategory>("/api/expense-categories", { name }, ExpenseCategorySchema),
@@ -165,7 +178,8 @@ export const accountsService = {
 };
 
 export const reportService = {
-  get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema)
+  get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema),
+  salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema)
 };
 
 export const printService = {
@@ -208,5 +222,28 @@ export const settingsService = {
 };
 
 export const fileService = {
-  attachImportDocument: importService.addDocument
+  attachImportDocument: importService.addDocument,
+  async open(document: DocumentRecord) {
+    const response = await fetch(API_BASE_URL + `/api/documents/${encodeURIComponent(document.id)}/content`, { headers: headers() });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null;
+      throw new Error(body?.message || `Document could not be opened (${response.status})`);
+    }
+    return response.blob();
+  }
+};
+
+function contextParams(context: AIContext) {
+  const params = new URLSearchParams();
+  Object.entries(context).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params.toString();
+}
+
+export const aiService = {
+  chat: (message: string, context: AIContext) => post<AIChatResponse>("/api/ai/chat", { message, context }, AIChatResponseSchema),
+  insights: (context: AIContext) => get<AIInsight[]>(`/api/ai/insights?${contextParams(context)}`, z.array(AIInsightSchema)),
+  recommendations: (context: AIContext) => get<AIRecommendation[]>(`/api/ai/recommendations?${contextParams(context)}`, z.array(AIRecommendationSchema)),
+  extractDocument: (importId: string, documentId: string) => post<AIDocumentExtraction>("/api/ai/document-extract", { importId, documentId }, AIDocumentExtractionSchema)
 };

@@ -11,10 +11,12 @@ import {
   ShoppingCart
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import PageHeader from "../../components/ui/PageHeader";
+import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Panel, TableFrame } from "../../domains/components";
-import { dashboardService } from "../../domains/services";
+import { aiService, dashboardService } from "../../domains/services";
 import { useAuthStore } from "../../lib/auth/session";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
@@ -23,7 +25,9 @@ const metricTones = ["border-blue-700", "border-cyan-600", "border-amber-500", "
 
 export default function DashboardPage() {
   const session = useAuthStore((state) => state.session);
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const query = useQuery({ queryKey: ["dashboard", session?.user.id], queryFn: dashboardService.get });
+  const recommendationsQuery = useQuery({ queryKey: ["ai", "dashboard", session?.user.id], queryFn: () => aiService.recommendations({ route: "/app/dashboard", entityType: "dashboard" }) });
 
   if (query.isLoading) return <LoadingBlock label="Preparing your role dashboard" />;
   if (query.isError || !query.data) return <ErrorBlock error={query.error} onRetry={() => void query.refetch()} />;
@@ -56,6 +60,8 @@ export default function DashboardPage() {
           );
         })}
       </section>
+
+      {recommendationsQuery.data?.some((item) => !dismissed.includes(item.id)) ? <section aria-label="Smart operational alerts"><div className="mb-2 flex items-center justify-between"><div><h2 className="text-sm font-bold text-slate-950">Smart operational alerts</h2><p className="text-xs text-slate-500">Rule-backed priorities from the same records shown below</p></div></div><div className="grid gap-3 lg:grid-cols-2">{recommendationsQuery.data.filter((item) => !dismissed.includes(item.id)).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} onDismiss={() => setDismissed((current) => [...current, item.id])} key={item.id} />)}</div></section> : null}
 
       {data.importAttention.length || data.expiryAlerts.length ? <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         {data.importAttention.length ? <Panel title="Action queue" subtitle="Records needing the next operational step">

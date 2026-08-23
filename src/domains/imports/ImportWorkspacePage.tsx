@@ -9,6 +9,7 @@ import {
   Check,
   CircleX,
   FileText,
+  Eye,
   LockKeyhole,
   PackagePlus,
   Paperclip,
@@ -17,6 +18,7 @@ import {
   Printer,
   RotateCcw,
   Save,
+  ScanText,
   Ship,
   Trash2,
   Upload,
@@ -26,6 +28,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import DocumentViewer, { readDocumentUpload } from "../../components/documents/DocumentViewer";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import {
@@ -42,14 +45,19 @@ import {
 } from "../components";
 import type {
   AllocationMethod,
+  AIDocumentExtraction,
+  AIDocumentExtractionField,
+  DocumentRecord,
+  DocumentUpload,
   ImportCase,
   ImportCostLine,
+  ImportDocument,
   ImportItem,
   LandedCostPreview,
   Product,
   WarehouseReceipt
 } from "../erp.types";
-import { importService, settingsService } from "../services";
+import { aiService, importService, settingsService } from "../services";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
 import { hasCapability } from "../../lib/permissions/matrix";
@@ -80,6 +88,8 @@ export default function ImportWorkspacePage() {
   const [deleteCost, setDeleteCost] = useState<ImportCostLine | null>(null);
   const [pendingTransition, setPendingTransition] = useState<"Cancelled" | "Closed" | null>(null);
   const [preview, setPreview] = useState<LandedCostPreview | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<DocumentRecord | null>(null);
+  const [extraction, setExtraction] = useState<AIDocumentExtraction | null>(null);
 
   const recordQuery = useQuery({ queryKey: ["import", importId], queryFn: () => importService.get(importId), enabled: Boolean(importId) });
   const receiptsQuery = useQuery({ queryKey: ["import-receipts", importId], queryFn: () => importService.receipts(importId), enabled: Boolean(importId) });
@@ -101,6 +111,7 @@ export default function ImportWorkspacePage() {
       setEditingCost(undefined);
       setPendingTransition(null);
       setPreview(null);
+      setExtraction(null);
       pushToast({ kind: "success", title: task.success });
     },
     onError: (error) => pushToast({ kind: "error", title: "Action could not be completed", message: error instanceof Error ? error.message : undefined })
@@ -109,6 +120,11 @@ export default function ImportWorkspacePage() {
     mutationFn: () => importService.preview(importId),
     onSuccess: (data) => setPreview(data),
     onError: (error) => pushToast({ kind: "error", title: "Cost preview failed", message: error instanceof Error ? error.message : undefined })
+  });
+  const extractionMutation = useMutation({
+    mutationFn: (document: ImportDocument) => aiService.extractDocument(importId, document.id),
+    onSuccess: (data) => setExtraction(data),
+    onError: (error) => pushToast({ kind: "error", title: "Field extraction failed", message: error instanceof Error ? error.message : undefined })
   });
 
   if (recordQuery.isLoading || productsQuery.isLoading) return <LoadingBlock label="Opening connected import workspace" />;
@@ -129,6 +145,21 @@ export default function ImportWorkspacePage() {
   const nextOperationalStatus = record.status === "LC/TT Opened" ? "In Production" : record.status === "In Production" ? "Shipped" : record.status === "Shipped" ? "At Port" : null;
   const canCancel = canEdit && ["Draft", "PI Received", "LC/TT Opened", "In Production", "Shipped", "At Port", "Costing"].includes(record.status);
   const canClose = ["Super Admin", "Import Officer"].includes(role) && record.status === "Received";
+  const applyExtractedFields = (fields: AIDocumentExtractionField[]) => {
+    action.mutate({
+      success: `${fields.length} reviewed field${fields.length === 1 ? "" : "s"} applied through normal validation`,
+      run: async () => {
+        const importUpdates: Record<string, string> = {};
+        const itemUpdates = new Map<string, Record<string, string>>();
+        for (const field of fields) {
+          if (field.target === "import") importUpdates[field.key] = field.value;
+          if (field.target === "item" && field.targetId) itemUpdates.set(field.targetId, { ...(itemUpdates.get(field.targetId) ?? {}), [field.key]: field.value });
+        }
+        if (Object.keys(importUpdates).length) await importService.update(record.id, importUpdates as Partial<ImportCase>);
+        for (const [itemId, updates] of itemUpdates) await importService.updateItem(record.id, itemId, updates as Partial<ImportItem>);
+      }
+    });
+  };
 
   return (
     <>
@@ -251,17 +282,17 @@ export default function ImportWorkspacePage() {
 
       <SectionAccordion
         title="3. Documents"
-        subtitle="Metadata-ready document archive for PI, LC, BL and assessed customs documents"
+        subtitle="Attached PDFs and images stay with this shipment and open through role-protected file access"
         icon={FileText}
         status={<span className="text-xs font-bold text-slate-500">{record.documents.length} files</span>}
         actions={<Button variant="ghost" icon={<Upload className="h-4 w-4" />} onClick={() => setModal("document")} aria-label="Attach document" title="Attach document" />}
       >
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
           {record.documents.map((document) => (
-            <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-200 p-3" key={document.id}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-blue-50 text-blue-700"><Paperclip className="h-4 w-4" /></span>
-              <div className="min-w-0"><strong className="block truncate text-sm text-slate-900" title={document.name}>{document.name}</strong><span className="block text-xs text-slate-500">{document.type} · {document.uploadedAt.slice(0, 10)}</span></div>
-            </div>
+            <article className="min-w-0 rounded-md border border-slate-200 p-3" key={document.id}>
+              <div className="flex min-w-0 items-center gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-blue-50 text-blue-700"><Paperclip className="h-4 w-4" /></span><div className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-900" title={document.name}>{document.name}</strong><span className="block text-xs text-slate-500">{document.type} | {document.uploadedAt.slice(0, 10)}</span></div></div>
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-2"><Button variant="ghost" icon={<Eye className="h-4 w-4" />} onClick={() => setViewingDocument(document)}>View</Button>{document.mimeType === "application/pdf" ? <Button variant="ghost" icon={<ScanText className="h-4 w-4" />} disabled={extractionMutation.isPending} onClick={() => extractionMutation.mutate(document)}>Extract Fields</Button> : null}</div>
+            </article>
           ))}
           {!record.documents.length ? <p className="text-sm text-slate-500">No documents attached yet.</p> : null}
         </div>
@@ -293,14 +324,15 @@ export default function ImportWorkspacePage() {
                     <span><b className="block text-slate-700">Scope</b>{cost.appliesToItemIds.length ? cost.appliesToItemIds.map((id) => record.items.find((item) => item.id === id)?.productCode).filter(Boolean).join(", ") : "All products"}</span>
                     <span><b className="block text-slate-700">Payment</b>{cost.paymentDate ?? "Not recorded"}<small className="block">{cost.accountId ?? "-"}</small></span>
                   </div>
+                  {cost.attachment ? <div className="mt-2 border-t border-slate-100 pt-2"><Button variant="ghost" icon={<Eye className="h-4 w-4" />} onClick={() => setViewingDocument(cost.attachment!)}>View {cost.attachment.fileName}</Button></div> : null}
                 </article>
               ))}
             </div>
             <div className="hidden md:block"><TableFrame>
               <table className="min-w-[1050px] w-full text-left text-sm">
-                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-2.5">Cost</th><th className="px-4 py-2.5">Foreign / BDT</th><th className="px-4 py-2.5">Allocation</th><th className="px-4 py-2.5">Scope</th><th className="px-4 py-2.5">Payment</th>{canEditCost ? <th className="px-4 py-2.5 text-right">Actions</th> : null}</tr></thead>
+                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-2.5">Cost</th><th className="px-4 py-2.5">Foreign / BDT</th><th className="px-4 py-2.5">Allocation</th><th className="px-4 py-2.5">Scope</th><th className="px-4 py-2.5">Payment</th><th className="px-4 py-2.5">Support</th>{canEditCost ? <th className="px-4 py-2.5 text-right">Actions</th> : null}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {record.costs.map((cost) => <tr key={cost.id}><td className="px-4 py-3"><strong className="block text-slate-900">{cost.name}</strong><small className="text-slate-500">{cost.category}{cost.vendor ? " · " + cost.vendor : ""}</small></td><td className="px-4 py-3"><span className="block">{cost.currency} {formatNumber(cost.amountForeign)}</span><strong className="text-slate-900">{formatCurrency(cost.amountBdt)}</strong></td><td className="px-4 py-3"><span className="rounded bg-cyan-50 px-2 py-1 text-xs font-bold text-cyan-800">{cost.allocationMethod.replace("_", " ")}</span></td><td className="px-4 py-3 text-slate-600">{cost.appliesToItemIds.length ? cost.appliesToItemIds.map((id) => record.items.find((item) => item.id === id)?.productCode).filter(Boolean).join(", ") : "All products"}</td><td className="px-4 py-3 text-slate-600">{cost.paymentDate ?? "Not recorded"}<small className="block text-slate-400">{cost.accountId ?? "-"}</small></td>{canEditCost ? <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => { setEditingCost(cost); setModal("cost"); }} aria-label="Edit cost" title="Edit cost" /><Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-red-600" />} onClick={() => setDeleteCost(cost)} aria-label="Delete cost" title="Delete cost" /></div></td> : null}</tr>)}
+                  {record.costs.map((cost) => <tr key={cost.id}><td className="px-4 py-3"><strong className="block text-slate-900">{cost.name}</strong><small className="text-slate-500">{cost.category}{cost.vendor ? " · " + cost.vendor : ""}</small></td><td className="px-4 py-3"><span className="block">{cost.currency} {formatNumber(cost.amountForeign)}</span><strong className="text-slate-900">{formatCurrency(cost.amountBdt)}</strong></td><td className="px-4 py-3"><span className="rounded bg-cyan-50 px-2 py-1 text-xs font-bold text-cyan-800">{cost.allocationMethod.replace("_", " ")}</span></td><td className="px-4 py-3 text-slate-600">{cost.appliesToItemIds.length ? cost.appliesToItemIds.map((id) => record.items.find((item) => item.id === id)?.productCode).filter(Boolean).join(", ") : "All products"}</td><td className="px-4 py-3 text-slate-600">{cost.paymentDate ?? "Not recorded"}<small className="block text-slate-400">{cost.accountId ?? "-"}</small></td><td className="px-4 py-3">{cost.attachment ? <Button variant="ghost" icon={<Eye className="h-4 w-4" />} onClick={() => setViewingDocument(cost.attachment!)} aria-label={`View ${cost.attachment.fileName}`} title={cost.attachment.fileName}>View</Button> : <span className="text-xs text-slate-400">-</span>}</td>{canEditCost ? <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => { setEditingCost(cost); setModal("cost"); }} aria-label="Edit cost" title="Edit cost" /><Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-red-600" />} onClick={() => setDeleteCost(cost)} aria-label="Delete cost" title="Delete cost" /></div></td> : null}</tr>)}
                 </tbody>
               </table>
             </TableFrame></div>
@@ -382,9 +414,11 @@ export default function ImportWorkspacePage() {
       {modal === "shipment" ? <Modal open title="LC / TT and shipment" subtitle="The primary visible reference updates automatically after LC or TT entry." onClose={() => setModal(null)}><ShipmentEditor record={record} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => importService.update(record.id, payload), success: "Payment and shipment details updated" })} /></Modal> : null}
       {modal === "item" ? <Modal open title={editingItem ? "Edit imported product" : "Add imported product"} subtitle="Use a canonical product variant and enter its own FOB, quantity and CBM basis." onClose={() => { setModal(null); setEditingItem(undefined); }} width="max-w-3xl"><ItemEditor record={record} products={products} item={editingItem} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingItem ? importService.updateItem(record.id, editingItem.id, payload) : importService.addItem(record.id, payload), success: editingItem ? "Product line updated" : "Product line added" })} /></Modal> : null}
       {modal === "cost" ? <Modal open title={editingCost ? "Edit cost row" : "Add import cost"} subtitle="Every common or transport cost requires an explicit allocation decision." onClose={() => { setModal(null); setEditingCost(undefined); }} width="max-w-4xl"><CostEditor record={record} cost={editingCost} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingCost ? importService.updateCost(record.id, editingCost.id, payload) : importService.addCost(record.id, payload), success: editingCost ? "Cost row updated" : "Cost row added" })} /></Modal> : null}
-      {modal === "document" ? <Modal open title="Attach import document" subtitle="The prototype stores upload metadata; a real file service can replace this boundary." onClose={() => setModal(null)}><DocumentEditor busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => importService.addDocument(record.id, payload), success: "Document metadata attached" })} /></Modal> : null}
+      {modal === "document" ? <Modal open title="Attach import document" subtitle="PDF/image content and metadata stay linked to this import through the file-service boundary." onClose={() => setModal(null)}><DocumentEditor busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => importService.addDocument(record.id, payload), success: "Document attached and ready to view" })} /></Modal> : null}
       {modal === "receive" ? <Modal open title="Receive to warehouse" subtitle="Product and finalized cost are inherited. Enter batch traceability and accepted/rejected quantities." onClose={() => setModal(null)} width="max-w-5xl"><ReceiptEditor record={record} receipts={receipts} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => importService.receive(record.id, payload), success: "Warehouse receipt posted and stock batches created" })} /></Modal> : null}
       {modal === "reopen" ? <ReopenModal busy={action.isPending} onClose={() => setModal(null)} onSubmit={(reason) => action.mutate({ run: () => importService.reopen(record.id, reason), success: "Landed cost reopened with an audit reason" })} /> : null}
+      {extraction ? <Modal open title="AI Extracted Fields" subtitle={`${extraction.documentName} | review required; nothing is overwritten automatically.`} onClose={() => setExtraction(null)} width="max-w-3xl"><AIDocumentExtractReview extraction={extraction} busy={action.isPending} onApply={applyExtractedFields} /></Modal> : null}
+      <DocumentViewer document={viewingDocument} onClose={() => setViewingDocument(null)} />
 
       <ConfirmDialog open={Boolean(deleteItem)} title="Remove product line?" message="Any cost scoped to this product will also be removed. This is allowed only before landed-cost finalization." confirmLabel="Remove product" onCancel={() => setDeleteItem(null)} onConfirm={() => deleteItem && action.mutate({ run: () => importService.removeItem(record.id, deleteItem.id), success: "Product line removed" })} />
       <ConfirmDialog open={Boolean(deleteCost)} title="Remove cost row?" message="The next landed-cost preview will be recalculated without this cost." confirmLabel="Remove cost" onCancel={() => setDeleteCost(null)} onConfirm={() => deleteCost && action.mutate({ run: () => importService.removeCost(record.id, deleteCost.id), success: "Cost row removed" })} />
@@ -416,15 +450,24 @@ function ItemEditor({ record, products, item, busy, onSubmit }: { record: Import
   return <form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={submit}><label className="sm:col-span-2"><span className={labelClass}>Canonical Product</span><select className={inputClass} value={form.productId} onChange={(event) => change("productId", event.target.value)} required><option value="">Select variant</option>{products.map((entry) => <option value={entry.id} key={entry.id}>{entry.code} · {entry.name}</option>)}</select></label><div className="row-span-2 flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><ProductThumb src={product?.imageUrl} name={product?.name ?? "Product"} size="lg" /><div className="min-w-0"><strong className="block truncate text-sm">{product?.name ?? "Choose a product"}</strong><small className="text-slate-500">{product?.family} {product?.variant}</small></div></div><label><span className={labelClass}>Quantity</span><input className={inputClass} type="number" min="1" step="1" value={form.quantity} onChange={(event) => change("quantity", event.target.value)} required /></label><label><span className={labelClass}>FOB / Unit ({record.currency})</span><input className={inputClass} type="number" min="0" step="0.0001" value={form.fobUnitForeign} onChange={(event) => change("fobUnitForeign", event.target.value)} /></label><label><span className={labelClass}>Exchange Rate</span><input className={inputClass} type="number" min="0" step="0.0001" value={form.exchangeRate} onChange={(event) => change("exchangeRate", event.target.value)} /></label><label><span className={labelClass}>CBM Source</span><select className={inputClass} value={form.cbmMode} onChange={(event) => change("cbmMode", event.target.value)}><option value="CALCULATED">Cartons × CBM / carton</option><option value="MANUAL">Manual total from PI</option></select></label>{form.cbmMode === "CALCULATED" ? <><label><span className={labelClass}>Cartons</span><input className={inputClass} type="number" min="0" step="1" value={form.cartonCount} onChange={(event) => change("cartonCount", event.target.value)} /></label><label><span className={labelClass}>CBM / Carton</span><input className={inputClass} type="number" min="0" step="0.0001" value={form.cbmPerCarton} onChange={(event) => change("cbmPerCarton", event.target.value)} /></label></> : <label className="sm:col-span-2"><span className={labelClass}>PI Total CBM</span><input className={inputClass} type="number" min="0" step="0.0001" value={form.manualTotalCbm} onChange={(event) => change("manualTotalCbm", event.target.value)} /></label>}<label><span className={labelClass}>Gross Weight</span><input className={inputClass} type="number" min="0" step="0.01" value={form.grossWeight} onChange={(event) => change("grossWeight", event.target.value)} /></label><label><span className={labelClass}>Net Weight</span><input className={inputClass} type="number" min="0" step="0.01" value={form.netWeight} onChange={(event) => change("netWeight", event.target.value)} /></label><div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 sm:col-span-2 lg:col-span-3"><span className="text-xs text-cyan-900">Preview: <strong>{formatCurrency(fob)}</strong> FOB · <strong>{cbm.toFixed(4)} CBM</strong>. The API recomputes and stores both values with Decimal arithmetic when saved.</span></div><div className="flex justify-end sm:col-span-2 lg:col-span-3"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Save Product Line</Button></div></form>;
 }
 
-function CostEditor({ record, cost, busy, onSubmit }: { record: ImportCase; cost?: ImportCostLine; busy: boolean; onSubmit: (payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt">) => void }) {
+function CostEditor({ record, cost, busy, onSubmit }: { record: ImportCase; cost?: ImportCostLine; busy: boolean; onSubmit: (payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt"> & { attachmentUpload?: DocumentUpload }) => void }) {
   const [form, setForm] = useState({ name: cost?.name ?? "", category: cost?.category ?? "Freight", amountForeign: cost?.amountForeign ?? "", currency: cost?.currency ?? "BDT", exchangeRate: cost?.exchangeRate ?? "1", allocationMethod: (cost?.allocationMethod ?? "") as AllocationMethod | "", scope: cost?.appliesToItemIds.length ? "SELECTED" : "ALL", selected: cost?.appliesToItemIds ?? [], vendor: cost?.vendor ?? "", paymentDate: cost?.paymentDate ?? "", accountId: cost?.accountId ?? "", notes: cost?.notes ?? "", attachmentName: cost?.attachmentName ?? "" });
   const initialManual = Object.fromEntries(record.items.map((item) => [item.id, cost?.manualSplits?.find((split) => split.importItemId === item.id)?.amountBdt ?? ""]));
   const [manual, setManual] = useState<Record<string, string>>(initialManual);
   const [error, setError] = useState("");
+  const [attachmentUpload, setAttachmentUpload] = useState<DocumentUpload>();
   const change = (key: keyof typeof form, value: string | string[]) => setForm((current) => ({ ...current, [key]: value, ...(key === "category" && value === "Local Transport" && !cost ? { allocationMethod: "CBM" as AllocationMethod } : {}) }));
   const eligibleIds = form.scope === "ALL" ? record.items.map((item) => item.id) : form.selected;
   const converted = form.currency === "BDT" ? Number(form.amountForeign || 0) : Number(form.amountForeign || 0) * Number(form.exchangeRate || 0);
   const manualTotal = eligibleIds.reduce((sum, id) => sum + Number(manual[id] || 0), 0);
+  const changeAttachment = (file?: File) => {
+    change("attachmentName", file?.name ?? cost?.attachmentName ?? "");
+    setAttachmentUpload(undefined);
+    if (!file) return;
+    void readDocumentUpload(file)
+      .then((upload) => { setAttachmentUpload(upload); setError(""); })
+      .catch((reason) => { change("attachmentName", cost?.attachmentName ?? ""); setError(reason instanceof Error ? reason.message : "Attachment could not be read."); });
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!form.allocationMethod) return setError("Select an allocation method explicitly.");
@@ -432,16 +475,50 @@ function CostEditor({ record, cost, busy, onSubmit }: { record: ImportCase; cost
     if (form.allocationMethod === "PRODUCT_SPECIFIC" && eligibleIds.length !== 1) return setError("Product-specific allocation requires exactly one product.");
     if (form.allocationMethod === "MANUAL" && Math.abs(manualTotal - converted) > 0.005) return setError("Manual splits must equal the converted BDT amount exactly.");
     setError("");
-    onSubmit({ name: form.name, category: form.category, amountForeign: form.amountForeign, currency: form.currency, exchangeRate: form.currency === "BDT" ? "1" : form.exchangeRate, amountBdt: converted.toFixed(2), allocationMethod: form.allocationMethod, appliesToItemIds: form.scope === "ALL" ? [] : form.selected, manualSplits: form.allocationMethod === "MANUAL" ? eligibleIds.map((id) => ({ importItemId: id, amountBdt: Number(manual[id] || 0).toFixed(2) })) : undefined, vendor: form.vendor, paymentDate: form.paymentDate, accountId: form.accountId, notes: form.notes, attachmentName: form.attachmentName });
+    onSubmit({ name: form.name, category: form.category, amountForeign: form.amountForeign, currency: form.currency, exchangeRate: form.currency === "BDT" ? "1" : form.exchangeRate, amountBdt: converted.toFixed(2), allocationMethod: form.allocationMethod, appliesToItemIds: form.scope === "ALL" ? [] : form.selected, manualSplits: form.allocationMethod === "MANUAL" ? eligibleIds.map((id) => ({ importItemId: id, amountBdt: Number(manual[id] || 0).toFixed(2) })) : undefined, vendor: form.vendor, paymentDate: form.paymentDate, accountId: form.accountId, notes: form.notes, attachmentName: form.attachmentName, attachment: cost?.attachment, attachmentUpload });
   };
-  return <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" onSubmit={submit}>{error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 md:col-span-2 xl:col-span-3">{error}</div> : null}<label><span className={labelClass}>Cost Name</span><input className={inputClass} value={form.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Ocean Freight" required /></label><label><span className={labelClass}>Category</span><select className={inputClass} value={form.category} onChange={(event) => change("category", event.target.value)}>{["Freight", "Customs Duty", "Bank Charge", "Insurance", "Port / C&F", "Local Transport", "Labour", "Other Import Cost"].map((value) => <option key={value}>{value}</option>)}</select></label><label><span className={labelClass}>Allocation Method</span><select className={inputClass} value={form.allocationMethod} onChange={(event) => change("allocationMethod", event.target.value)} required><option value="">Choose explicitly</option><option value="CBM">CBM</option><option value="FOB_VALUE">FOB Value</option><option value="QUANTITY">Quantity</option><option value="PRODUCT_SPECIFIC">Product-specific</option><option value="MANUAL">Manual split</option></select></label><label><span className={labelClass}>Amount</span><input className={inputClass} type="number" min="0.01" step="0.01" value={form.amountForeign} onChange={(event) => change("amountForeign", event.target.value)} required /></label><label><span className={labelClass}>Currency</span><select className={inputClass} value={form.currency} onChange={(event) => change("currency", event.target.value)}><option>BDT</option><option>USD</option><option>CNY</option><option>EUR</option></select></label><label><span className={labelClass}>Exchange Rate Snapshot</span><input className={inputClass} type="number" min="0.0001" step="0.0001" value={form.currency === "BDT" ? "1" : form.exchangeRate} onChange={(event) => change("exchangeRate", event.target.value)} disabled={form.currency === "BDT"} required /></label><div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 md:col-span-2 xl:col-span-3"><span className="text-xs text-cyan-800">Converted amount: <strong>{formatCurrency(converted)}</strong>. Final allocations reconcile to this amount to the poisha.</span></div><fieldset className="rounded-md border border-slate-200 p-3 md:col-span-2 xl:col-span-3"><legend className="px-1 text-xs font-bold uppercase text-slate-500">Product Scope</legend><div className="flex flex-wrap gap-4"><label className="flex items-center gap-2 text-sm font-semibold"><input type="radio" name="scope" checked={form.scope === "ALL"} onChange={() => change("scope", "ALL")} /> All products</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="radio" name="scope" checked={form.scope === "SELECTED"} onChange={() => change("scope", "SELECTED")} /> Selected products</label></div>{form.scope === "SELECTED" ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{record.items.map((item) => <label className="flex items-center gap-2 rounded bg-slate-50 p-2 text-sm" key={item.id}><input type="checkbox" checked={form.selected.includes(item.id)} onChange={(event) => change("selected", event.target.checked ? [...form.selected, item.id] : form.selected.filter((id) => id !== item.id))} /> {item.productCode} · {item.productName}</label>)}</div> : null}</fieldset>{form.allocationMethod === "MANUAL" ? <fieldset className="rounded-md border border-amber-200 bg-amber-50 p-3 md:col-span-2 xl:col-span-3"><legend className="px-1 text-xs font-bold uppercase text-amber-800">Manual BDT Split</legend><div className="grid gap-3 sm:grid-cols-2">{record.items.filter((item) => eligibleIds.includes(item.id)).map((item) => <label key={item.id}><span className={labelClass}>{item.productCode} · {item.productName}</span><input className={inputClass} type="number" min="0" step="0.01" value={manual[item.id] ?? ""} onChange={(event) => setManual((current) => ({ ...current, [item.id]: event.target.value }))} /></label>)}</div><p className="mt-2 text-xs font-semibold text-amber-800">Split total {formatCurrency(manualTotal)} / required {formatCurrency(converted)}</p></fieldset> : null}<label><span className={labelClass}>Vendor</span><input className={inputClass} value={form.vendor} onChange={(event) => change("vendor", event.target.value)} /></label><label><span className={labelClass}>Payment Date</span><input className={inputClass} type="date" value={form.paymentDate} onChange={(event) => change("paymentDate", event.target.value)} /></label><label><span className={labelClass}>Payment Account / Ref</span><input className={inputClass} value={form.accountId} onChange={(event) => change("accountId", event.target.value)} /></label><label><span className={labelClass}>Attachment</span><input className={inputClass + " pt-2"} type="file" onChange={(event) => change("attachmentName", event.target.files?.[0]?.name ?? "")} /></label><label className="md:col-span-2"><span className={labelClass}>Notes</span><textarea className={textareaClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} /></label><div className="flex justify-end md:col-span-2 xl:col-span-3"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Save Cost Row</Button></div></form>;
+  return <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" onSubmit={submit}>{error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 md:col-span-2 xl:col-span-3">{error}</div> : null}<label><span className={labelClass}>Cost Name</span><input className={inputClass} value={form.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Ocean Freight" required /></label><label><span className={labelClass}>Category</span><select className={inputClass} value={form.category} onChange={(event) => change("category", event.target.value)}>{["Freight", "Customs Duty", "Bank Charge", "Insurance", "Port / C&F", "Local Transport", "Labour", "Other Import Cost"].map((value) => <option key={value}>{value}</option>)}</select></label><label><span className={labelClass}>Allocation Method</span><select className={inputClass} value={form.allocationMethod} onChange={(event) => change("allocationMethod", event.target.value)} required><option value="">Choose explicitly</option><option value="CBM">CBM</option><option value="FOB_VALUE">FOB Value</option><option value="QUANTITY">Quantity</option><option value="PRODUCT_SPECIFIC">Product-specific</option><option value="MANUAL">Manual split</option></select></label><label><span className={labelClass}>Amount</span><input className={inputClass} type="number" min="0.01" step="0.01" value={form.amountForeign} onChange={(event) => change("amountForeign", event.target.value)} required /></label><label><span className={labelClass}>Currency</span><select className={inputClass} value={form.currency} onChange={(event) => change("currency", event.target.value)}><option>BDT</option><option>USD</option><option>CNY</option><option>EUR</option></select></label><label><span className={labelClass}>Exchange Rate Snapshot</span><input className={inputClass} type="number" min="0.0001" step="0.0001" value={form.currency === "BDT" ? "1" : form.exchangeRate} onChange={(event) => change("exchangeRate", event.target.value)} disabled={form.currency === "BDT"} required /></label><div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 md:col-span-2 xl:col-span-3"><span className="text-xs text-cyan-800">Converted amount: <strong>{formatCurrency(converted)}</strong>. Final allocations reconcile to this amount to the poisha.</span></div><fieldset className="rounded-md border border-slate-200 p-3 md:col-span-2 xl:col-span-3"><legend className="px-1 text-xs font-bold uppercase text-slate-500">Product Scope</legend><div className="flex flex-wrap gap-4"><label className="flex items-center gap-2 text-sm font-semibold"><input type="radio" name="scope" checked={form.scope === "ALL"} onChange={() => change("scope", "ALL")} /> All products</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="radio" name="scope" checked={form.scope === "SELECTED"} onChange={() => change("scope", "SELECTED")} /> Selected products</label></div>{form.scope === "SELECTED" ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{record.items.map((item) => <label className="flex items-center gap-2 rounded bg-slate-50 p-2 text-sm" key={item.id}><input type="checkbox" checked={form.selected.includes(item.id)} onChange={(event) => change("selected", event.target.checked ? [...form.selected, item.id] : form.selected.filter((id) => id !== item.id))} /> {item.productCode} · {item.productName}</label>)}</div> : null}</fieldset>{form.allocationMethod === "MANUAL" ? <fieldset className="rounded-md border border-amber-200 bg-amber-50 p-3 md:col-span-2 xl:col-span-3"><legend className="px-1 text-xs font-bold uppercase text-amber-800">Manual BDT Split</legend><div className="grid gap-3 sm:grid-cols-2">{record.items.filter((item) => eligibleIds.includes(item.id)).map((item) => <label key={item.id}><span className={labelClass}>{item.productCode} · {item.productName}</span><input className={inputClass} type="number" min="0" step="0.01" value={manual[item.id] ?? ""} onChange={(event) => setManual((current) => ({ ...current, [item.id]: event.target.value }))} /></label>)}</div><p className="mt-2 text-xs font-semibold text-amber-800">Split total {formatCurrency(manualTotal)} / required {formatCurrency(converted)}</p></fieldset> : null}<label><span className={labelClass}>Vendor</span><input className={inputClass} value={form.vendor} onChange={(event) => change("vendor", event.target.value)} /></label><label><span className={labelClass}>Payment Date</span><input className={inputClass} type="date" value={form.paymentDate} onChange={(event) => change("paymentDate", event.target.value)} /></label><label><span className={labelClass}>Payment Account / Ref</span><input className={inputClass} value={form.accountId} onChange={(event) => change("accountId", event.target.value)} /></label><label><span className={labelClass}>Attachment</span><input className={inputClass + " pt-2"} type="file" accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" onChange={(event) => changeAttachment(event.target.files?.[0])} /></label><label className="md:col-span-2"><span className={labelClass}>Notes</span><textarea className={textareaClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} /></label><div className="flex justify-end md:col-span-2 xl:col-span-3"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Save Cost Row</Button></div></form>;
 }
 
-function DocumentEditor({ busy, onSubmit }: { busy: boolean; onSubmit: (payload: { type: string; name: string }) => void }) {
+function DocumentEditor({ busy, onSubmit }: { busy: boolean; onSubmit: (payload: { type: string; name: string; upload: DocumentUpload; sensitive: boolean }) => void }) {
   const [type, setType] = useState("PI");
-  const [name, setName] = useState("");
-  const documentTypes = ["PO", "PI", "LC", "Swift Copy", "TT Advice", "Commercial Invoice", "Packing List", "Bill of Lading", "COA", "CE Certificate", "ISO Certificate", "Customs Assessment", "Duty Proof", "Freight Invoice", "Bank Advice", "Insurance", "C&F Bill", "Other"];
-  return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); onSubmit({ type, name }); }}><label><span className={labelClass}>Document Type</span><select className={inputClass} value={type} onChange={(event) => setType(event.target.value)}>{documentTypes.map((value) => <option key={value}>{value}</option>)}</select></label><label><span className={labelClass}>Select File</span><input className={inputClass + " pt-2"} type="file" required onChange={(event) => setName(event.target.files?.[0]?.name ?? "")} /></label><p className="text-xs leading-5 text-slate-500">Prototype behavior: file name and metadata are retained temporarily. The file service interface is ready for object storage integration.</p><div className="flex justify-end"><Button type="submit" variant="primary" icon={<Upload className="h-4 w-4" />} disabled={busy || !name}>Attach Document</Button></div></form>;
+  const [upload, setUpload] = useState<DocumentUpload>();
+  const [sensitive, setSensitive] = useState(false);
+  const [error, setError] = useState("");
+  const documentTypes = ["PO", "PI", "LC", "Swift Copy", "TT Advice", "Commercial Invoice", "Packing List", "Bill of Lading", "COA", "CE Certificate", "ISO Certificate", "Customs Assessment", "Duty Proof", "Freight Invoice", "Bank Advice", "Insurance", "C&F Bill", "Port Bill", "Transport Bill", "Other"];
+  const selectFile = (file?: File) => {
+    if (!file) return setUpload(undefined);
+    void readDocumentUpload(file).then((value) => { setUpload(value); setError(""); }).catch((reason) => { setUpload(undefined); setError(reason instanceof Error ? reason.message : "File could not be read."); });
+  };
+  return (
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); if (upload) onSubmit({ type, name: upload.fileName, upload, sensitive }); }}>
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div> : null}
+      <label><span className={labelClass}>Document Type</span><select className={inputClass} value={type} onChange={(event) => setType(event.target.value)}>{documentTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
+      <label><span className={labelClass}>PDF or Image</span><input className={inputClass + " pt-2"} type="file" accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" required onChange={(event) => selectFile(event.target.files?.[0])} /></label>
+      {upload ? <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900"><strong className="block truncate">{upload.fileName}</strong><span>{upload.mimeType} | {(upload.sizeBytes / 1024).toFixed(1)} KB | preview ready</span></div> : null}
+      <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 text-sm"><input className="mt-1" type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} /><span><strong className="block">Sensitive cost/customs file</strong><small className="text-slate-500">Require explicit sensitive-cost visibility to open this file.</small></span></label>
+      <p className="text-xs leading-5 text-slate-500">The mock keeps content in temporary server memory. The same metadata boundary can later use a private Supabase bucket and signed URL.</p>
+      <div className="flex justify-end"><Button type="submit" variant="primary" icon={<Upload className="h-4 w-4" />} disabled={busy || !upload}>Attach Document</Button></div>
+    </form>
+  );
+}
+
+function AIDocumentExtractReview({ extraction, busy, onApply }: { extraction: AIDocumentExtraction; busy: boolean; onApply: (fields: AIDocumentExtractionField[]) => void }) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const selectedFields = extraction.fields.filter((field) => selected.includes(`${field.target}:${field.targetId ?? "record"}:${field.key}`));
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-start gap-3 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950"><ScanText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-700" /><div><strong>Review before apply</strong><p className="mt-1 text-xs leading-5">Extraction is advisory. Select only verified values; saving runs the same server validation as manual import editing.</p></div></div>
+      <div className="grid gap-2">
+        {extraction.fields.map((field) => {
+          const id = `${field.target}:${field.targetId ?? "record"}:${field.key}`;
+          return <label className="grid cursor-pointer gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[24px_minmax(0,1fr)_90px] sm:items-center" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, id] : current.filter((value) => value !== id))} /><span className="min-w-0"><strong className="block text-xs text-slate-500">{field.label}</strong><span className="block break-words text-sm font-semibold text-slate-950">{field.value}</span></span><span className="text-xs font-bold text-cyan-700">{Number(field.confidence) * 100}% match</span></label>;
+        })}
+      </div>
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">{extraction.warnings.map((warning) => <p key={warning}>- {warning}</p>)}</div>
+      <div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{selectedFields.length} of {extraction.fields.length} fields selected</span><Button variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy || !selectedFields.length} onClick={() => onApply(selectedFields)}>Apply Selected Fields</Button></div>
+    </div>
+  );
 }
 
 function ReceiptEditor({ record, receipts, busy, onSubmit }: { record: ImportCase; receipts: WarehouseReceipt[]; busy: boolean; onSubmit: (payload: Omit<WarehouseReceipt, "id" | "importId" | "reference" | "status" | "receivedBy">) => void }) {

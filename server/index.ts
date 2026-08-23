@@ -1,14 +1,20 @@
 import cors from "cors";
 import { Decimal } from "decimal.js";
 import express, { type Request, type Response } from "express";
+import { fileURLToPath } from "node:url";
 import { calculateLandedCost, importDisplayReference } from "../src/domains/imports/costing.js";
 import type {
+  AIContext,
+  AIInsight,
+  AIRecommendation,
   Capability,
   Collection,
   CustomerOpeningBalance,
   CustomerLedger,
   DispatchAllocation,
   Delivery,
+  DocumentRecord,
+  DocumentUpload,
   Expense,
   ImportCase,
   ImportCostLine,
@@ -19,6 +25,9 @@ import type {
   ProfitPreview,
   Quotation,
   SalesOrder,
+  SalespersonEmployee,
+  SalespersonPerformanceDetail,
+  SalespersonPerformanceSummary,
   StockBatch,
   WarehouseReceipt
 } from "../src/domains/erp.types.js";
@@ -76,6 +85,15 @@ const printConfiguration = structuredClone(seedPrintConfiguration);
 const productAliases: ProductAlias[] = structuredClone(seedProductAliases);
 const customerOpeningBalances: CustomerOpeningBalance[] = structuredClone(seedCustomerOpeningBalances);
 const pendingSignupRequests: Record<string, unknown>[] = [];
+const documentContents = new Map<string, string>();
+const seededPdfPath = fileURLToPath(new URL("./assets/mipro-source-document.pdf", import.meta.url));
+const seededExpenseImagePath = fileURLToPath(new URL("./assets/office-utility-receipt.png", import.meta.url));
+
+for (const record of imports) {
+  for (const document of record.documents) documentContents.set(document.id, seededPdfPath);
+  for (const cost of record.costs) if (cost.attachment) documentContents.set(cost.attachment.id, seededPdfPath);
+}
+for (const expense of expenses) if (expense.attachment) documentContents.set(expense.attachment.id, expense.attachment.mimeType.startsWith("image/") ? seededExpenseImagePath : seededPdfPath);
 
 app.use(cors());
 app.use(express.json({ limit: "8mb" }));
@@ -117,7 +135,7 @@ const areaRoles: Record<string, Role[]> = {
   inventory: ["Super Admin", "Managing Director", "Warehouse Manager", "Sales Manager"],
   sales: ["Super Admin", "Managing Director", "Accounts", "Warehouse Manager", "Sales Manager", "Sales Executive"],
   accounts: ["Super Admin", "Managing Director", "Accounts"],
-  reports: ["Super Admin", "Managing Director", "Accounts", "Sales Manager"],
+  reports: ["Super Admin", "Managing Director", "Accounts", "Sales Manager", "Sales Executive"],
   settings: ["Super Admin"]
 };
 
@@ -145,6 +163,42 @@ function money(value: Decimal | string | number) {
 
 function precise(value: Decimal | string | number, places = 4) {
   return new Decimal(value).toDecimalPlaces(places, Decimal.ROUND_HALF_UP).toFixed(places);
+}
+
+function uploadedDocument(
+  req: Request,
+  input: DocumentUpload,
+  entityType: DocumentRecord["entityType"],
+  entityId: string,
+  documentType: string,
+  sensitive: boolean
+) {
+  if (!input?.fileName || !input?.mimeType || !input?.fileDataUrl) throw new Error("Select a PDF or image file to attach.");
+  const allowedMimeTypes = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif"]);
+  if (!allowedMimeTypes.has(input.mimeType)) throw new Error("Only PDF, PNG, JPEG, WebP and GIF attachments are supported in this prototype.");
+  const match = input.fileDataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!match || match[1] !== input.mimeType || match[2].length % 4 !== 0) throw new Error("Attachment content or MIME type is invalid.");
+  const actualSize = Buffer.from(match[2], "base64").byteLength;
+  if (!actualSize || actualSize > 5_000_000) throw new Error("Attachment must be a non-empty file no larger than 5 MB.");
+  const user = userFor(req)!;
+  const documentId = id("doc");
+  const document: DocumentRecord = {
+    id: documentId,
+    entityType,
+    entityId,
+    documentType,
+    source: "UPLOADED",
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: actualSize,
+    previewUrl: `/api/documents/${documentId}/content`,
+    sensitive,
+    createdByUserId: user.id,
+    createdByName: user.name,
+    createdAt: new Date().toISOString()
+  };
+  documentContents.set(document.id, input.fileDataUrl);
+  return document;
 }
 
 function businessDate(value = new Date()) {
@@ -351,6 +405,7 @@ function importForRole(record: ImportCase, req: Request): ImportCase {
   const copy = structuredClone(record);
   if (!hasCapability(req, "view_sensitive_cost")) {
     copy.costs = [];
+    copy.documents = copy.documents.filter((document) => !document.sensitive);
     delete copy.snapshot;
     copy.items = copy.items.map((item) => ({ ...item, fobUnitForeign: "0.00", fobTotalBdt: "0.00", exchangeRate: "0.00" }));
   }
@@ -373,6 +428,169 @@ function customerScoped(req: Request) {
 
 function nextReference(prefix: string, count: number) {
   return `${prefix}-2026-${String(count + 1).padStart(3, "0")}`;
+}
+
+function salesOwnerForDelivery(delivery: Delivery) {
+  return delivery.salesOwnerId
+    ?? orders.find((order) => order.id === delivery.orderId)?.ownerId
+    ?? customers.find((customer) => customer.id === delivery.customerId)?.assignedSalesUserId;
+}
+
+function reportPeriod(req: Request) {
+  const today = businessDate();
+  const from = String(req.query.from ?? `${today.slice(0, 7)}-01`);
+  const to = String(req.query.to ?? today);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error("Enter a valid report date range.");
+  return { from, to };
+}
+
+function salesEmployeesFor(req: Request): SalespersonEmployee[] {
+  const user = userFor(req)!;
+  return demoUsers
+    .filter((entry) => entry.role === "Sales Executive" && entry.status === "Active" && (user.role !== "Sales Executive" || entry.id === user.id))
+    .map((entry) => ({ id: entry.id, name: entry.name, title: entry.title, territory: entry.territory }));
+}
+
+function salespersonPerformance(employee: SalespersonEmployee, from: string, to: string): SalespersonPerformanceDetail {
+  const employeeQuotes = quotations.filter((quote) => quote.ownerId === employee.id && inPeriod(quote.date, from, to));
+  const employeeOrders = orders.filter((order) => order.ownerId === employee.id && inPeriod(order.date, from, to));
+  const employeeDeliveries = deliveries.filter((delivery) => salesOwnerForDelivery(delivery) === employee.id && inPeriod(delivery.date, from, to));
+  const employeeCollections = collections.filter((collection) => collection.ownerId === employee.id && collection.status === "Posted" && inPeriod(collection.date, from, to));
+  const deliveredOrderIds = new Set(employeeDeliveries.map((delivery) => delivery.orderId));
+  const handledCustomerIds = new Set([
+    ...employeeQuotes.map((quote) => quote.customerId),
+    ...employeeOrders.map((order) => order.customerId),
+    ...employeeDeliveries.map((delivery) => delivery.customerId),
+    ...employeeCollections.map((collection) => collection.customerId)
+  ]);
+  const assignedCustomers = customers.filter((customer) => customer.assignedSalesUserId === employee.id);
+  const deliveredSales = employeeDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0));
+  const deliveredUnits = employeeDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.quantity), new Decimal(0));
+  const collectionValue = employeeCollections.reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
+  const quotationValue = employeeQuotes.reduce((sum, quote) => sum.plus(quote.total), new Decimal(0));
+  const convertedCount = employeeQuotes.filter((quote) => quote.status === "Converted" || orders.some((order) => order.quotationId === quote.id)).length;
+  const pendingQuotationValue = employeeQuotes.filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status) && !orders.some((order) => order.quotationId === quote.id)).reduce((sum, quote) => sum.plus(quote.total), new Decimal(0));
+  const totalDiscount = employeeQuotes.reduce((sum, quote) => sum.plus(quote.discountTotal), new Decimal(0));
+  const orderValue = employeeOrders.reduce((sum, order) => sum.plus(order.total), new Decimal(0));
+  const summary: SalespersonPerformanceSummary = {
+    quotationsCreated: employeeQuotes.length,
+    quotationValue: money(quotationValue),
+    sentQuotations: employeeQuotes.filter((quote) => quote.status === "Sent").length,
+    acceptedQuotations: employeeQuotes.filter((quote) => quote.status === "Accepted").length,
+    convertedQuotations: convertedCount,
+    rejectedQuotations: employeeQuotes.filter((quote) => quote.status === "Rejected").length,
+    pendingQuotationValue: money(pendingQuotationValue),
+    ordersCreated: employeeOrders.length,
+    ordersDelivered: deliveredOrderIds.size,
+    deliveredSalesValue: money(deliveredSales),
+    unitsDelivered: precise(deliveredUnits, 4),
+    collectionsReceived: money(collectionValue),
+    customersHandled: handledCustomerIds.size,
+    assignedCustomerDue: money(assignedCustomers.reduce((sum, customer) => sum.plus(customer.currentDue), new Decimal(0))),
+    averageOrderValue: money(employeeOrders.length ? orderValue.div(employeeOrders.length) : 0),
+    conversionRate: precise(employeeQuotes.length ? new Decimal(convertedCount).div(employeeQuotes.length).mul(100) : 0, 2),
+    totalDiscount: money(totalDiscount),
+    averageDiscount: money(employeeQuotes.length ? totalDiscount.div(employeeQuotes.length) : 0)
+  };
+  const productTotals = new Map<string, { product: string; units: Decimal; value: Decimal }>();
+  for (const line of employeeDeliveries.flatMap((delivery) => delivery.lines)) {
+    const row = productTotals.get(line.productId) ?? { product: line.productName, units: new Decimal(0), value: new Decimal(0) };
+    row.units = row.units.plus(line.quantity);
+    row.value = row.value.plus(line.lineTotal);
+    productTotals.set(line.productId, row);
+  }
+  const visibleCustomers = customers.filter((customer) => handledCustomerIds.has(customer.id) || customer.assignedSalesUserId === employee.id);
+  return {
+    employee,
+    summary,
+    tables: {
+      quotations: { id: "employee-quotations", title: "Quotation Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Quotation" }, { key: "customer", label: "Customer" }, { key: "status", label: "Status" }, { key: "discount", label: "Discount", align: "right" }, { key: "value", label: "Value", align: "right" }], rows: employeeQuotes.map((quote) => ({ date: quote.date, reference: quote.quotationNumber, customer: quote.customerName, status: quote.status, discount: quote.discountTotal, value: quote.total })) },
+      orders: { id: "employee-orders", title: "Order Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Order" }, { key: "customer", label: "Customer" }, { key: "status", label: "Status" }, { key: "value", label: "Value", align: "right" }], rows: employeeOrders.map((order) => ({ date: order.date, reference: order.orderNumber, customer: order.customerName, status: order.status, value: order.total })) },
+      deliveries: { id: "employee-deliveries", title: "Delivery / Challan Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Challan" }, { key: "customer", label: "Customer" }, { key: "units", label: "Units", align: "right" }, { key: "value", label: "Delivered Value", align: "right" }], rows: employeeDeliveries.map((delivery) => ({ date: delivery.date, reference: delivery.challanNumber, customer: delivery.customerName, units: precise(delivery.lines.reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), value: money(delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0))) })) },
+      collections: { id: "employee-collections", title: "Collection Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Receipt" }, { key: "customer", label: "Customer" }, { key: "mode", label: "Mode" }, { key: "amount", label: "Amount", align: "right" }], rows: employeeCollections.map((collection) => ({ date: collection.date, reference: collection.receiptNumber, customer: collection.customerName, mode: collection.paymentMode, amount: collection.amount })) },
+      customers: { id: "employee-customers", title: "Customer Summary", columns: [{ key: "customer", label: "Customer" }, { key: "territory", label: "Territory" }, { key: "terms", label: "Terms" }, { key: "sales", label: "Total Sales", align: "right" }, { key: "collected", label: "Collected", align: "right" }, { key: "due", label: "Current Due", align: "right" }], rows: visibleCustomers.map((customer) => ({ customer: customer.name, territory: customer.territory, terms: customer.paymentTerms, sales: customer.totalSales, collected: customer.totalCollected, due: customer.currentDue })) },
+      products: { id: "employee-products", title: "Top Products", columns: [{ key: "product", label: "Product" }, { key: "units", label: "Units", align: "right" }, { key: "value", label: "Delivered Value", align: "right" }], rows: [...productTotals.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, units: precise(row.units, 4), value: money(row.value) })) }
+    }
+  };
+}
+
+function documentById(documentId: string) {
+  for (const record of imports) {
+    const importDocument = record.documents.find((document) => document.id === documentId);
+    if (importDocument) return { document: importDocument as DocumentRecord, area: "imports" as const };
+    const costDocument = record.costs.find((cost) => cost.attachment?.id === documentId)?.attachment;
+    if (costDocument) return { document: costDocument, area: "imports" as const };
+  }
+  const expenseDocument = expenses.find((expense) => expense.attachment?.id === documentId)?.attachment;
+  if (expenseDocument) return { document: expenseDocument, area: "accounts" as const };
+  return null;
+}
+
+function aiContextFromRequest(req: Request): AIContext {
+  const source = req.method === "POST" ? (req.body?.context ?? {}) : req.query;
+  return {
+    route: String(source.route ?? "/app/dashboard"),
+    entityType: source.entityType ? String(source.entityType) as AIContext["entityType"] : undefined,
+    entityId: source.entityId ? String(source.entityId) : undefined,
+    reportFrom: source.reportFrom ? String(source.reportFrom) : undefined,
+    reportTo: source.reportTo ? String(source.reportTo) : undefined
+  };
+}
+
+function aiSuggestionsFor(user: User, context: AIContext) {
+  if (context.entityType === "import" && areaRoles.imports.includes(user.role)) return ["Explain the current shipment stage", "Which documents are missing?", "What needs attention next?"];
+  if (context.entityType === "inventory" && areaRoles.inventory.includes(user.role)) return ["Which batches need attention?", "Which lot should be issued first?", "Explain the FIFO rule"];
+  if (context.entityType === "sales" && areaRoles.sales.includes(user.role)) return ["Which customers need follow-up?", "Which quotations are still pending?", "Summarize collections and dues"];
+  if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) return ["Summarize this report period", "Compare salesperson performance", "Which customer owes the most?"];
+  return ["What needs attention today?", "Summarize my current workspace", "Which action should I review next?"];
+}
+
+function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendation[] {
+  const user = userFor(req)!;
+  const result: AIRecommendation[] = [];
+  const canSeeImports = areaRoles.imports.includes(user.role);
+  const canSeeInventory = areaRoles.inventory.includes(user.role) || user.role === "Warehouse Manager";
+  const canSeeSales = areaRoles.sales.includes(user.role) && user.role !== "Warehouse Manager";
+  const include = (entities: AIContext["entityType"][]) => !context.entityType || context.entityType === "dashboard" || entities.includes(context.entityType);
+
+  if (canSeeImports && include(["import"])) {
+    const record = imports.find((entry) => entry.id === context.entityId) ?? imports.find((entry) => !["Closed", "Cancelled", "Received"].includes(entry.status));
+    if (record) {
+      const expected = ["PI", record.paymentMode === "TT" ? "Swift Copy" : "LC", "Commercial Invoice", "Packing List", "Bill of Lading"];
+      const existing = new Set(record.documents.map((document) => document.type.toLowerCase()));
+      const missing = expected.filter((type) => !existing.has(type.toLowerCase()));
+      if (missing.length) result.push({ id: `import-docs-${record.id}`, title: `${record.primaryReference} is missing ${missing.length} core document${missing.length === 1 ? "" : "s"}`, summary: missing.join(", "), severity: "Attention", sourceLabel: record.primaryReference, sourcePath: `/app/imports/${record.id}`, reason: "The shipment file is incomplete for its current stage.", recommendedAction: "Open Documents and attach or verify the missing files." });
+      if (record.status === "Costing" && hasCapability(req, "view_sensitive_cost")) result.push({ id: `import-cost-${record.id}`, title: "Landed-cost review is still open", summary: `${record.costs.length} cost rows are recorded and await validation/finalization.`, severity: "Attention", sourceLabel: record.primaryReference, sourcePath: `/app/imports/${record.id}`, reason: "Warehouse receiving stays locked until the deterministic cost snapshot is finalized.", recommendedAction: "Preview allocations, reconcile every row, then use the authorized finalize action." });
+    }
+  }
+
+  if (canSeeInventory && include(["inventory"])) {
+    const attention = stockBatches.filter((batch) => decimal(batch.quantityAvailable).gt(0) && expiryStatus(batch.expiryDate) !== "Normal").sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+    if (attention.length) {
+      const batch = attention[0];
+      result.push({ id: `expiry-${batch.id}`, title: `${attention.length} batch${attention.length === 1 ? " needs" : "es need"} expiry attention`, summary: `${batch.productName}, lot ${batch.lotNumber}, expires ${batch.expiryDate}.`, severity: batch.expiryStatus === "Expired" ? "Critical" : "Attention", sourceLabel: "Inventory batches", sourcePath: "/app/inventory", reason: "Expiry remains visible alongside FIFO so unusable or urgent stock is not selected blindly.", recommendedAction: "Review the batch register and plan issue or quarantine according to policy." });
+    }
+    const grouped = new Map<string, StockBatch[]>();
+    for (const batch of stockBatches.filter((entry) => decimal(entry.quantityAvailable).gt(0) && expiryStatus(entry.expiryDate) !== "Expired")) grouped.set(batch.productId, [...(grouped.get(batch.productId) ?? []), batch]);
+    const multi = [...grouped.values()].map((rows) => rows.sort((a, b) => a.receivedDate.localeCompare(b.receivedDate) || a.id.localeCompare(b.id))).find((rows) => rows.length > 1);
+    if (multi) result.push({ id: `fifo-${multi[0].productId}`, title: "Older stock remains available", summary: `${multi[0].productName}: lot ${multi[0].lotNumber} has ${multi[0].quantityAvailable} units and is the authoritative FIFO recommendation.`, severity: "Info", sourceLabel: `Lot ${multi[0].lotNumber}`, sourcePath: "/app/inventory", reason: `A newer lot (${multi[1].lotNumber}) also exists, but the earlier eligible receipt must be issued first.`, recommendedAction: "Use automatic FIFO in Delivery; any newer-lot override still needs capability and a reason." });
+  }
+
+  if (canSeeSales && include(["sales", "reports"])) {
+    const scopedCustomers = customerScoped(req).filter((customer) => decimal(customer.currentDue).gt(0)).sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue));
+    if (scopedCustomers[0]) result.push({ id: `due-${scopedCustomers[0].id}`, title: "Collection follow-up suggested", summary: `${scopedCustomers[0].name} has an outstanding due of Tk ${money(scopedCustomers[0].currentDue)}.`, severity: "Attention", sourceLabel: scopedCustomers[0].name, sourcePath: "/app/sales?view=collections", reason: "This is the largest receivable currently visible to your role.", recommendedAction: "Review the customer ledger and record the next verified collection action." });
+    const scopedQuotes = salesScoped(quotations, req);
+    const pendingQuote = scopedQuotes.find((quote) => ["Sent", "Accepted"].includes(quote.status) && !orders.some((order) => order.quotationId === quote.id));
+    if (pendingQuote) result.push({ id: `quote-${pendingQuote.id}`, title: "Quotation needs conversion follow-up", summary: `${pendingQuote.quotationNumber} for ${pendingQuote.customerName} is ${pendingQuote.status.toLowerCase()} and has no linked order.`, severity: "Info", sourceLabel: pendingQuote.quotationNumber, sourcePath: "/app/sales?view=orders", reason: "The commercial flow has not yet moved to an order.", recommendedAction: "Confirm the customer decision, then use the existing conversion action when approved." });
+  }
+
+  if (["Super Admin", "Managing Director"].includes(user.role) && include(["dashboard", "reports"])) {
+    const month = businessDate().slice(0, 7);
+    const sales = deliveries.filter((delivery) => delivery.date.startsWith(month)).flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0));
+    const collected = collections.filter((collection) => collection.status === "Posted" && collection.date.startsWith(month)).reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
+    result.unshift({ id: "management-cash-gap", title: collected.lt(sales) ? "Collections trail delivered sales" : "Collections cover delivered sales", summary: `This month: delivered sales Tk ${money(sales)}; collections Tk ${money(collected)}.`, severity: collected.lt(sales) ? "Attention" : "Info", sourceLabel: "Management reports", sourcePath: "/app/reports", reason: "This compares posted delivery value with posted collections without inventing profit or accounting entries.", recommendedAction: collected.lt(sales) ? "Review customer dues and salesperson follow-up priorities." : "Continue monitoring receivables and upcoming deliveries." });
+  }
+  return result.slice(0, 5);
 }
 
 app.get("/api/health", (_req, res) => res.json(ok({ service: "mipro-simplified-erp-api", ok: true })));
@@ -407,6 +625,131 @@ app.post("/api/auth/reset-password", (req, res) => {
 app.get("/api/me", (req, res) => {
   const user = requireUser(req, res);
   if (user) res.json(ok({ token: `mock-token-${user.id}`, user }, "Current session"));
+});
+
+app.get("/api/documents/:documentId/content", (req, res) => {
+  const located = documentById(req.params.documentId);
+  if (!located) return fail(res, 404, "Document file is unavailable.");
+  const user = requireArea(req, res, located.area);
+  if (!user) return;
+  if ((located.document.sensitive || located.document.entityType === "import-cost") && !hasCapability(req, "view_sensitive_cost")) {
+    return fail(res, 403, "This supporting document contains sensitive import-cost information.");
+  }
+  const content = documentContents.get(located.document.id);
+  if (!content) return fail(res, 404, "The attachment metadata exists, but its demo file is missing.");
+  const safeFileName = located.document.fileName.replace(/[\r\n"]/g, "");
+  res.setHeader("Content-Type", located.document.mimeType);
+  res.setHeader("Content-Disposition", `inline; filename="${safeFileName}"`);
+  if (!content.startsWith("data:")) {
+    return res.sendFile(content, (error) => {
+      if (!error) return;
+      if (!res.headersSent) fail(res, 404, "The attachment metadata exists, but its demo file is missing.");
+      else res.end();
+    });
+  }
+  const match = content.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) return fail(res, 422, "The stored attachment content is invalid.");
+  res.send(Buffer.from(match[2], "base64"));
+});
+
+app.get("/api/ai/recommendations", (req, res) => {
+  if (!requireUser(req, res)) return;
+  res.json(ok(aiRecommendationsFor(req, aiContextFromRequest(req)), "Role-safe recommendations loaded"));
+});
+
+app.get("/api/ai/insights", (req, res) => {
+  if (!requireUser(req, res)) return;
+  const insights: AIInsight[] = aiRecommendationsFor(req, aiContextFromRequest(req)).map((recommendation) => ({
+    id: recommendation.id,
+    title: recommendation.title,
+    summary: recommendation.summary,
+    severity: recommendation.severity,
+    sourceLabel: recommendation.sourceLabel,
+    sourcePath: recommendation.sourcePath,
+  }));
+  res.json(ok(insights, "Role-safe operational insights loaded"));
+});
+
+app.post("/api/ai/chat", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const context = aiContextFromRequest(req);
+  const question = String(req.body?.message ?? "").trim();
+  if (!question) return fail(res, 422, "Ask a question about the current ERP workspace.");
+  const asksForCost = /landed\s*cost|fob|supplier\s*price|import\s*cost/i.test(question);
+  const asksForProfit = /gross\s*profit|profit\s*margin/i.test(question);
+  const suggestions = aiSuggestionsFor(user, context);
+  if ((asksForCost && !hasCapability(req, "view_sensitive_cost")) || (asksForProfit && !hasCapability(req, "view_profit"))) {
+    return res.json(ok({ answer: `I cannot provide supplier pricing, landed cost or profit to the ${user.role} role. I can still help with allowed status, stock, customer, due and workflow information.`, contextLabel: `${user.role} · permission-safe response`, suggestions, sources: [], restricted: true }, "Sensitive request safely restricted"));
+  }
+  if ((context.entityType === "import" && !areaRoles.imports.includes(user.role)) || (context.entityType === "inventory" && !areaRoles.inventory.includes(user.role)) || (context.entityType === "reports" && !areaRoles.reports.includes(user.role))) {
+    return res.json(ok({ answer: `The ${context.entityType} workspace is outside the ${user.role} role, so I cannot read or summarize its records.`, contextLabel: `${user.role} · access restricted`, suggestions: aiSuggestionsFor(user, { route: "/app/dashboard", entityType: "dashboard" }), sources: [], restricted: true }, "Context safely restricted"));
+  }
+
+  let answer = "I reviewed the records available to your role. ";
+  let contextLabel = `${user.role} · ${context.entityType ?? "dashboard"}`;
+  let sources: { label: string; path: string }[] = [];
+  if (context.entityType === "import" && areaRoles.imports.includes(user.role)) {
+    const record = imports.find((entry) => entry.id === context.entityId);
+    if (record) {
+      contextLabel = `${record.primaryReference} · ${record.status}`;
+      sources = [{ label: record.primaryReference, path: `/app/imports/${record.id}` }];
+      const existing = new Set(record.documents.map((document) => document.type.toLowerCase()));
+      const expected = ["PI", record.paymentMode === "TT" ? "Swift Copy" : "LC", "Commercial Invoice", "Packing List", "Bill of Lading"];
+      const missing = expected.filter((type) => !existing.has(type.toLowerCase()));
+      if (/missing|document/i.test(question)) answer = missing.length ? `${record.primaryReference} is missing: ${missing.join(", ")}. Attach or verify these in the Documents section; no data will be applied automatically.` : `${record.primaryReference} has all five core commercial and shipment document types in the current checklist.`;
+      else if (/allocation|freight|cost/i.test(question) && hasCapability(req, "view_sensitive_cost")) answer = `${record.primaryReference} has ${record.costs.length} recorded import-cost rows. Each row uses its explicit deterministic basis, and the landed-cost preview must reconcile exactly before authorized finalization.`;
+      else answer = `${record.primaryReference} is at ${record.status}. Its next valid action follows the controlled import milestones; warehouse receiving stays locked until the landed-cost snapshot is finalized.`;
+    } else answer += "The requested import record is not available.";
+  } else if (context.entityType === "inventory" && areaRoles.inventory.includes(user.role)) {
+    const recs = aiRecommendationsFor(req, context).filter((item) => item.id.startsWith("expiry-") || item.id.startsWith("fifo-"));
+    answer = recs.length ? recs.map((item) => `${item.title}: ${item.summary}`).join(" ") : "No current non-expired batch requires special FIFO or expiry attention.";
+    sources = [{ label: "Inventory batches", path: "/app/inventory" }];
+  } else if (context.entityType === "sales" && areaRoles.sales.includes(user.role) && user.role !== "Warehouse Manager") {
+    const visibleCustomers = customerScoped(req);
+    const topDue = [...visibleCustomers].sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue))[0];
+    const openQuotes = salesScoped(quotations, req).filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status));
+    answer = topDue ? `${topDue.name} has the largest visible due at Tk ${money(topDue.currentDue)}. ${openQuotes.length} quotation${openQuotes.length === 1 ? " is" : "s are"} still open in your permitted sales scope.` : "There are no visible customer dues in your current sales scope.";
+    sources = [{ label: "Sales workspace", path: "/app/sales" }];
+  } else if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) {
+    const from = context.reportFrom && /^\d{4}-\d{2}-\d{2}$/.test(context.reportFrom) ? context.reportFrom : `${businessDate().slice(0, 7)}-01`;
+    const to = context.reportTo && /^\d{4}-\d{2}-\d{2}$/.test(context.reportTo) ? context.reportTo : businessDate();
+    const performance = salesEmployeesFor(req).map((employee) => salespersonPerformance(employee, from, to));
+    const leader = [...performance].sort((a, b) => decimal(b.summary.deliveredSalesValue).comparedTo(a.summary.deliveredSalesValue))[0];
+    const totalSales = performance.reduce((sum, row) => sum.plus(row.summary.deliveredSalesValue), new Decimal(0));
+    const totalCollections = performance.reduce((sum, row) => sum.plus(row.summary.collectionsReceived), new Decimal(0));
+    answer = `${from} to ${to}: permitted delivered sales are Tk ${money(totalSales)} and collections are Tk ${money(totalCollections)}.${leader ? ` ${leader.employee.name} leads visible delivered sales at Tk ${leader.summary.deliveredSalesValue}.` : ""}`;
+    sources = [{ label: "Salesperson performance", path: "/app/reports" }];
+  } else {
+    const recommendation = aiRecommendationsFor(req, { ...context, entityType: "dashboard" })[0];
+    answer = recommendation ? `${recommendation.title}. ${recommendation.summary} Recommended next step: ${recommendation.recommendedAction}` : `There are no urgent exceptions in the records currently visible to ${user.role}.`;
+    sources = recommendation?.sourcePath ? [{ label: recommendation.sourceLabel, path: recommendation.sourcePath }] : [];
+  }
+  res.json(ok({ answer, contextLabel, suggestions, sources, restricted: false }, "Contextual answer generated from current mock ERP data"));
+});
+
+app.post("/api/ai/document-extract", (req, res) => {
+  const user = requireArea(req, res, "imports");
+  if (!user) return;
+  const record = imports.find((entry) => entry.id === req.body?.importId);
+  const document = record?.documents.find((entry) => entry.id === req.body?.documentId);
+  if (!record || !document) return fail(res, 404, "Import document not found.");
+  if (document.sensitive && !hasCapability(req, "view_sensitive_cost")) return fail(res, 403, "This document is sensitive for your role.");
+  const firstItem = record.items[0];
+  const fields = [
+    { key: "supplierName", label: "Supplier", value: record.supplierName, target: "import" as const, confidence: "0.99" },
+    { key: "piNumber", label: "PI Number", value: record.piNumber ?? `PI-${record.poNumber.replace("PO-", "")}`, target: "import" as const, confidence: "0.96" },
+    { key: "piDate", label: "PI Date", value: record.piDate ?? record.poDate, target: "import" as const, confidence: "0.94" },
+    { key: "currency", label: "Currency", value: record.currency, target: "import" as const, confidence: "0.98" },
+    ...(firstItem ? [
+      { key: "quantity", label: `${firstItem.productName} Quantity`, value: firstItem.quantity, target: "item" as const, targetId: firstItem.id, confidence: "0.95" },
+      { key: "cartonCount", label: `${firstItem.productName} Cartons`, value: firstItem.cartonCount, target: "item" as const, targetId: firstItem.id, confidence: "0.91" },
+      { key: "cbmPerCarton", label: `${firstItem.productName} CBM / Carton`, value: firstItem.cbmPerCarton, target: "item" as const, targetId: firstItem.id, confidence: "0.89" },
+      ...(hasCapability(req, "view_sensitive_cost") ? [{ key: "fobUnitForeign", label: `${firstItem.productName} FOB / Unit`, value: firstItem.fobUnitForeign, target: "item" as const, targetId: firstItem.id, confidence: "0.93" }] : [])
+    ] : [])
+  ];
+  audit(req, "AI extraction prepared", "ImportDocument", document.id, `${fields.length} fields extracted for human review; no record was changed.`);
+  res.json(ok({ importId: record.id, documentId: document.id, documentName: document.name, requiresReview: true as const, fields, warnings: ["Mock extraction uses current document-linked demo data.", "Review every selected field before applying normal import validation."] }, "Fields extracted for review"));
 });
 
 app.get(["/api/dashboard", "/api/dashboard/summary"], (req, res) => {
@@ -751,7 +1094,8 @@ app.post("/api/imports/:importId/costs", (req, res) => {
   if (!record) return fail(res, 404, "Import not found");
   if (terminalImportLocked(record, res)) return;
   if (record.snapshot) return fail(res, 423, "Finalized imports are locked.");
-  const cost: ImportCostLine = { ...req.body, id: id("cost"), enteredBy: userFor(req)?.name ?? "Unknown", createdAt: new Date().toISOString() };
+  const { attachmentUpload, ...costPayload } = req.body as Record<string, unknown> & { attachmentUpload?: DocumentUpload };
+  const cost: ImportCostLine = { ...(costPayload as unknown as ImportCostLine), id: id("cost"), enteredBy: userFor(req)?.name ?? "Unknown", createdAt: new Date().toISOString() };
   if (!cost.allocationMethod) return fail(res, 422, "Select an allocation method explicitly.");
   try {
     const amount = requiredDecimal(cost.amountForeign, `${cost.name || "Cost"} amount`);
@@ -760,6 +1104,14 @@ app.post("/api/imports/:importId/costs", (req, res) => {
     cost.amountBdt = money(amount.mul(rate));
   } catch (error) {
     return fail(res, 422, error instanceof Error ? error.message : "Cost values are invalid.");
+  }
+  if (attachmentUpload) {
+    try {
+      cost.attachment = uploadedDocument(req, attachmentUpload, "import-cost", cost.id, cost.category || cost.name, true);
+      cost.attachmentName = cost.attachment.fileName;
+    } catch (error) {
+      return fail(res, 422, error instanceof Error ? error.message : "Cost attachment is invalid.");
+    }
   }
   record.costs.push(cost);
   record.status = "Costing";
@@ -777,7 +1129,8 @@ app.patch("/api/imports/:importId/costs/:costId", (req, res) => {
   if (!record || index < 0) return fail(res, 404, "Cost line not found");
   if (terminalImportLocked(record, res)) return;
   if (record.snapshot) return fail(res, 423, "Finalized imports are locked.");
-  const cost: ImportCostLine = { ...record.costs[index], ...req.body, id: record.costs[index].id };
+  const { attachmentUpload, ...costPayload } = req.body as Record<string, unknown> & { attachmentUpload?: DocumentUpload };
+  const cost: ImportCostLine = { ...record.costs[index], ...(costPayload as Partial<ImportCostLine>), id: record.costs[index].id };
   try {
     const amount = requiredDecimal(cost.amountForeign, `${cost.name || "Cost"} amount`);
     const rate = cost.currency === "BDT" ? new Decimal(1) : requiredDecimal(cost.exchangeRate, `${cost.name || "Cost"} exchange rate`);
@@ -785,6 +1138,14 @@ app.patch("/api/imports/:importId/costs/:costId", (req, res) => {
     cost.amountBdt = money(amount.mul(rate));
   } catch (error) {
     return fail(res, 422, error instanceof Error ? error.message : "Cost values are invalid.");
+  }
+  if (attachmentUpload) {
+    try {
+      cost.attachment = uploadedDocument(req, attachmentUpload, "import-cost", cost.id, cost.category || cost.name, true);
+      cost.attachmentName = cost.attachment.fileName;
+    } catch (error) {
+      return fail(res, 422, error instanceof Error ? error.message : "Cost attachment is invalid.");
+    }
   }
   record.costs[index] = cost;
   audit(req, "Cost line changed", "Import", record.id, `${cost.name} amount or allocation basis changed.`);
@@ -810,7 +1171,13 @@ app.post("/api/imports/:importId/documents", (req, res) => {
   const record = imports.find((item) => item.id === req.params.importId);
   if (!record) return fail(res, 404, "Import not found");
   if (terminalImportLocked(record, res)) return;
-  const document: ImportDocument = { id: id("doc"), importId: record.id, type: req.body.type, name: req.body.name, uploadedAt: new Date().toISOString(), uploadedBy: user.name, status: "Available" };
+  let common: DocumentRecord;
+  try {
+    common = uploadedDocument(req, req.body.upload, "import", record.id, String(req.body.type || "Other"), Boolean(req.body.sensitive));
+  } catch (error) {
+    return fail(res, 422, error instanceof Error ? error.message : "Document is invalid.");
+  }
+  const document: ImportDocument = { ...common, importId: record.id, type: common.documentType, name: common.fileName, uploadedAt: common.createdAt, uploadedBy: user.name, status: "Available" };
   record.documents.push(document);
   audit(req, "Document attached", "Import", record.id, `${document.type}: ${document.name}`);
   res.status(201).json(ok(document, "Document metadata saved"));
@@ -1044,7 +1411,7 @@ app.post("/api/quotations", (req, res) => {
   }
   const subtotal = lines.reduce((sum, line) => sum.plus(decimal(line.quantity).mul(line.unitPrice)), new Decimal(0));
   const discount = lines.reduce((sum, line) => sum.plus(line.discount), new Decimal(0));
-  const quote: Quotation = { ...req.body, id: id("quo"), quotationNumber: nextReference("QT", quotations.length), customerId: customer.id, customerName: customer.name, customerAddressSnapshot: customer.address, customerPhoneSnapshot: customer.phone, customerContactSnapshot: customer.contactPerson, ownerId: user.role === "Sales Executive" ? user.id : req.body.ownerId ?? user.id, lines, subtotal: money(subtotal), discountTotal: money(discount), total: money(subtotal.minus(discount)), status: "Draft" };
+  const quote: Quotation = { ...req.body, id: id("quo"), quotationNumber: nextReference("QT", quotations.length), customerId: customer.id, customerName: customer.name, customerAddressSnapshot: customer.address, customerPhoneSnapshot: customer.phone, customerContactSnapshot: customer.contactPerson, ownerId: user.role === "Sales Executive" ? user.id : req.body.ownerId ?? customer.assignedSalesUserId ?? user.id, createdByUserId: user.id, lines, subtotal: money(subtotal), discountTotal: money(discount), total: money(subtotal.minus(discount)), status: "Draft" };
   quotations.unshift(quote);
   audit(req, "Quotation created", "Quotation", quote.id, `${quote.quotationNumber} created for ${quote.customerName}.`);
   res.status(201).json(ok(quote, "Quotation created"));
@@ -1095,7 +1462,7 @@ app.post("/api/quotations/:quoteId/convert", (req, res) => {
   if (!ownsCustomer(req, quote.customerId)) return fail(res, 403, "The quotation customer is outside your assigned records.");
   if (quote.status === "Converted") return fail(res, 409, "Quotation has already been converted.");
   quote.status = "Converted";
-  const order: SalesOrder = { id: id("order"), orderNumber: nextReference("SO", orders.length), quotationId: quote.id, date: businessDate(), customerId: quote.customerId, customerName: quote.customerName, customerAddressSnapshot: quote.customerAddressSnapshot, customerPhoneSnapshot: quote.customerPhoneSnapshot, customerContactSnapshot: quote.customerContactSnapshot, ownerId: quote.ownerId, paymentConditions: quote.paymentTerms, deliveryInstruction: req.body?.deliveryInstruction ?? "Confirm with customer before dispatch", requestedDeliveryDate: req.body?.requestedDeliveryDate, orderReceivedByName: req.body?.orderReceivedByName, orderReceivedByDesignation: req.body?.orderReceivedByDesignation, orderGivenBy: req.body?.orderGivenBy, paymentConfirmation: req.body?.paymentConfirmation, paymentReference: req.body?.paymentReference, paymentDate: req.body?.paymentDate, headOfSalesSignoff: req.body?.headOfSalesSignoff, coeSignoff: req.body?.coeSignoff, mdSignoff: req.body?.mdSignoff, amountReceived: "0.00", due: "0.00", status: "Placed", lines: structuredClone(quote.lines), total: quote.total };
+  const order: SalesOrder = { id: id("order"), orderNumber: nextReference("SO", orders.length), quotationId: quote.id, date: businessDate(), customerId: quote.customerId, customerName: quote.customerName, customerAddressSnapshot: quote.customerAddressSnapshot, customerPhoneSnapshot: quote.customerPhoneSnapshot, customerContactSnapshot: quote.customerContactSnapshot, ownerId: quote.ownerId, createdByUserId: user.id, paymentConditions: quote.paymentTerms, deliveryInstruction: req.body?.deliveryInstruction ?? "Confirm with customer before dispatch", requestedDeliveryDate: req.body?.requestedDeliveryDate, orderReceivedByName: req.body?.orderReceivedByName, orderReceivedByDesignation: req.body?.orderReceivedByDesignation, orderGivenBy: req.body?.orderGivenBy, paymentConfirmation: req.body?.paymentConfirmation, paymentReference: req.body?.paymentReference, paymentDate: req.body?.paymentDate, headOfSalesSignoff: req.body?.headOfSalesSignoff, coeSignoff: req.body?.coeSignoff, mdSignoff: req.body?.mdSignoff, amountReceived: "0.00", due: "0.00", status: "Placed", lines: structuredClone(quote.lines), total: quote.total };
   orders.unshift(order);
   audit(req, "Quotation converted", "SalesOrder", order.id, `${quote.quotationNumber} converted to ${order.orderNumber}.`);
   res.status(201).json(ok(order, "Quotation converted to order"));
@@ -1191,7 +1558,7 @@ app.post("/api/deliveries", (req, res) => {
     }
   }
   if (!plannedLines.length) return fail(res, 422, "Enter at least one delivery quantity.");
-  const delivery: Delivery = { ...payload, lines: plannedLines, id: id("delivery"), challanNumber: nextReference("DC", deliveries.length), status: "Dispatched", customerId: order.customerId, customerName: order.customerName };
+  const delivery: Delivery = { ...payload, lines: plannedLines, id: id("delivery"), challanNumber: nextReference("DC", deliveries.length), status: "Dispatched", customerId: order.customerId, customerName: order.customerName, salesOwnerId: order.ownerId, dispatchedByUserId: user.id };
   deliveries.unshift(delivery);
   for (const line of delivery.lines) {
     const batch = stockBatches.find((entry) => entry.id === line.batchId)!;
@@ -1245,7 +1612,7 @@ app.post("/api/collections", (req, res) => {
   if (req.body.paymentMode !== "Cash" && !String(req.body.referenceNumber ?? "").trim()) return fail(res, 422, "Enter the bank, mobile-banking or cheque reference for this collection.");
   if (amount.gt(customer.currentDue)) return fail(res, 422, "Collection cannot exceed the customer's current due.");
   if (linkedOrder && amount.gt(linkedOrder.due)) return fail(res, 422, "Collection cannot exceed the selected order's due amount.");
-  const collection: Collection = { ...req.body, amount: money(amount), customerName: customer.name, accountId: account.id, id: id("collection"), receiptNumber: nextReference("MR", collections.length), ownerId: user.role === "Sales Executive" ? user.id : linkedOrder?.ownerId ?? req.body.ownerId ?? user.id, status: "Posted" };
+  const collection: Collection = { ...req.body, amount: money(amount), customerName: customer.name, accountId: account.id, id: id("collection"), receiptNumber: nextReference("MR", collections.length), ownerId: user.role === "Sales Executive" ? user.id : linkedOrder?.ownerId ?? customer.assignedSalesUserId ?? req.body.ownerId ?? user.id, postedByUserId: user.id, status: "Posted" };
   collections.unshift(collection);
   customer.currentDue = money(decimal(customer.currentDue).minus(amount));
   customer.totalCollected = money(decimal(customer.totalCollected).plus(amount));
@@ -1286,7 +1653,16 @@ app.post("/api/expenses", (req, res) => {
   if (!category?.active) return fail(res, 422, "Select a valid active expense category.");
   const account = accounts.find((entry) => entry.id === req.body.paidFromAccountId && entry.active);
   if (!account || decimal(account.balance).lt(amount)) return fail(res, 422, "Selected account has insufficient balance.");
-  const expense: Expense = { ...req.body, amount: money(amount), id: id("expense"), categoryName: category.name, status: "Posted" };
+  const { attachmentUpload, ...expensePayload } = req.body as Record<string, unknown> & { attachmentUpload?: DocumentUpload };
+  const expense: Expense = { ...(expensePayload as unknown as Expense), amount: money(amount), id: id("expense"), categoryName: category.name, status: "Posted" };
+  if (attachmentUpload) {
+    try {
+      expense.attachment = uploadedDocument(req, attachmentUpload, "expense", expense.id, "Expense Receipt", false);
+      expense.attachmentName = expense.attachment.fileName;
+    } catch (error) {
+      return fail(res, 422, error instanceof Error ? error.message : "Expense attachment is invalid.");
+    }
+  }
   expenses.unshift(expense);
   account.balance = money(decimal(account.balance).minus(amount));
   accountTransactions.unshift({ id: id("trx"), date: expense.date, accountId: account.id, accountName: account.name, direction: "Out", amount: expense.amount, sourceType: "Expense", sourceId: expense.id, description: expense.remarks });
@@ -1330,18 +1706,48 @@ app.get("/api/account-transactions", (req, res) => {
   res.json(ok(accountTransactions, "Account transactions loaded"));
 });
 
+app.get("/api/reports/salespeople", (req, res) => {
+  const user = requireArea(req, res, "reports");
+  if (!user) return;
+  let period: { from: string; to: string };
+  try {
+    period = reportPeriod(req);
+  } catch (error) {
+    return fail(res, 422, error instanceof Error ? error.message : "Report period is invalid.");
+  }
+  const employees = salesEmployeesFor(req);
+  const requested = String(req.query.employeeId ?? "all");
+  if (user.role === "Sales Executive" && !["all", "self", user.id].includes(requested)) return fail(res, 403, "Sales Executives can open only their own performance report.");
+  const selectedEmployeeId = user.role === "Sales Executive" ? user.id : requested;
+  const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId);
+  if (selectedEmployeeId !== "all" && !selectedEmployee) return fail(res, 403, "The selected employee is outside your report scope.");
+  const details = employees.map((employee) => salespersonPerformance(employee, period.from, period.to));
+  res.json(ok({
+    period,
+    selectedEmployeeId,
+    employees,
+    comparison: details.map((detail) => ({ ...detail.employee, ...detail.summary })),
+    selected: selectedEmployee ? details.find((detail) => detail.employee.id === selectedEmployee.id) : undefined
+  }, selectedEmployee ? `${selectedEmployee.name} performance loaded` : "Sales team comparison loaded"));
+});
+
 app.get("/api/reports", (req, res) => {
-  if (!requireArea(req, res, "reports")) return;
-  const today = businessDate();
-  const defaultFrom = `${today.slice(0, 7)}-01`;
-  const from = String(req.query.from ?? defaultFrom);
-  const to = String(req.query.to ?? today);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return fail(res, 422, "Enter a valid report date range.");
+  const user = requireArea(req, res, "reports");
+  if (!user) return;
+  let from: string;
+  let to: string;
+  try {
+    ({ from, to } = reportPeriod(req));
+  } catch (error) {
+    return fail(res, 422, error instanceof Error ? error.message : "Report period is invalid.");
+  }
+  const ownSalesId = user.role === "Sales Executive" ? user.id : undefined;
+  const reportCustomers = ownSalesId ? customers.filter((customer) => customer.assignedSalesUserId === ownSalesId) : customers;
   const landed = imports.filter((record) => record.snapshot && inPeriod(record.snapshot.finalizedAt.slice(0, 10), from, to));
   const importCost = landed.reduce((sum, record) => sum.plus(record.snapshot?.totalShipmentCostBdt ?? 0), new Decimal(0));
   const inventoryUnits = stockBatches.reduce((sum, batch) => sum.plus(batch.quantityAvailable), new Decimal(0));
-  const periodDeliveries = deliveries.filter((delivery) => inPeriod(delivery.date, from, to));
-  const periodCollections = collections.filter((collection) => collection.status === "Posted" && inPeriod(collection.date, from, to));
+  const periodDeliveries = deliveries.filter((delivery) => inPeriod(delivery.date, from, to) && (!ownSalesId || salesOwnerForDelivery(delivery) === ownSalesId));
+  const periodCollections = collections.filter((collection) => collection.status === "Posted" && inPeriod(collection.date, from, to) && (!ownSalesId || collection.ownerId === ownSalesId));
   const periodExpenses = expenses.filter((expense) => expense.status === "Posted" && inPeriod(expense.date, from, to));
   const salesTotal = periodDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0));
   const collectionTotal = periodCollections.reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
@@ -1380,7 +1786,7 @@ app.get("/api/reports", (req, res) => {
     period: { from, to },
     importCosts: [{ label: "Imports created", value: String(imports.filter((record) => inPeriod(record.createdAt.slice(0, 10), from, to)).length) }, { label: "Finalized shipment value", value: sensitive ? money(importCost) : "Restricted" }, { label: "Pending finalization", value: String(imports.filter((item) => item.costingStatus === "In Progress").length) }],
     inventory: [{ label: "Available units", value: inventoryUnits.toFixed(0) }, { label: "Tracked batches", value: String(stockBatches.length) }, { label: "Expiry attention", value: String(stockBatches.filter((batch) => expiryStatus(batch.expiryDate) !== "Normal").length) }],
-    sales: [{ label: "Delivered sales", value: money(salesTotal) }, { label: "Collections received", value: money(collectionTotal) }, { label: "Customer dues", value: money(customers.reduce((sum, customer) => sum.plus(customer.currentDue), new Decimal(0))) }, ...(profitVisible ? [{ label: "Realized gross profit", value: money(realized.revenue.minus(realized.cogs)) }] : [])],
+    sales: [{ label: ownSalesId ? "My delivered sales" : "Delivered sales", value: money(salesTotal) }, { label: ownSalesId ? "My collections" : "Collections received", value: money(collectionTotal) }, { label: ownSalesId ? "My customer dues" : "Customer dues", value: money(reportCustomers.reduce((sum, customer) => sum.plus(customer.currentDue), new Decimal(0))) }, ...(profitVisible ? [{ label: "Realized gross profit", value: money(realized.revenue.minus(realized.cogs)) }] : [])],
     expenses: [{ label: "Operating expenses", value: money(expenseTotal) }, { label: "Posted entries", value: String(periodExpenses.length) }, { label: "Cash / bank accounts", value: String(accounts.filter((entry) => entry.active).length) }],
     tables: {
       imports: [
@@ -1400,8 +1806,8 @@ app.get("/api/reports", (req, res) => {
         { id: "sales-by-product", title: "Sales by Product", columns: [{ key: "product", label: "Product" }, { key: "quantity", label: "Units Delivered", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }], rows: [...salesByProduct.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, quantity: precise(row.quantity, 4), value: money(row.value) })) },
         { id: "sales-by-month", title: "Sales by Month", columns: [{ key: "month", label: "Month" }, { key: "deliveries", label: "Challans", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }], rows: [...salesByMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, row]) => ({ month, deliveries: String(row.deliveries), value: money(row.value) })) },
         { id: "collections", title: "Collections Received", columns: [{ key: "date", label: "Date" }, { key: "receipt", label: "Receipt" }, { key: "customer", label: "Customer" }, { key: "mode", label: "Mode" }, { key: "reference", label: "Payment Ref" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodCollections.map((collection) => ({ date: collection.date, receipt: collection.receiptNumber, customer: collection.customerName, mode: collection.paymentMode, reference: collection.referenceNumber ?? "-", amount: collection.amount })) },
-        { id: "customer-dues", title: "Customer Receivables", columns: [{ key: "customer", label: "Customer" }, { key: "terms", label: "Terms" }, { key: "sales", label: "Total Sales", align: "right" as const }, { key: "collected", label: "Collected", align: "right" as const }, { key: "due", label: "Current Due", align: "right" as const }], rows: customers.map((customer) => ({ customer: customer.name, terms: customer.paymentTerms, sales: customer.totalSales, collected: customer.totalCollected, due: customer.currentDue })) },
-        { id: "customer-ledger", title: "Customer Running Ledger", columns: [{ key: "date", label: "Date" }, { key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "reference", label: "Reference" }, { key: "debit", label: "Debit / Sale", align: "right" as const }, { key: "credit", label: "Credit / Collection", align: "right" as const }, { key: "runningDue", label: "Running Due", align: "right" as const }], rows: customers.flatMap((customer) => (customerLedger(customer.id)?.entries ?? []).filter((entry) => inPeriod(entry.date, from, to)).map((entry) => ({ date: entry.date, customer: customer.name, type: entry.type, reference: entry.reference, debit: entry.debit, credit: entry.credit, runningDue: entry.runningDue }))) }
+        { id: "customer-dues", title: "Customer Receivables", columns: [{ key: "customer", label: "Customer" }, { key: "terms", label: "Terms" }, { key: "sales", label: "Total Sales", align: "right" as const }, { key: "collected", label: "Collected", align: "right" as const }, { key: "due", label: "Current Due", align: "right" as const }], rows: reportCustomers.map((customer) => ({ customer: customer.name, terms: customer.paymentTerms, sales: customer.totalSales, collected: customer.totalCollected, due: customer.currentDue })) },
+        { id: "customer-ledger", title: "Customer Running Ledger", columns: [{ key: "date", label: "Date" }, { key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "reference", label: "Reference" }, { key: "debit", label: "Debit / Sale", align: "right" as const }, { key: "credit", label: "Credit / Collection", align: "right" as const }, { key: "runningDue", label: "Running Due", align: "right" as const }], rows: reportCustomers.flatMap((customer) => (customerLedger(customer.id)?.entries ?? []).filter((entry) => inPeriod(entry.date, from, to)).map((entry) => ({ date: entry.date, customer: customer.name, type: entry.type, reference: entry.reference, debit: entry.debit, credit: entry.credit, runningDue: entry.runningDue }))) }
       ],
       expenses: [
         { id: "daily-expenditure", title: "Daily Expenditure", columns: [{ key: "date", label: "Date" }, { key: "category", label: "Category / Detail" }, { key: "remarks", label: "Remarks" }, { key: "paidFrom", label: "Paid From" }, { key: "amount", label: "Cost", align: "right" as const }], rows: periodExpenses.map((expense) => ({ date: expense.date, category: `${expense.categoryName}${expense.subtype === "TA/DA" ? ` · ${expense.employee ?? "Employee"}` : ""}`, remarks: expense.remarks, paidFrom: accounts.find((account) => account.id === expense.paidFromAccountId)?.name ?? expense.paidFromAccountId, amount: expense.amount })) },
@@ -1411,6 +1817,14 @@ app.get("/api/reports", (req, res) => {
       ]
     }
   };
+  if (ownSalesId) {
+    report.importCosts = [];
+    report.inventory = [];
+    report.expenses = [];
+    report.tables.imports = [];
+    report.tables.inventory = [];
+    report.tables.expenses = [];
+  }
   res.json(ok({
     ...report
   }, `Reports loaded for ${from} to ${to}`));
@@ -1437,7 +1851,7 @@ app.post("/api/settings/users", (req, res) => {
     avatarUrl: String(req.body.avatarUrl ?? ""),
     status: req.body.status ?? "Active",
     territory: req.body.territory,
-    capabilities: req.body.capabilities ?? []
+    capabilities: (req.body.capabilities ?? []).filter((capability: Capability) => capability !== "manage_users")
   };
   demoUsers.push(user);
   passwordByEmail.set(user.email, String(req.body.password ?? "password123"));
@@ -1450,7 +1864,7 @@ app.patch("/api/settings/users/:userId", (req, res) => {
   const index = demoUsers.findIndex((user) => user.id === req.params.userId);
   if (index < 0) return fail(res, 404, "User not found");
   const previousEmail = demoUsers[index].email;
-  demoUsers[index] = { ...demoUsers[index], ...req.body, id: demoUsers[index].id };
+  demoUsers[index] = { ...demoUsers[index], ...req.body, id: demoUsers[index].id, capabilities: (req.body.capabilities ?? demoUsers[index].capabilities ?? []).filter((capability: Capability) => capability !== "manage_users") };
   if (req.body.password) passwordByEmail.set(demoUsers[index].email, String(req.body.password));
   if (previousEmail !== demoUsers[index].email) {
     const existingPassword = passwordByEmail.get(previousEmail) ?? "password123";

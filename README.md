@@ -1,6 +1,6 @@
 # MIPRO Medical Supplier ERP
 
-A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. The simplified plan plus `files/Medical_Supplier_ERP_Simplified_Plan_update1.md` are the current source of truth.
+A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. `files/Medical_Supplier_ERP_Simplified_Plan_update2.md` and `files/MIPRO_ERP_PreSimplification_Analysis.md` are the current source of truth.
 
 ## Current Scope
 
@@ -17,7 +17,7 @@ Operating expenses and cash/bank transactions are tracked separately. The active
 
 `Dashboard`, `Imports`, `Inventory`, `Sales`, `Expenses & Accounts`, `Reports`, `Settings`.
 
-AI, GPS, mobile field sales, HR/payroll, fleet and full accounting are intentionally deferred by the latest requirement.
+Contextual features stay inside those areas: protected PDF/image viewing, salesperson performance reports, smart recommendation cards, reviewed import-document extraction, and a floating role-safe MIPRO AI assistant. GPS/mobile field sales, HR/payroll, fleet and full accounting remain deferred.
 
 ## Stack
 
@@ -103,6 +103,8 @@ server/
   data.ts        normalized client-like in-memory fixtures
 ```
 
+Shared `src/components/documents/` and `src/components/ai/` components provide protected file viewing and contextual assistance without adding navigation modules.
+
 Components do not import fixtures. Every screen reads and writes through a domain service and TanStack Query. Responses are validated with Zod before reaching page components.
 
 ## Landed-Cost Rules
@@ -136,6 +138,9 @@ Customs duty is entered as the final assessed amount per product. The applicatio
 - Collection requires a real active account, reduces customer/order due and credits that account.
 - Operating expenses never affect landed cost.
 - Reports apply API-side date filters and export actual detail rows.
+- Salesperson performance preserves the business owner through quotation, order, delivery and collection; Sales Executives can request only their own report.
+- Uploaded import/cost/expense files open through an authorized API endpoint; sensitive cost documents require the same cost capability as the record.
+- MIPRO AI receives route/entity/report-period context and only role-scoped records. It explains deterministic rules but cannot finalize, post or override them.
 - Digital/preprinted A4 prints use the supplied MIPRO/LED stationery and Order Receiving Sheet structure.
 
 ## Commands
@@ -197,7 +202,8 @@ The mock API is functional but in-memory:
 - edits work while the process remains alive;
 - API restart/redeployment resets fixtures;
 - Vercel instances may not share memory;
-- uploads store metadata, not durable file content.
+- uploaded file content and metadata remain only in the current API process;
+- seeded PDFs/images are demo assets served through an authorization check.
 
 The backend phase should replace this with persistent authentication, Postgres/Supabase, storage, row-level security, durable audit and transactional business operations.
 

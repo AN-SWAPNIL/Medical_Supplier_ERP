@@ -18,6 +18,7 @@ import {
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -33,7 +34,7 @@ import {
   textareaClass
 } from "../components";
 import type { Customer, Quotation, SalesOrder } from "../erp.types";
-import { inventoryService, salesService, settingsService } from "../services";
+import { aiService, inventoryService, salesService, settingsService } from "../services";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { hasCapability } from "../../lib/permissions/matrix";
 import { useToastStore } from "../../lib/ui/toast";
@@ -78,6 +79,7 @@ export default function SalesPage() {
   const batchesQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches, enabled: canDispatch });
   const accountsQuery = useQuery({ queryKey: ["sales", "payment-accounts"], queryFn: salesService.paymentAccounts, enabled: canCollect });
   const ledgerQuery = useQuery({ queryKey: ["sales", "customer-ledger", ledgerCustomer?.id], queryFn: () => salesService.customerLedger(ledgerCustomer!.id), enabled: Boolean(ledgerCustomer) });
+  const recommendationsQuery = useQuery({ queryKey: ["ai", "sales", session?.user.id], queryFn: () => aiService.recommendations({ route: "/app/sales", entityType: "sales" }), enabled: role !== "Warehouse Manager" });
 
   const queries = [customersQuery, quotationsQuery, ordersQuery, deliveriesQuery, collectionsQuery, productsQuery];
   const error = queries.find((query) => query.error)?.error ?? batchesQuery.error ?? accountsQuery.error;
@@ -150,6 +152,8 @@ export default function SalesPage() {
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Open orders</span><strong className="mt-1 block text-2xl">{formatNumber(orders.filter((order) => !["Delivered", "Cancelled"].includes(order.status)).length)}</strong><small className="text-slate-400">awaiting or in delivery</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Collections shown</span><strong className="mt-1 block text-2xl text-emerald-700">{formatCurrency(totalCollections, true)}</strong><small className="text-slate-400">cash and banking channels</small></div>
       </div>
+
+      {recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Sales follow-up suggestions">{recommendationsQuery.data.filter((item) => item.id.startsWith("due-") || item.id.startsWith("quote-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <Segmented value={visibleOptions.some((option) => option.value === view) ? view : visibleOptions[0].value} onChange={setView} ariaLabel="Sales views" options={visibleOptions} />

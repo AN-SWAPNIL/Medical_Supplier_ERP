@@ -2,7 +2,7 @@
 
 ## Goal
 
-Record a confident 16-18 minute client walkthrough that proves this is one connected operating flow, not a collection of static pages. Follow one story from import costing to stock, sale, collection, expense, report, and permission control.
+Record a confident 19-20 minute client walkthrough that proves this is one connected operating flow, not a collection of static pages. Follow one story from import evidence and costing to stock, sale, collection, expense, employee reporting, contextual assistance, and permission control.
 
 Use clear business language. Mention the API only to explain that actions are connected and backend-ready.
 
@@ -29,16 +29,17 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 |---|---|---|
 | 00:00-01:10 | Landing | Two connected business flows, seven areas |
 | 01:10-02:10 | Login | Fixed role identity and capability control |
-| 02:10-03:25 | Dashboard | Six role-safe KPIs and action lists |
-| 03:25-07:45 | Import workspace | One LC, many products, dynamic costs |
+| 02:10-03:25 | Dashboard | Six role-safe KPIs, action lists and smart alerts |
+| 03:25-07:45 | Import workspace | One LC, many products, protected documents, dynamic costs |
 | 07:45-09:10 | Cost result/finalization | Exact, explainable, immutable costing |
 | 09:10-10:35 | Warehouse/inventory | Receiving, batches, FIFO, expiry |
 | 10:35-13:40 | Sales | Customer -> quote -> order -> delivery -> collection |
 | 13:40-14:50 | Expenses & Accounts | Operating money without full GL |
-| 14:50-15:45 | Reports/print | Same data summarized and printed |
-| 15:45-16:45 | Settings | Capabilities and confirmation queue |
-| 16:45-17:40 | Second role | Navigation and direct-URL denial |
-| 17:40-18:00 | Close | Frontend complete, backend-ready, honest scope |
+| 14:50-16:20 | Reports/print | Employee/date reporting from owned transactions |
+| 16:20-17:20 | Contextual AI | Page context, sources and workflow-safe answers |
+| 17:20-18:20 | Settings | Capabilities, access summary and confirmation queue |
+| 18:20-19:40 | Second role | Own report, direct denial and AI redaction |
+| 19:40-20:00 | Close | Frontend complete, backend-ready, honest scope |
 
 ---
 
@@ -85,7 +86,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 1. Pause on the six KPI cards.
 2. Point to Sales, Collections, Receivable, Operating Expenditure, Inventory Value, and Imports in Progress.
-3. Scroll through Action Queue, Expiry Awareness, Customer Dues, Recent Activity, and Expense Pulse.
+3. Show the Smart Operational Alerts, then scroll through Action Queue, Expiry Awareness, Customer Dues, Recent Activity, and Expense Pulse.
 
 ### Say
 
@@ -94,6 +95,8 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 > The same dashboard changes by role. The owner may see inventory value, while a sales user sees only permitted own-record totals. Sensitive product cost is not sent to an unauthorized user.
 
 > The lists are actionable: an import waiting for costing, a visible expiry, a customer due, a recent collection, or a recent office expense all lead back to the underlying operational record.
+
+> The smart cards use the same role-safe records. They explain why an item matters and link to its source; they do not approve or post anything.
 
 ---
 
@@ -149,11 +152,16 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 1. Expand **Documents**.
 2. Point to PI, LC/Swift, commercial invoice, packing list, certificate, BL and customs evidence types.
-3. Click the upload icon and briefly show the metadata form, then close it.
+3. Click **View** on the PI and pause on the protected PDF viewer.
+4. Point to file type, size, uploader, Open in New Tab and Download, then close it.
+5. Click **Extract Fields** and show that every proposed field begins unchecked.
+6. Explain **Apply Selected Fields**, then close without changing the import.
 
 ### Say
 
-> Commercial evidence remains attached to the same case. The frontend currently stores file metadata through a file service boundary. Real storage can replace that boundary without changing this workspace.
+> Commercial evidence remains attached to the same case. The viewer requests the file through the API, which checks the signed-in user and document sensitivity before returning content. A guessed direct link does not bypass access control.
+
+> Extract Fields is advisory. It proposes supplier, PI, date, currency, quantity or CBM values, but nothing is selected and nothing is overwritten automatically. A person reviews the source and applies only verified fields through the normal validation flow.
 
 ---
 
@@ -163,10 +171,11 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 1. Expand **Costs & Allocation**.
 2. Point to sea freight, product duties, bank fee, insurance, C&F, gate, port, transport and labour.
-3. Click **Add Cost**.
-4. Point to Cost Name, Category, Amount, Currency, Exchange Rate, Product Scope, Allocation Method, Vendor, Payment, Notes, and Attachment.
-5. Open the allocation list and mention all five choices.
-6. Close without saving unless you want to add a harmless demo row.
+3. Open the freight attachment and explain that sensitive cost evidence uses the same cost permission.
+4. Click **Add Cost**.
+5. Point to Cost Name, Category, Amount, Currency, Exchange Rate, Product Scope, Allocation Method, Vendor, Payment, Notes, and Attachment.
+6. Open the allocation list and mention all five choices.
+7. Close without saving unless you want to add a harmless demo row.
 
 ### Say
 
@@ -176,7 +185,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 > Local covered-van transport now defaults to CBM because the latest meeting confirmed volume-based treatment. Common bank, insurance and C&F costs still require an explicit method because their permanent default is not confirmed.
 
-> The system stores foreign amount, currency, exchange-rate snapshot, BDT amount, scope, vendor, payment information, notes and attachment metadata. Office rent, salaries, utilities and TA/DA never belong here.
+> The system stores foreign amount, currency, exchange-rate snapshot, BDT amount, scope, vendor, payment information, notes and a viewable supporting file. Office rent, salaries, utilities and TA/DA never belong here.
 
 ---
 
@@ -228,7 +237,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 ### Show
 
 1. Open **Inventory**.
-2. Show Stock cards with product image, canonical code, available quantity, FIFO lot and nearest expiry.
+2. Show the FIFO/expiry recommendation card, then Stock cards with product image, canonical code, available quantity, FIFO lot and nearest expiry.
 3. Open **Batches**.
 4. Point to Import Receipt versus Opening Stock source, Issue First, receipt date, lot, batch, expiry and location.
 5. Open **Movements**.
@@ -331,9 +340,10 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 2. Show daily expenses.
 3. Open **New Expense**.
 4. Point to category, general or TA/DA subtype, account, amount, remarks and attachment.
-5. Show cash/bank accounts and transaction ledger.
-6. Point to a reversal action.
-7. Mention the Daily Expenditure and monthly category report, then show the TA/DA Approved Sheet under Reports.
+5. Open the seeded utility receipt image and point out the shared viewer.
+6. Show cash/bank accounts and transaction ledger.
+7. Point to a reversal action.
+8. Mention the Daily Expenditure and monthly category report, then show the TA/DA Approved Sheet under Reports.
 
 ### Say
 
@@ -345,69 +355,93 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 14:50-15:45 - Reports And Print
+## 14:50-16:20 - Reports And Employee Print
 
 ### Show
 
 1. Open **Reports**.
-2. Change From/To dates and point to the Applied Scope line.
-3. Move across Import & Cost, Inventory, Sales & Collection, Expense & Cash/Bank.
-4. Open actual detail tables such as landed cost history, expiry, sales by product, running ledger and daily expenditure.
-5. Point to owner-only realized gross profit, actual-row CSV export and print.
-6. Filter TA/DA by employee and show the printable Approved Sheet.
-7. Open the narrow Audit view.
+2. Set From to `01 Aug 2026` and To to `31 Aug 2026`; point to Applied Scope.
+3. Open **Sales & Collection**, then **Salesperson Performance**.
+4. Keep **All Sales Employees** selected and show the comparison chart/table.
+5. Select **Rafiq Ahmed**, show summary cards and the quotation/order/delivery/collection/customer/product detail tabs.
+6. Click **Print Employee Report**, then return to Reports.
+7. Briefly move across Import & Cost, Inventory and Expense & Cash-Bank; show TA/DA employee filtering and Audit.
 
 ### Say
 
 > Reports use the same operational records and API-applied date range; they are not manually maintained copies. CSV exports the visible filtered rows. Users see only the groups and sensitive values their role permits.
 
+> Performance credit follows the business owner. If a manager creates an order or Accounts posts a collection for Rafiq's customer, the operator is recorded but Rafiq remains the sales owner. A Sales Executive can request only their own report, and this report never contains FOB, landed cost or profit.
+
 > The narrow audit focuses on important risk: cost finalization or reopening, receiving, FIFO override, stock dispatch, collection, expense reversal and permission changes.
 
 ---
 
-## 15:45-16:45 - Settings And Open Decisions
+## 16:20-17:20 - Contextual MIPRO AI
+
+### Show
+
+1. Return to `LC-77612` and click **Ask MIPRO AI** at bottom-right.
+2. Point to the signed-in role and **Current import case** context.
+3. Ask **Explain the current shipment stage**.
+4. Ask **Which documents are missing?**.
+5. Click a returned source link, then reopen the assistant on Reports and ask **Summarize this report period**.
+6. Narrow the window briefly to show the near-full-screen mobile panel.
+
+### Say
+
+> The assistant is contextual rather than a separate AI module. It receives the current route, record ID and report period, then the API reads only records already allowed for this role.
+
+> It can explain a deterministic allocation or FIFO recommendation, identify missing evidence, summarize the selected period and suggest a follow-up. It cannot finalize landed cost, dispatch stock, post a collection or bypass any approval.
+
+> These answers are rule-backed mock intelligence behind typed endpoints. A production LangChain or LangGraph service can replace the server implementation later without rebuilding this interface.
+
+---
+
+## 17:20-18:20 - Settings And Open Decisions
 
 ### Show
 
 1. Open **Settings**.
 2. Show **Client Confirmation Queue**.
 3. Point to a confirmed answer with source/value and a pending decision with disabled behavior.
-4. Open Users & Capabilities, Products & Aliases, Suppliers and Business Setup.
+4. Open Users & Capabilities, edit a user, and show the read-only **Role Access Summary**.
 5. Open Data Migration and show Opening Batch plus Customer Balance forms.
 6. Point to user image, fixed role, capabilities, product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
 
 ### Say
 
-> Settings is owner-only. It manages users and capabilities, canonical products and legacy aliases, suppliers, accounts, warehouse, expense categories, cost presets, actual stationery identities and opening-data migration.
+> Settings is owner-only. It manages users and explicit capabilities, and the access summary answers what each role will actually see without introducing a second permission system. It also holds canonical products and aliases, suppliers, accounts, warehouse, expense categories, cost presets, stationery identities and opening-data migration.
 
 > Confirmed decisions retain the actual answer, notes, source, user and time. Local transport CBM and FIFO are confirmed. Invoice requirement, common-cost default, accounting depth, warehouse count, sales tax and finalization authority remain visible rather than silently hard-coded.
 
 ---
 
-## 16:45-17:40 - Prove Role Access
+## 18:20-19:40 - Prove Role Access
 
 ### Show
 
 1. Use the profile menu and sign out.
 2. Sign in as `sales1@mipro.local` with `password123`.
-3. Show the smaller navigation: Dashboard and Sales.
+3. Show the smaller navigation: Dashboard, Sales and Reports.
 4. Open Sales and point to **My Customers** and **My Quotes & Orders**.
-5. Type `/app/accounts` in the address bar.
-6. Show **Access denied**.
+5. Open Reports and show that only this executive's Salesperson Performance is available.
+6. Open MIPRO AI and ask `What is the landed cost and profit margin?`; pause on the permission-safe refusal.
+7. Type `/app/accounts` in the address bar and show **Access denied**.
 
 ### Say
 
-> This is not a cosmetic role switch. The Sales Executive receives a small own-record web workspace and cannot see import costing, accounts, reports or settings.
+> This is not a cosmetic role switch. The Sales Executive receives a small own-record web workspace: Sales plus their own report. They cannot see import costing, accounts, another employee's report or settings.
 
-> Even a direct URL is denied. The API also filters customers and sales records by owner and does not send sensitive cost fields.
+> Even a direct URL and an AI question are denied at the API boundary. Customers, transactions and employee reports are owner-filtered, and sensitive cost fields are never sent.
 
 ---
 
-## 17:40-18:00 - Closing
+## 19:40-20:00 - Closing
 
 ### Say
 
-> This release completes the latest audited frontend scope: PO-first imports with controlled milestones, authoritative landed cost, protected receiving history, opening and imported batch stock, multi-batch FIFO, quotation profit preview through collection, operational expenses, detailed reports, migration/settings, role access and supplied-stationery print views.
+> This release completes the latest audited frontend scope: PO-first imports, protected evidence, authoritative landed cost, receiving and FIFO stock, quotation through collection, operational expenses, salesperson reporting, contextual role-safe assistance, settings/access control and supplied-stationery print views.
 
 > Every screen uses typed API services and validated responses, so a persistent backend can replace the in-memory Express demo without rebuilding the frontend workflow.
 
@@ -436,7 +470,8 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - Vercel serverless memory can reset; this is expected for the frontend approval build.
 - Do not say uploaded files are permanently stored.
 - Do not say the prototype is a production database.
-- Do not claim AI, GPS, HR, payroll, fleet, invoice, full accounting or automatic customs calculation.
+- Present AI as a deterministic, role-safe prototype boundary, not as a production model or autonomous decision-maker.
+- Do not claim GPS, HR, payroll, fleet, invoice, full accounting or automatic customs calculation.
 - If a table is wide on mobile, demonstrate its intentional horizontal scroll area.
 - If product images do not appear, verify the individual files under `/public/products/` are deployed.
 - If an API request fails locally, confirm both ports are running and `/api/health` succeeds.
@@ -452,6 +487,8 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - [ ] PO-first draft creation and later PI/LC progression are explained.
 - [ ] Status is action-derived; Cancel/Close are controlled terminal actions.
 - [ ] LC-77612 shows several products.
+- [ ] PI PDF, freight attachment and expense image viewer are shown.
+- [ ] Extract Fields is shown with human review and no automatic overwrite.
 - [ ] All five allocation methods are mentioned.
 - [ ] Allocation explanation and exact reconciliation are shown.
 - [ ] Customs formulas are explicitly not automated.
@@ -465,6 +502,9 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - [ ] Customer running ledger is opened.
 - [ ] Operating expenses remain separate from landed cost.
 - [ ] Date-filtered report tables, actual CSV and TA/DA sheet are shown.
+- [ ] All-employee comparison, individual employee details and employee print are shown.
+- [ ] Contextual AI uses the current import/report and provides source links.
+- [ ] Sales Executive AI cost refusal and own-only report are demonstrated.
 - [ ] MIPRO digital, preprinted and Order Receiving Sheet views are shown.
 - [ ] Settings confirmation queue is shown.
 - [ ] Opening stock/customer balance migration and product aliases are shown.

@@ -52,6 +52,24 @@ async function api(path, options = {}) {
   return payload.data;
 }
 
+async function rawApi(path, options = {}) {
+  const method = options.method || "GET";
+  const as = options.as || identities.super;
+  const response = await fetch(base + path, {
+    method,
+    redirect: options.redirect || "manual",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "http://127.0.0.1:5173",
+      "x-user-id": as.id,
+      "x-role": as.role
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+  });
+  assert.equal(response.status, options.expected || 200, method + " " + path + " returned " + response.status);
+  return response;
+}
+
 function metric(report, group, label) {
   return report[group].find((entry) => entry.label === label)?.value;
 }
@@ -184,11 +202,29 @@ async function run() {
   assert.equal(itemA.totalCbm, "0.1600");
   assert.equal(itemB.fobTotalBdt, "26950.00");
   assert.equal(itemB.totalCbm, "0.4000");
-  await api("/api/imports/" + importRecord.id + "/documents", {
+  const uploadedInvoice = await api("/api/imports/" + importRecord.id + "/documents", {
     method: "POST",
     as: identities.import,
     expected: 201,
-    body: { type: "Commercial Invoice", name: "Commercial-Invoice-" + suffix + ".pdf" }
+    body: {
+      type: "Commercial Invoice",
+      sensitive: false,
+      upload: {
+        fileName: "Commercial-Invoice-" + suffix + ".pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 15,
+        fileDataUrl: "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK"
+      }
+    }
+  });
+  const uploadedInvoiceFile = await rawApi("/api/documents/" + uploadedInvoice.id + "/content", { as: identities.import, expected: 200 });
+  assert.match(uploadedInvoiceFile.headers.get("content-type") || "", /application\/pdf/);
+  assert.equal((await uploadedInvoiceFile.arrayBuffer()).byteLength, 15);
+  await api("/api/imports/" + importRecord.id + "/documents", {
+    method: "POST",
+    as: identities.import,
+    expected: 422,
+    body: { type: "Other", upload: { fileName: "spoofed.svg", mimeType: "image/svg+xml", sizeBytes: 1, fileDataUrl: "data:image/svg+xml;base64,PHN2Zy8+" } }
   });
 
   console.log("2. Five allocations, immutable snapshots and receipt integrity");
@@ -433,7 +469,79 @@ async function run() {
   const dynamicExpiry = (await api("/api/inventory/batches")).find((entry) => entry.id === expiredBatch.id);
   assert.equal(dynamicExpiry.expiryStatus, "Expired");
 
-  console.log("All update1 ERP integrity scenarios passed.");
+  console.log("8. Employee reports, protected documents and contextual AI");
+  const performanceAll = await api("/api/reports/salespeople?from=2026-08-01&to=2026-08-31&employeeId=all", { as: identities.salesManager });
+  assert.deepEqual(performanceAll.period, { from: "2026-08-01", to: "2026-08-31" });
+  assert.ok(performanceAll.comparison.length >= 2);
+  assert.ok(performanceAll.comparison.some((entry) => entry.id === identities.sales1.id));
+  assert.equal(performanceAll.selected, undefined);
+  const employeePerformance = await api("/api/reports/salespeople?from=2026-08-01&to=2026-08-31&employeeId=" + identities.sales1.id, { as: identities.salesManager });
+  assert.equal(employeePerformance.selected.employee.id, identities.sales1.id);
+  assert.ok(employeePerformance.selected.tables.quotations.rows.length > 0);
+  assert.ok(employeePerformance.selected.tables.deliveries.rows.length > 0);
+  assert.ok(employeePerformance.selected.tables.collections.rows.length > 0);
+  assert.doesNotMatch(JSON.stringify(employeePerformance), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
+  const ownPerformance = await api("/api/reports/salespeople?from=2026-08-01&to=2026-08-31&employeeId=all", { as: identities.sales1 });
+  assert.deepEqual(ownPerformance.employees.map((employee) => employee.id), [identities.sales1.id]);
+  assert.deepEqual(ownPerformance.comparison.map((employee) => employee.id), [identities.sales1.id]);
+  assert.equal(ownPerformance.selected.employee.id, identities.sales1.id);
+  await api("/api/reports/salespeople?from=2026-08-01&to=2026-08-31&employeeId=" + identities.sales2.id, { as: identities.sales1, expected: 403 });
+  const ownGeneralReport = await api("/api/reports?from=2026-08-01&to=2026-08-31", { as: identities.sales1 });
+  assert.deepEqual(ownGeneralReport.importCosts, []);
+  assert.deepEqual(ownGeneralReport.inventory, []);
+  assert.deepEqual(ownGeneralReport.expenses, []);
+  assert.doesNotMatch(JSON.stringify(ownGeneralReport), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
+
+  const normalDocument = await rawApi("/api/documents/doc-pi/content", { as: identities.import, expected: 200 });
+  assert.match(normalDocument.headers.get("content-type") || "", /application\/pdf/);
+  await rawApi("/api/documents/doc-pi/content", { as: identities.sales1, expected: 403 });
+  await rawApi("/api/documents/doc-assess/content", { as: identities.import, expected: 403 });
+  await rawApi("/api/documents/doc-cost-frt/content", { as: identities.import, expected: 403 });
+  await rawApi("/api/documents/doc-assess/content", { as: identities.super, expected: 200 });
+  const expenseReceipt = await rawApi("/api/documents/doc-exp-6/content", { as: identities.accounts, expected: 200 });
+  assert.match(expenseReceipt.headers.get("content-type") || "", /image\/png/);
+  await rawApi("/api/documents/not-a-document/content", { as: identities.super, expected: 404 });
+
+  const importBeforeExtraction = await api("/api/imports/imp-77612", { as: identities.import });
+  const extraction = await api("/api/ai/document-extract", {
+    method: "POST",
+    as: identities.import,
+    body: { importId: "imp-77612", documentId: "doc-pi" }
+  });
+  assert.equal(extraction.requiresReview, true);
+  assert.ok(extraction.fields.length > 0);
+  assert.ok(!extraction.fields.some((field) => field.key === "fobUnitForeign"));
+  const importAfterExtraction = await api("/api/imports/imp-77612", { as: identities.import });
+  assert.deepEqual(importAfterExtraction, importBeforeExtraction);
+
+  const restrictedAi = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.sales1,
+    body: { message: "What is the landed cost and profit margin?", context: { route: "/app/sales", entityType: "sales" } }
+  });
+  assert.equal(restrictedAi.restricted, true);
+  assert.equal(restrictedAi.sources.length, 0);
+  assert.doesNotMatch(restrictedAi.answer, /\d+[,.]\d+/);
+  const ownSalesAi = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.sales1,
+    body: { message: "Which customers need follow-up?", context: { route: "/app/sales", entityType: "sales" } }
+  });
+  assert.equal(ownSalesAi.restricted, false);
+  assert.ok(ownSalesAi.sources.every((source) => source.path.startsWith("/app/sales")));
+  const fifoRecommendations = await api("/api/ai/recommendations?route=%2Fapp%2Finventory&entityType=inventory", { as: identities.warehouse });
+  assert.ok(fifoRecommendations.some((entry) => entry.id.startsWith("fifo-") || entry.id.startsWith("expiry-")));
+  assert.ok(fifoRecommendations.every((entry) => entry.sourcePath === "/app/inventory"));
+  const reportAi = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.salesManager,
+    body: { message: "Summarize this report period", context: { route: "/app/reports", entityType: "reports", reportFrom: "2026-08-01", reportTo: "2026-08-31" } }
+  });
+  assert.match(reportAi.answer, /2026-08-01 to 2026-08-31/);
+  assert.equal(reportAi.restricted, false);
+  assert.doesNotMatch(JSON.stringify(reportAi), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
+
+  console.log("All update2 simplified ERP scenarios passed.");
 }
 
 try {

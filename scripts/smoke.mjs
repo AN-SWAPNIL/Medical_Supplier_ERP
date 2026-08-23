@@ -8,7 +8,7 @@ const sessionKey = "mipro-erp-session";
 await mkdir("artifacts", { recursive: true });
 
 const people = {
-  super: { id: "u-super", name: "Sadia Karim", email: "superadmin@mipro.local", role: "Super Admin", title: "Owner & System Administrator", department: "Management", phone: "+880 1711 000001", avatarUrl: "/mipro-owner.png", status: "Active", capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "manage_users", "approve_special_price"] },
+  super: { id: "u-super", name: "Sadia Karim", email: "superadmin@mipro.local", role: "Super Admin", title: "Owner & System Administrator", department: "Management", phone: "+880 1711 000001", avatarUrl: "/mipro-owner.png", status: "Active", capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price"] },
   md: { id: "u-md", name: "Mahmud Rahman", email: "md@mipro.local", role: "Managing Director", title: "Managing Director", department: "Management", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
   accounts: { id: "u-accounts", name: "Nusrat Jahan", email: "accounts@mipro.local", role: "Accounts", title: "Accounts Officer", department: "Accounts", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
   import: { id: "u-import", name: "Tanvir Hasan", email: "import@mipro.local", role: "Import Officer", title: "Import Officer", department: "Import", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
@@ -20,11 +20,15 @@ const people = {
 const session = (user) => ({ token: "mock-token-" + user.id, user });
 const browser = await chromium.launch({ channel: browserChannel, headless: true });
 const issues = [];
+let expectedDocument404 = false;
 
 function watchPage(page, name) {
   page.on("pageerror", (error) => issues.push(name + ": " + error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") issues.push(name + ": console " + message.text());
+    if (message.type() === "error") {
+      if (expectedDocument404 && name === "document-viewer-pdf" && message.text().includes("404")) return;
+      issues.push(name + ": console " + message.text());
+    }
   });
 }
 
@@ -103,8 +107,13 @@ await costing.getByText("Final Shipment Cost").waitFor({ timeout: 30000 });
 await costing.screenshot({ path: "artifacts/costing-result-desktop.png", fullPage: true });
 const reconciliation = await costing.locator("body").textContent();
 if (!reconciliation?.includes("Explain") || !reconciliation.includes("Final Shipment Cost")) issues.push("Costing explanation/result is missing.");
-await costing.getByRole("button", { name: "Finalize Snapshot" }).click();
-await costing.getByText("Snapshot v1", { exact: true }).waitFor({ timeout: 30000 });
+const finalizeButton = costing.getByRole("button", { name: "Finalize Snapshot" });
+if (await finalizeButton.isVisible().catch(() => false)) {
+  await finalizeButton.click();
+  await costing.getByText(/Snapshot v\d+/).waitFor({ timeout: 30000 });
+} else if ((await costing.getByText(/Snapshot v\d+/).count()) === 0) {
+  issues.push("Landed-cost snapshot state is unavailable after preview.");
+}
 await costing.close();
 
 await visitAndCapture({ name: "costing-result-mobile", path: "/app/imports/imp-77612", width: 390, height: 1200, user: people.super });
@@ -140,6 +149,72 @@ await customerLedger.getByText("Current Due", { exact: true }).waitFor({ timeout
 await customerLedger.screenshot({ path: "artifacts/customer-ledger-desktop.png", fullPage: true });
 await customerLedger.close();
 
+const employeeReport = await preparePage({ name: "employee-performance-desktop", width: 1440, height: 1100, user: people.salesManager });
+await employeeReport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
+await employeeReport.getByLabel("From Date").fill("2026-08-01");
+await employeeReport.getByLabel("To Date").fill("2026-08-31");
+await employeeReport.getByRole("tab", { name: "Sales & Collection" }).click();
+await employeeReport.getByRole("tab", { name: /Salesperson Performance/ }).click();
+await employeeReport.getByRole("heading", { name: "Salesperson Performance" }).waitFor({ timeout: 30000 });
+const employeeSelect = employeeReport.getByRole("combobox", { name: "Employee" });
+await employeeSelect.selectOption("sales1");
+await employeeReport.getByText(/Rafiq Ahmed \| Activity details/).waitFor({ timeout: 30000 });
+await employeeReport.getByRole("button", { name: "Print Employee Report" }).waitFor();
+const performanceText = await employeeReport.locator("body").textContent();
+if (!performanceText?.includes("Delivered Sales") || !performanceText.includes("Collections")) issues.push("Employee report summary is incomplete.");
+await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
+await employeeReport.getByRole("button", { name: "Print Employee Report" }).click();
+await employeeReport.getByText("SALES EMPLOYEE PERFORMANCE REPORT", { exact: true }).waitFor({ timeout: 30000 });
+await employeeReport.screenshot({ path: "artifacts/print-employee-performance.png", fullPage: true });
+await employeeReport.close();
+
+const documentPage = await preparePage({ name: "document-viewer-pdf", width: 1440, height: 1000, user: people.super });
+await documentPage.goto(baseUrl + "/app/imports/imp-77612", { waitUntil: "networkidle", timeout: 60000 });
+await documentPage.getByRole("button", { name: "View", exact: true }).first().click();
+const pdfViewer = documentPage.getByTestId("document-viewer");
+await pdfViewer.waitFor({ timeout: 30000 });
+await pdfViewer.locator("iframe").waitFor({ timeout: 30000 });
+await documentPage.screenshot({ path: "artifacts/document-viewer-pdf.png", fullPage: true });
+await pdfViewer.getByRole("button", { name: "Close document viewer" }).last().click();
+await documentPage.getByRole("button", { name: /View freight-invoice\.pdf/ }).click();
+await documentPage.getByRole("dialog", { name: /freight-invoice\.pdf/ }).waitFor({ timeout: 30000 });
+await documentPage.getByRole("dialog", { name: /freight-invoice\.pdf/ }).getByRole("button", { name: "Close document viewer" }).last().click();
+
+await documentPage.route("**/api/documents/doc-pi/content", (route) => route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, message: "The attachment metadata exists, but its demo file is missing." }) }));
+expectedDocument404 = true;
+await documentPage.getByRole("button", { name: "View", exact: true }).first().click();
+await documentPage.getByText("Preview unavailable", { exact: true }).waitFor({ timeout: 30000 });
+expectedDocument404 = false;
+await documentPage.getByTestId("document-viewer").getByRole("button", { name: "Close document viewer" }).last().click();
+
+await documentPage.getByTestId("ai-launcher").click();
+await documentPage.getByTestId("ai-assistant").waitFor();
+await documentPage.getByRole("button", { name: "Explain the current shipment stage" }).click();
+await documentPage.getByText(/LC-77612 is at/).waitFor({ timeout: 30000 });
+await documentPage.screenshot({ path: "artifacts/contextual-ai-import.png", fullPage: true });
+await documentPage.close();
+
+const expenseDocument = await preparePage({ name: "document-viewer-image", width: 1280, height: 900, user: people.super });
+await expenseDocument.goto(baseUrl + "/app/accounts", { waitUntil: "networkidle", timeout: 60000 });
+await expenseDocument.getByRole("button", { name: "View office-utility-receipt.png" }).click();
+const imageViewer = expenseDocument.getByTestId("document-viewer");
+await imageViewer.locator("img").waitFor({ timeout: 30000 });
+await expenseDocument.screenshot({ path: "artifacts/document-viewer-image.png", fullPage: true });
+await expenseDocument.close();
+
+const mobileAi = await preparePage({ name: "contextual-ai-mobile", width: 390, height: 844, user: people.sales });
+await mobileAi.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
+await mobileAi.getByTestId("ai-launcher").click();
+const mobileAssistant = mobileAi.getByTestId("ai-assistant");
+await mobileAssistant.waitFor();
+const aiBox = await mobileAssistant.boundingBox();
+if (!aiBox || aiBox.width > 390 || aiBox.height > 844 || aiBox.x < 0 || aiBox.y < 0) issues.push("Mobile AI assistant does not fit the viewport.");
+await mobileAi.getByPlaceholder("Ask about this workspace...").fill("What is the landed cost and profit margin?");
+await mobileAi.getByRole("button", { name: "Send question" }).click();
+await mobileAi.getByText(/cannot provide supplier pricing/i).waitFor({ timeout: 30000 });
+await mobileAi.screenshot({ path: "artifacts/contextual-ai-mobile.png", fullPage: true });
+await mobileAi.close();
+
 const expectedNavigation = new Map([
   [people.super, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports", "Settings"]],
   [people.md, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports"]],
@@ -147,7 +222,7 @@ const expectedNavigation = new Map([
   [people.import, ["Dashboard", "Imports"]],
   [people.warehouse, ["Dashboard", "Inventory"]],
   [people.salesManager, ["Dashboard", "Inventory", "Sales", "Reports"]],
-  [people.sales, ["Dashboard", "Sales"]]
+  [people.sales, ["Dashboard", "Sales", "Reports"]]
 ]);
 const deniedRoute = new Map([
   [people.md, "/app/settings"],

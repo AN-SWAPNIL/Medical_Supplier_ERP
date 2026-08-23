@@ -3,6 +3,7 @@ import {
   Banknote,
   Building2,
   CheckCircle2,
+  Check,
   Database,
   ExternalLink,
   FileQuestion,
@@ -17,7 +18,8 @@ import {
   ShieldCheck,
   Tags,
   Trash2,
-  Warehouse
+  Warehouse,
+  X
 } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -28,6 +30,7 @@ import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { businessDate } from "../../lib/date";
 import { useToastStore } from "../../lib/ui/toast";
+import { hasPermission, navSections } from "../../lib/permissions/matrix";
 import type { Role, User } from "../../types";
 import { roles } from "../../types";
 import { formatCurrency, formatNumber } from "../../utils/format";
@@ -73,7 +76,6 @@ const capabilityOptions: ReadonlyArray<readonly [Capability, string]> = [
   ["reopen_landed_cost", "Reopen landed cost"],
   ["view_profit", "View selling-profit information"],
   ["approve_stock_override", "Approve FIFO override"],
-  ["manage_users", "Manage users"],
   ["approve_special_price", "Approve special price"]
 ];
 
@@ -88,6 +90,7 @@ export default function SettingsPage() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier>();
   const [editingAccount, setEditingAccount] = useState<CashBankAccount>();
   const [editingPreset, setEditingPreset] = useState<CostPreset>();
+  const [accessPreviewRole, setAccessPreviewRole] = useState<Role>("Sales Executive");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
@@ -165,7 +168,7 @@ export default function SettingsPage() {
         title="Settings"
         subtitle="Users, master records, company setup, migration tools and client decisions live here without creating more top-level modules."
         actions={
-          view === "users" ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setModal("user")}>New User</Button> :
+          view === "users" ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setAccessPreviewRole("Sales Executive"); setModal("user"); }}>New User</Button> :
           view === "products" ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setModal("product")}>New Product</Button> :
           view === "suppliers" ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setModal("supplier")}>New Supplier</Button> :
           view === "migration" ? <><Button icon={<Building2 className="h-4 w-4" />} onClick={() => setModal("customer-opening")}>Customer Balance</Button><Button variant="primary" icon={<Database className="h-4 w-4" />} onClick={() => setModal("opening")}>Opening Batch</Button></> : undefined
@@ -187,14 +190,14 @@ export default function SettingsPage() {
       />
 
       {view === "decisions" ? <DecisionQueue decisions={decisions} onEdit={(decision) => { setEditingDecision(decision); setModal("decision"); }} /> : null}
-      {view === "users" ? <UsersTable users={users} onEdit={(user) => { setEditingUser(user); setModal("user"); }} /> : null}
+      {view === "users" ? <UsersTable users={users} onEdit={(user) => { setEditingUser(user); setAccessPreviewRole(user.role); setModal("user"); }} /> : null}
       {view === "products" ? <ProductsWorkspace products={products} aliases={aliases} onNewAlias={() => setModal("alias")} onEdit={(product) => { setEditingProduct(product); setModal("product"); }} onDelete={setDeleteTarget} /> : null}
       {view === "suppliers" ? <SuppliersTable suppliers={suppliers} onEdit={(supplier) => { setEditingSupplier(supplier); setModal("supplier"); }} onDelete={setDeleteTarget} /> : null}
       {view === "business" ? <BusinessSetup accounts={accounts} warehouse={warehouse} categories={categories} presets={presets} printConfiguration={printConfiguration} onModal={setModal} onEditAccount={(account) => { setEditingAccount(account); setModal("account"); }} onEditPreset={(preset) => { setEditingPreset(preset); setModal("preset"); }} onDelete={setDeleteTarget} /> : null}
       {view === "migration" ? <MigrationWorkspace batches={openingBatches} customerOpenings={customerOpenings} onOpeningStock={() => setModal("opening")} onCustomerBalance={() => setModal("customer-opening")} /> : null}
 
       {modal === "decision" && editingDecision ? <Modal open title="Record client decision" subtitle="A confirmed item must store the answer, source and notes, not only a status flag." onClose={closeEditor}><DecisionForm decision={editingDecision} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => settingsService.updateDecision(editingDecision.id, payload), success: "Client decision recorded" })} /></Modal> : null}
-      {modal === "user" ? <Modal open title={editingUser ? "Edit user access" : "Create ERP user"} subtitle="A role is assigned here and cannot be switched by the user after login." onClose={closeEditor} width="max-w-3xl"><UserForm user={editingUser} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingUser ? settingsService.updateUser(editingUser.id, payload) : settingsService.createUser(payload), success: editingUser ? "User access updated" : "User created" })} /></Modal> : null}
+      {modal === "user" ? <Modal open title={editingUser ? "Edit user access" : "Create ERP user"} subtitle="A role is assigned here and cannot be switched by the user after login." onClose={closeEditor} width="max-w-3xl"><div className="grid gap-4" onChangeCapture={(event) => { const target = event.target; if (target instanceof HTMLSelectElement && roles.includes(target.value as Role)) setAccessPreviewRole(target.value as Role); }}><RoleAccessSummary role={accessPreviewRole} /><UserForm user={editingUser} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingUser ? settingsService.updateUser(editingUser.id, payload) : settingsService.createUser(payload), success: editingUser ? "User access updated" : "User created" })} /></div></Modal> : null}
       {modal === "product" ? <Modal open title={editingProduct ? "Edit canonical product" : "Create canonical product"} subtitle="Canonical product variants prevent duplicate stock and sales records." onClose={closeEditor}><ProductForm product={editingProduct} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingProduct ? settingsService.updateProduct(editingProduct.id, payload) : settingsService.createProduct(payload), success: editingProduct ? "Product updated" : "Product created" })} /></Modal> : null}
       {modal === "alias" ? <Modal open title="Map legacy product name" subtitle="Map a spreadsheet spelling or historic item name to one canonical product." onClose={closeEditor}><AliasForm products={products} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => settingsService.createProductAlias(payload), success: "Product alias mapped" })} /></Modal> : null}
       {modal === "supplier" ? <Modal open title={editingSupplier ? "Edit supplier" : "Create supplier"} onClose={closeEditor}><SupplierForm supplier={editingSupplier} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingSupplier ? settingsService.updateSupplier(editingSupplier.id, payload) : settingsService.createSupplier(payload), success: editingSupplier ? "Supplier updated" : "Supplier created" })} /></Modal> : null}
@@ -309,8 +312,13 @@ function DecisionForm({ decision, busy, onSubmit }: { decision: BusinessDecision
   return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}><label><span className={labelClass}>Decision Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as BusinessDecision["status"] }))}><option>Pending Client Confirmation</option><option>Confirmed</option></select></label><label><span className={labelClass}>Resolution / Confirmed Answer</span><input className={inputClass} required={form.status === "Confirmed"} value={form.resolutionValue} onChange={(event) => setForm((current) => ({ ...current, resolutionValue: event.target.value }))} placeholder="e.g. CBM, Optional invoice, One warehouse" /></label><label><span className={labelClass}>Resolution Notes</span><textarea className={textareaClass} value={form.resolutionNotes} onChange={(event) => setForm((current) => ({ ...current, resolutionNotes: event.target.value }))} /></label><label><span className={labelClass}>Source Reference</span><input className={inputClass} value={form.sourceReference} onChange={(event) => setForm((current) => ({ ...current, sourceReference: event.target.value }))} placeholder="Meeting date, email or requirement file" /></label><div className="flex justify-end"><Button type="submit" variant="primary" icon={<CheckCircle2 className="h-4 w-4" />} disabled={busy || (form.status === "Confirmed" && !form.resolutionValue.trim())}>Save Decision</Button></div></form>;
 }
 
+function RoleAccessSummary({ role }: { role: Role }) {
+  const areas = navSections.flatMap((section) => section.items);
+  return <section className="rounded-md border border-blue-200 bg-blue-50 p-3"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-800" /><div><strong className="block text-sm text-blue-950">Role Access Summary | {role}</strong><span className="text-xs text-blue-800">Default visible areas before any named sensitive-action capabilities</span></div></div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{areas.map((area) => { const allowed = area.roles.includes(role) && hasPermission(role, area.permission); return <span className={`flex items-center gap-1.5 rounded bg-white px-2 py-1.5 text-xs font-semibold ${allowed ? "text-emerald-700" : "text-slate-400"}`} key={area.path}>{allowed ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}{area.label}</span>; })}</div><p className="mt-2 text-[11px] leading-4 text-blue-800">The capabilities below grant only the named sensitive action; user administration remains Super Admin-only.</p></section>;
+}
+
 function UserForm({ user, busy, onSubmit }: { user?: User; busy: boolean; onSubmit: (payload: Partial<User> & { password?: string }) => void }) {
-  const [form, setForm] = useState({ name: user?.name ?? "", email: user?.email ?? "", role: user?.role ?? "Sales Executive" as Role, title: user?.title ?? "", department: user?.department ?? "", phone: user?.phone ?? "", avatarUrl: user?.avatarUrl ?? "", territory: user?.territory ?? "", status: user?.status ?? "Active", password: "", capabilities: user?.capabilities ?? [] as Capability[] });
+  const [form, setForm] = useState({ name: user?.name ?? "", email: user?.email ?? "", role: user?.role ?? "Sales Executive" as Role, title: user?.title ?? "", department: user?.department ?? "", phone: user?.phone ?? "", avatarUrl: user?.avatarUrl ?? "", territory: user?.territory ?? "", status: user?.status ?? "Active", password: "", capabilities: (user?.capabilities ?? []).filter((capability) => capability !== "manage_users") as Capability[] });
   return <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form as Partial<User> & { password?: string }); }}><div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2"><Avatar className="h-16 w-16 rounded object-cover" src={form.avatarUrl} name={form.name || "User"} /><div><strong className="block">{form.name || "New user"}</strong><span className="text-xs text-slate-500">{form.role}</span></div></div><label><span className={labelClass}>Full Name</span><input className={inputClass} required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label><label><span className={labelClass}>Email</span><input className={inputClass} type="email" required value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span className={labelClass}>Assigned Role</span><select className={inputClass} value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as Role }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label><label><span className={labelClass}>Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as User["status"] }))}><option>Active</option><option>Pending</option><option>Inactive</option></select></label><label><span className={labelClass}>Job Title</span><input className={inputClass} required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label><label><span className={labelClass}>Department</span><input className={inputClass} required value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} /></label><label><span className={labelClass}>Phone</span><input className={inputClass} value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></label><label><span className={labelClass}>Territory</span><input className={inputClass} value={form.territory} onChange={(event) => setForm((current) => ({ ...current, territory: event.target.value }))} /></label><label className="sm:col-span-2"><span className={labelClass}>Profile Image URL</span><input className={inputClass} value={form.avatarUrl} onChange={(event) => setForm((current) => ({ ...current, avatarUrl: event.target.value }))} /></label><label className="sm:col-span-2"><span className={labelClass}>{user ? "New Password (optional)" : "Initial Password"}</span><input className={inputClass} type="password" minLength={6} required={!user} value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} /></label><fieldset className="rounded-md border border-slate-200 p-3 sm:col-span-2"><legend className="px-1 text-xs font-bold uppercase text-slate-500">Explicit Capabilities</legend><div className="grid gap-2 sm:grid-cols-2">{capabilityOptions.map(([value, label]) => <label className="flex items-center gap-2 rounded bg-slate-50 p-2 text-sm" key={value}><input type="checkbox" checked={form.capabilities.includes(value)} onChange={(event) => setForm((current) => ({ ...current, capabilities: event.target.checked ? [...current.capabilities, value] : current.capabilities.filter((capability) => capability !== value) }))} /> {label}</label>)}</div></fieldset><div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<ShieldCheck className="h-4 w-4" />} disabled={busy}>Save User Access</Button></div></form>;
 }
 

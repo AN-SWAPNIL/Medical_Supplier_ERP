@@ -2,9 +2,9 @@
 
 ## Client Presentation Guide
 
-**Build:** Simplified workflow-driven frontend, updated through the 23 August 2026 integrity audit
+**Build:** Simplified workflow-driven frontend, updated through the 24 August 2026 update2 audit
 
-**Primary requirements:** `files/Medical_Supplier_ERP_Simplified_Plan.md` and `files/Medical_Supplier_ERP_Simplified_Plan_update1.md`
+**Primary requirements:** `files/Medical_Supplier_ERP_Simplified_Plan_update2.md` and `files/MIPRO_ERP_PreSimplification_Analysis.md`
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -47,10 +47,12 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Narrow operational accounts, not a premature full accounting package.
 - Realistic local medical product images and client-like sample records.
 - Actual MIPRO and LED TRACKERS stationery backgrounds plus calibrated digital/preprinted A4 modes.
+- Employee/date-filtered salesperson performance with all-person comparison and individual print.
+- Protected PDF/image viewing for import, cost, and expense evidence.
+- Floating contextual MIPRO AI, reviewed document extraction, and smart operational recommendations.
 
 ### Intentionally deferred
 
-- AI command center and floating chatbot
 - GPS and field-sales map
 - Native mobile application
 - HR and payroll
@@ -58,7 +60,7 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Full general ledger, trial balance, and balance sheet
 - Automatic customs, VAT, AIT, or HS-code duty formulas
 
-These are not missing implementation. They are excluded by the latest simplified scope so the prototype follows the client's real workflow.
+There is no separate AI Command Center: AI appears only as a floating assistant and contextual actions. The remaining items are excluded by the latest simplified scope so the prototype follows the client's real workflow.
 
 ---
 
@@ -90,7 +92,7 @@ A user chooses the appropriate demo identity only while signing in. The role can
 | Warehouse Manager | Dashboard, Inventory | Finalized import receiving reference and delivery work |
 | Accounts | Dashboard, Sales, Expenses & Accounts, Reports | Customer dues, collections, expenses, cash/bank |
 | Sales Manager | Dashboard, Inventory, Sales, Reports | Available stock and commercial records |
-| Sales Executive | Dashboard, Sales | Own customers, quotations/orders, and collections only |
+| Sales Executive | Dashboard, Sales, Reports | Own customers, quotations/orders, collections, and own performance report only |
 
 Directly typing an unauthorized URL still shows **Access denied**. The server also checks the role and capability; hiding a menu item is not the only control.
 
@@ -102,7 +104,6 @@ Directly typing an unauthorized URL still shows **Access denied**. The server al
 - `reopen_landed_cost`
 - `view_profit`
 - `approve_stock_override`
-- `manage_users`
 - `approve_special_price`
 
 The Super Admin is the temporary sole landed-cost finalizer/reopener until the client confirms another authority.
@@ -140,8 +141,8 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | Supplier | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced | No separate approval | Reused by import cases |
 | Import commercial data | Import Officer or Super Admin | Same roles before finalization | Draft/unposted case only | No separate approval | One connected import case |
 | Import product line | Import Officer or Super Admin | Same roles before finalization | Before cost finalization | No separate approval | Quantity, FOB, CBM, and HS reference |
-| Import document metadata | Import users | Import users | Protected after transaction use | No separate approval | PI, LC, BL, customs, and other document reference |
-| Import cost line | User with `edit_sensitive_cost` | Same capability before finalization | Before finalization | Owner reviews through preview | Named cost and allocation rule |
+| Import document/file | Import users | Import users | Protected after transaction use | Human reviews any extracted fields | PI, LC, BL, customs, and other evidence opens through an authorized viewer |
+| Import cost line/file | User with `edit_sensitive_cost` | Same capability before finalization | Before finalization | Owner reviews through preview | Named cost, allocation rule, and protected supporting evidence |
 | Landed-cost snapshot | System calculates | Immutable after finalization | Never physically deleted | `finalize_landed_cost` | Historical per-product/per-unit cost |
 | Reopen landed cost | Not applicable | Authorized owner with reason, before first receipt only | Old snapshot remains in history | `reopen_landed_cost` | Audited correction cycle; post-receipt reopen is blocked |
 | Warehouse receipt | Warehouse Manager or Super Admin | Posted as a receipt transaction | No silent delete | Receiving user posts | Batch/lot stock and stock-in movement |
@@ -156,6 +157,8 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | Opening stock batch | Super Admin | Posted migration transaction | No silent delete | Super Admin posts | Legacy lot joins FIFO/expiry stock |
 | Customer opening balance | Super Admin | Posted migration transaction | One opening per customer | Super Admin posts | First running-ledger due at cutover |
 | User/capabilities | Super Admin | Super Admin | Deactivate rather than erase history | Super Admin | Route, action, and sensitive-field access |
+| AI extraction | Import user requests it | User selects fields to apply through normal forms | Extraction itself changes nothing | Human review is mandatory | Suggested values pass through existing validation and audit |
+| AI recommendation/chat | System reads role-scoped records | User may dismiss locally or open its source | No operational record is deleted | AI cannot approve/post/finalize | Explanation and next-step guidance only |
 | Client decision | Super Admin records confirmation | Super Admin | Audit-worthy status change | Client confirms externally | Prevents assumptions being hard-coded |
 
 ---
@@ -267,7 +270,7 @@ Users do not choose final states from a generic status field. **Mark In Producti
    Payment mode, LC/TT reference and amount/date, bank, rate snapshot, commercial invoice, production follow-up, BL, container, vessel, ETD, and ETA.
 
 3. **Documents**
-   Named metadata for PI, LC/Swift, commercial invoice, packing list, COA, CE, ISO, BL, customs assessment, duty proof, freight, insurance, bank advice, and C&F evidence.
+   Actual PDF/image content plus metadata for PI, LC/Swift, commercial invoice, packing list, COA, CE, ISO, BL, customs assessment, duty proof, freight, insurance, bank advice, and C&F evidence. View opens the shared protected viewer; Extract Fields opens a review panel and never overwrites data automatically.
 
 4. **Costs & Allocation**
    Any number of named costs with currency, historical exchange rate, vendor/payment metadata, attachment, product scope, and an explicit allocation method.
@@ -407,6 +410,22 @@ The From/To dates are sent to the API and applied before period totals/tables ar
 
 Detailed tables include import register, cost breakdown, landed cost by product/batch, current batch stock, expiry attention, movements, sales by customer/product/month, collections, receivables, running customer ledger, daily expenditure, category summary, TA/DA sheet data, and cash/bank transactions. Realized delivered profit uses the actual dispatched batch landed cost and is owner/capability-only.
 
+### Salesperson Performance
+
+Under **Reports -> Sales & Collection -> Salesperson Performance**, management uses the existing From/To range and an employee selector. **All Sales Employees** compares quotes, conversions, orders, delivered sales, collections, customers, dues, and conversion rate. Selecting one executive opens quotation, order, delivery/challan, collection, customer, and product details plus an A4 employee report.
+
+Attribution follows business ownership rather than whoever typed the action:
+
+```text
+Customer.assignedSalesUserId
+  -> Quotation.ownerId
+  -> Order.ownerId
+  -> Delivery.salesOwnerId
+  -> Collection.ownerId
+```
+
+`createdByUserId`, `dispatchedByUserId`, and `postedByUserId` retain operator history. Therefore a manager may create an order or Accounts may post a collection without stealing the executive's performance credit. Sales Executives receive only their own report; no FOB, landed cost, COGS, or profit field is returned.
+
 The narrow audit captures high-risk actions such as:
 
 - landed-cost finalization or reopening
@@ -417,16 +436,47 @@ The narrow audit captures high-risk actions such as:
 - collection posting
 - expense reversal
 - capability changes
+- document attachment and AI extraction review activity
 
 ---
 
-## 13. Settings And Client Confirmation Queue
+## 13. Documents And Contextual AI
+
+### Protected document flow
+
+```text
+User selects PDF/image
+  -> typed fileService/importService/accountsService request
+  -> API validates role, entity access, MIME type, size, and sensitivity
+  -> metadata + temporary content stay linked to that business record
+  -> GET /api/documents/:id/content re-checks authorization
+  -> shared viewer renders PDF or image and offers open/download
+```
+
+Import documents, freight/cost evidence, and expense receipts use this flow. Sensitive customs or import-cost files require `view_sensitive_cost`, even when a user guesses the direct URL. Generated quotation/order/challan/receipt/import-cost documents still use the calibrated `PrintPage` because they come from ERP records rather than uploaded binaries.
+
+### Contextual MIPRO AI
+
+The assistant is fixed at the bottom-right on desktop and becomes a near-full-screen panel on mobile. It receives only `route`, `entityType`, `entityId`, and the selected report period, then the API builds an answer from records already permitted for the signed-in role.
+
+- Imports: stage, missing documents, and authorized allocation explanation.
+- Inventory: FIFO lot and expiry attention matching the deterministic engine.
+- Sales: own/team-visible dues, open quotations, and follow-up suggestions.
+- Reports: current-period sales/collection and employee summaries.
+- Dashboard: role-safe management priorities.
+
+The assistant cannot call finalization, dispatch, collection, or update endpoints. Document extraction returns proposed fields with confidence and warnings; all checkboxes begin unselected, and the user explicitly applies verified fields through the same validation used by manual editing. In this release answers are deterministic mock intelligence behind replaceable typed endpoints, not a production model claim.
+
+---
+
+## 14. Settings And Client Confirmation Queue
 
 Settings is for Super Admin only.
 
 It contains:
 
 - Users and capabilities
+- Read-only Role Access Summary inside user create/edit
 - Products with medical product imagery and legacy aliases
 - Suppliers
 - Cash and bank accounts
@@ -451,7 +501,7 @@ Each decision stores the question, current behavior, status, actual resolution v
 
 ---
 
-## 14. What An API Call Means
+## 15. What An API Call Means
 
 For a non-technical audience, describe the API as the system's controlled messenger.
 
@@ -490,7 +540,7 @@ You are not showing code for its own sake. You are proving:
 
 ---
 
-## 15. API Map
+## 16. API Map
 
 ### Session and dashboard
 
@@ -510,7 +560,8 @@ You are not showing code for its own sake. You are proving:
 | `POST /api/imports/:id/transition` | Advance an allowed operational milestone, cancel, or close |
 | `POST/PATCH/DELETE /api/imports/:id/items/*` | Maintain products within the same case |
 | `POST/PATCH/DELETE /api/imports/:id/costs/*` | Maintain sensitive named cost rows |
-| `POST /api/imports/:id/documents` | Attach document metadata |
+| `POST /api/imports/:id/documents` | Validate and attach an actual PDF/image to the import case |
+| `GET /api/documents/:id/content` | Re-authorize and stream/redirect protected file content |
 | `POST /api/imports/:id/cost-preview` | Calculate and explain allocations |
 | `POST /api/imports/:id/finalize` | Create immutable snapshot |
 | `POST /api/imports/:id/reopen` | Reopen with capability and reason |
@@ -548,6 +599,11 @@ You are not showing code for its own sake. You are proving:
 | `GET /api/accounts` | Cash/bank positions |
 | `GET /api/account-transactions` | Simple transaction ledger |
 | `GET /api/reports?from=...&to=...` | Date-filtered role-safe totals and detailed report tables |
+| `GET /api/reports/salespeople?from=...&to=...&employeeId=...` | All-person comparison or one authorized employee report |
+| `POST /api/ai/chat` | Return a current-context, role-safe answer and source links |
+| `GET /api/ai/insights` | Return compact page/report summaries |
+| `GET /api/ai/recommendations` | Return FIFO, expiry, due, quote, document, or management actions |
+| `POST /api/ai/document-extract` | Propose import fields for explicit human review |
 | `GET/POST/PATCH/DELETE /api/products/*` | Product master |
 | `GET/POST/PATCH/DELETE /api/suppliers/*` | Supplier master |
 | `/api/settings/opening-stock` | Post a historical stock batch and receive movement |
@@ -558,7 +614,7 @@ You are not showing code for its own sake. You are proving:
 
 ---
 
-## 16. Temporary Data Behavior
+## 17. Temporary Data Behavior
 
 This release is a complete functional frontend backed by an in-memory Express API.
 
@@ -567,13 +623,14 @@ During a running demo, create/edit/delete/finalize/receive/deliver/collect/rever
 - a local API restart resets the seed;
 - a Vercel function cold start or redeployment may reset it;
 - different serverless instances may not share the same memory;
-- uploaded files are metadata only.
+- uploaded file content and metadata live only in that API process;
+- seeded PDFs/images are presentation assets but still open through authorization.
 
 This is correct for frontend workflow approval. Production requires persistent authentication, database, storage, authorization, audit retention, backups, and transactions, with Supabase/Postgres being the planned replacement.
 
 ---
 
-## 17. Four Acceptance Scenarios
+## 18. Seven Acceptance Scenarios
 
 ### A. Multi-product import costing
 
@@ -611,30 +668,52 @@ This is correct for frontend workflow approval. Production requires persistent a
 - Daily expenditure, category summary and TA/DA Approved Sheet update.
 - Finalized import and product landed costs do not change.
 
+### E. Employee performance
+
+- Sales Manager compares all executives for a selected From/To period.
+- One employee report shows owned quotes, inherited deliveries, collections, customers, and products.
+- Individual A4 print uses the same report data.
+- Sales Executive cannot request another employee or receive cost/profit fields.
+
+### F. Protected documents
+
+- PI and freight PDFs open in the shared viewer; the expense receipt opens as an image.
+- Missing content produces a clear error instead of a blank screen.
+- Import Officer cannot open sensitive customs/freight content by direct URL.
+- Extract Fields changes nothing until the user reviews and selects fields.
+
+### G. Contextual AI
+
+- Import questions use the current `LC-77612` context and link back to the record.
+- FIFO/expiry recommendation agrees with deterministic inventory data.
+- Sales follow-up is scoped to the signed-in role.
+- Sales Executive landed-cost/profit question returns a restriction without a secret value.
+
 These scenarios are covered by automated unit, API-flow, role, and browser smoke tests.
 
 ---
 
-## 18. Recommended Live Presentation Order
+## 19. Recommended Live Presentation Order
 
 1. Landing page: explain the two flows and shared warehouse bridge.
 2. Login: choose Super Admin and explain fixed role identity.
 3. Dashboard: show no more than six KPIs and action lists.
 4. Imports: briefly open New Import to prove PO-first draft creation, then open LC-77612.
-5. Import sections: show progressive PI/LC entry, controlled status actions, and one record accumulating commercial, shipment, document, cost, result, and receipt data.
-6. Cost preview: expand an allocation explanation and explain exact reconciliation.
-7. Inventory: show product images, opening/import batches, expiry, and multi-batch FIFO.
-8. Sales: show customer running ledger, owner profit preview, and quotation-to-order connection.
+5. Import sections: show progressive PI/LC entry, then open the PI PDF and Extract Fields review.
+6. Cost preview: open the freight evidence, expand an allocation explanation, and explain exact reconciliation.
+7. Inventory: show product images, smart FIFO/expiry alert, opening/import batches, and multi-batch FIFO.
+8. Sales: show customer running ledger, follow-up recommendations, owner profit preview, and quotation-to-order connection.
 9. Deliveries: explain the automatic batch split and stock-out.
 10. Collections: explain due and account update.
-11. Expenses & Accounts: prove operating costs stay separate.
-12. Reports: change the date range, show actual tables/CSV, TA/DA print, realized profit, and narrow audit.
-13. Settings: show users/capabilities, aliases, opening data migration, calibrated print identities, and recorded client decisions.
-14. Sign out and sign in as Sales Executive: prove the smaller own-record navigation and direct-URL denial.
+11. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
+12. Reports: set From/To, compare salespeople, select/print one employee, then show TA/DA and audit.
+13. MIPRO AI: ask about the current import and show its source link.
+14. Settings: show users/capabilities, Role Access Summary, aliases, opening data, print identities, and decisions.
+15. Sign in as Sales Executive: prove own Sales/Reports, direct-URL denial, and AI cost refusal.
 
 ---
 
-## 19. Honest Production Position
+## 20. Honest Production Position
 
 ### Complete in this release
 
@@ -648,6 +727,9 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 - Typed DTO/domain services and Zod response validation
 - Supplied MIPRO/LED letterhead assets, Order Receiving Sheet, and calibrated A4 print previews
 - Responsive desktop/mobile frontend
+- Protected PDF/image viewer, temporary upload content, and seeded document evidence
+- Salesperson comparison/detail/print with owner-correct attribution
+- Contextual role-safe MIPRO AI, smart alerts, source links, and reviewed extraction
 - Vercel-compatible same-origin mock API
 - Automated acceptance coverage
 
@@ -657,7 +739,8 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 - Real authentication and password/email delivery
 - Server/database transactions and row-level security
 - Durable audit history
-- PDF generation/storage and document upload
+- Durable private file storage, signed URLs, and server-generated PDF snapshots
+- Production AI model/orchestration, retrieval, monitoring, and evaluation
 - Excel migration/import tooling
 - Backups, monitoring, and operational deployment controls
 
@@ -665,7 +748,7 @@ The frontend is ready for client workflow approval and backend integration. It m
 
 ---
 
-## 20. Likely Client Questions
+## 21. Likely Client Questions
 
 **Why are there fewer tabs now?**
 
@@ -717,7 +800,7 @@ The latest client flow is quotation -> order -> challan -> collection. Invoice i
 
 **Where are AI, GPS, HR, and fleet?**
 
-They were intentionally retired from this phase by the latest simplified plan. The core web data model can support later mobile/AI phases after the operational flow is approved.
+Contextual MIPRO AI is active in this prototype as a role-safe, rule-backed assistant with source links and reviewed document extraction. GPS/mobile visits, HR/payroll, and fleet remain deferred; a production AI model and persistent document intelligence belong to the backend phase.
 
 **Will demo changes remain forever?**
 

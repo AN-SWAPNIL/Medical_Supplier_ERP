@@ -1,30 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Ruler, Stamp } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import { ErrorBlock, LoadingBlock, Segmented } from "../components";
-import { importService, printService, salesService } from "../services";
-import type { Collection, Delivery, ImportCase, PrintIdentity, Quotation, SalesOrder } from "../erp.types";
+import { importService, printService, reportService, salesService } from "../services";
+import type { Collection, Delivery, ImportCase, PrintIdentity, Quotation, SalesOrder, SalespersonPerformanceDetail } from "../erp.types";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
 type LetterheadMode = "digital" | "preprinted";
-type Printable = Quotation | SalesOrder | Delivery | Collection | ImportCase;
+type Printable = Quotation | SalesOrder | Delivery | Collection | ImportCase | SalespersonPerformanceDetail;
 
 export default function PrintPage() {
   const { documentType = "", id = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [mode, setMode] = useState<LetterheadMode | "">("");
   const [identityId, setIdentityId] = useState("");
   const configQuery = useQuery({ queryKey: ["print", "configuration"], queryFn: printService.configuration });
   const recordQuery = useQuery({
-    queryKey: ["print", documentType, id],
+    queryKey: ["print", documentType, id, searchParams.get("from"), searchParams.get("to")],
     queryFn: async (): Promise<Printable> => {
       if (documentType === "quotation") return find(await salesService.quotations(), id);
       if (documentType === "order") return find(await salesService.orders(), id);
       if (documentType === "challan") return find(await salesService.deliveries(), id);
       if (documentType === "receipt") return find(await salesService.collections(), id);
       if (documentType === "import-cost") return importService.get(id);
+      if (documentType === "employee-performance") {
+        const today = new Date().toISOString().slice(0, 10);
+        const report = await reportService.salespeople(searchParams.get("from") ?? `${today.slice(0, 7)}-01`, searchParams.get("to") ?? today, id);
+        if (!report.selected) throw new Error("Select one employee before opening the printable report.");
+        return report.selected;
+      }
       throw new Error("Printable record not found or unavailable for this role.");
     }
   });
@@ -34,7 +41,7 @@ export default function PrintPage() {
   const config = configQuery.data;
   const record = recordQuery.data;
   const identity = config.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config.identities[0];
-  const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "ORDER RECEIVING SHEET" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : "IMPORT LANDED COST";
+  const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "ORDER RECEIVING SHEET" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : documentType === "employee-performance" ? "SALES EMPLOYEE PERFORMANCE REPORT" : "IMPORT LANDED COST";
   const effectiveMode: LetterheadMode = mode || (config.defaultLetterheadMode === "Digital" ? "digital" : "preprinted");
   const digital = effectiveMode === "digital";
 
@@ -76,6 +83,7 @@ export default function PrintPage() {
               {documentType === "challan" ? <ChallanDocument record={record as Delivery} /> : null}
               {documentType === "receipt" ? <ReceiptDocument record={record as Collection} /> : null}
               {documentType === "import-cost" ? <ImportCostDocument record={record as ImportCase} /> : null}
+              {documentType === "employee-performance" ? <EmployeePerformanceDocument record={record as SalespersonPerformanceDetail} from={searchParams.get("from") ?? ""} to={searchParams.get("to") ?? ""} /> : null}
             </div>
           </div>
         </article>
@@ -103,6 +111,7 @@ function DocumentReference({ type, record }: { type: string; record: Printable }
   if (type === "challan") { reference = (record as Delivery).challanNumber; date = (record as Delivery).date; }
   if (type === "receipt") { reference = (record as Collection).receiptNumber; date = (record as Collection).date; }
   if (type === "import-cost") { reference = (record as ImportCase).primaryReference; date = (record as ImportCase).snapshot?.finalizedAt.slice(0, 10) ?? ""; }
+  if (type === "employee-performance") { reference = (record as SalespersonPerformanceDetail).employee.name; date = "Selected period"; }
   return <dl className="grid gap-1 text-right text-[10px]"><div><dt className="inline text-slate-500">Reference: </dt><dd className="inline font-bold">{reference}</dd></div><div><dt className="inline text-slate-500">Date: </dt><dd className="inline font-bold">{date}</dd></div></dl>;
 }
 
@@ -142,6 +151,20 @@ function ImportCostDocument({ record }: { record: ImportCase }) {
   const snapshot = record.snapshot;
   if (!snapshot) return <p className="border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">No finalized landed-cost snapshot is available.</p>;
   return <><div className="mb-4 grid gap-2 text-[10px] sm:grid-cols-3"><div><span className="text-slate-500">Supplier</span><strong className="block">{record.supplierName}</strong></div><div><span className="text-slate-500">PO / PI</span><strong className="block">{record.poNumber} / {record.piNumber ?? "-"}</strong></div><div><span className="text-slate-500">Snapshot</span><strong className="block">Version {snapshot.version} | Immutable</strong></div></div><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="px-2 py-2 text-left">Product</th><th className="px-2 py-2 text-right">Qty</th><th className="px-2 py-2 text-right">FOB / unit</th><th className="px-2 py-2 text-right">Import cost / unit</th><th className="px-2 py-2 text-right">Landed / unit</th><th className="px-2 py-2 text-right">Total</th></tr></thead><tbody>{snapshot.products.map((product) => <tr className="border-b border-slate-300" key={product.importItemId}><td className="px-2 py-2"><strong>{product.productName}</strong><span className="block text-slate-500">{product.productCode}</span></td><td className="px-2 py-2 text-right">{formatNumber(product.quantity)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.fobPerUnitBdt)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.additionalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalTotalBdt)}</td></tr>)}</tbody></table><Totals subtotal={snapshot.totalProductValueBdt} discount="0" total={snapshot.totalShipmentCostBdt} /><p className="mt-4 text-[9px] text-slate-600">Additional allocated import cost: {formatCurrency(snapshot.totalAdditionalCostBdt)}. Customs duty values are final assessed product amounts, not ERP-generated tax formulas.</p><SignatureRow labels={["Prepared By", "Checked By", "Authorized Owner"]} /></>;
+}
+
+function EmployeePerformanceDocument({ record, from, to }: { record: SalespersonPerformanceDetail; from: string; to: string }) {
+  const summaryRows = [
+    ["Quotations", String(record.summary.quotationsCreated)],
+    ["Converted", String(record.summary.convertedQuotations)],
+    ["Orders", String(record.summary.ordersCreated)],
+    ["Delivered Sales", formatCurrency(record.summary.deliveredSalesValue)],
+    ["Collections", formatCurrency(record.summary.collectionsReceived)],
+    ["Outstanding Customer Due", formatCurrency(record.summary.assignedCustomerDue)],
+    ["Conversion Rate", `${record.summary.conversionRate}%`]
+  ];
+  const sections = [record.tables.customers, record.tables.quotations, record.tables.orders, record.tables.deliveries, record.tables.collections, record.tables.products];
+  return <div className="text-[9px]"><div className="grid grid-cols-2 gap-3 border border-slate-300 bg-white/90 p-3"><div><span className="text-slate-500">Employee</span><strong className="block text-[12px]">{record.employee.name}</strong><span>{record.employee.title}</span></div><div className="text-right"><span className="text-slate-500">Territory / Period</span><strong className="block">{record.employee.territory ?? "-"}</strong><span>{from} to {to}</span></div></div><h2 className="mt-4 border-b border-blue-900 pb-1 text-[10px] font-bold text-blue-950">SUMMARY</h2><div className="mt-2 grid grid-cols-4 gap-2">{summaryRows.map(([label, value]) => <div className="border border-slate-300 bg-white/90 p-2" key={label}><span className="block text-[7px] uppercase text-slate-500">{label}</span><strong className="mt-1 block text-[10px]">{value}</strong></div>)}</div>{sections.map((table) => <section className="mt-4 break-inside-avoid" key={table.id}><h2 className="border-b border-blue-900 pb-1 text-[10px] font-bold text-blue-950">{table.title.toUpperCase()}</h2><table className="mt-2 w-full border-collapse text-[8px]"><thead><tr className="bg-blue-950 text-white">{table.columns.map((column) => <th className={`border border-blue-950 px-1.5 py-1.5 ${column.align === "right" ? "text-right" : "text-left"}`} key={column.key}>{column.label}</th>)}</tr></thead><tbody>{table.rows.map((row, index) => <tr key={index}>{table.columns.map((column) => <td className={`border border-slate-300 px-1.5 py-1.5 ${column.align === "right" ? "text-right" : ""}`} key={column.key}>{/amount|value|sales|collected|due|discount/i.test(column.key) ? formatCurrency(row[column.key] ?? "0") : row[column.key] ?? "-"}</td>)}</tr>)}{!table.rows.length ? <tr><td className="border border-slate-300 p-2 text-center text-slate-500" colSpan={table.columns.length}>No activity in this period.</td></tr> : null}</tbody></table></section>)}<SignatureRow labels={["Prepared By", "Head of Sales", "Managing Director"]} /></div>;
 }
 
 function SignatureRow({ labels }: { labels: string[] }) {

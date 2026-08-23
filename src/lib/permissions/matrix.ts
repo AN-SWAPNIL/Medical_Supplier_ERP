@@ -83,6 +83,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
     dashboard: ["view"],
     sales: ["view", "create", "edit", "post"],
     customers: ["view", "create", "edit"],
+    reports: ["view", "export"],
     print: ["view"]
   }
 };
@@ -104,7 +105,7 @@ export const navSections: NavSection[] = [
       { label: "Inventory", path: "/app/inventory", permission: "inventory", icon: Boxes, roles: ["Super Admin", "Managing Director", "Warehouse Manager", "Sales Manager"] },
       { label: "Sales", path: "/app/sales", permission: "sales", icon: ShoppingCart, roles: ["Super Admin", "Managing Director", "Accounts", "Sales Manager", "Sales Executive"] },
       { label: "Expenses & Accounts", path: "/app/accounts", permission: "accounts", icon: ReceiptText, roles: ["Super Admin", "Managing Director", "Accounts"] },
-      { label: "Reports", path: "/app/reports", permission: "reports", icon: BarChart3, roles: ["Super Admin", "Managing Director", "Accounts", "Sales Manager"] },
+      { label: "Reports", path: "/app/reports", permission: "reports", icon: BarChart3, roles: ["Super Admin", "Managing Director", "Accounts", "Sales Manager", "Sales Executive"] },
       { label: "Settings", path: "/app/settings", permission: "settings", icon: Settings, roles: ["Super Admin"] }
     ]
   }

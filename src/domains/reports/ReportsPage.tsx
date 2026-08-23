@@ -7,18 +7,22 @@ import {
   Printer,
   ReceiptText,
   ShieldCheck,
-  ShoppingCart
+  ShoppingCart,
+  Sparkles,
+  Users
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
 import { useEffectiveRole } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
 import { formatCurrency, formatNumber } from "../../utils/format";
-import type { ReportTable } from "../erp.types";
+import type { ReportTable, SalespersonPerformanceData, SalespersonPerformanceSummary } from "../erp.types";
 import { ErrorBlock, LoadingBlock, Panel, Segmented, TableFrame, inputClass, labelClass } from "../components";
-import { reportService, settingsService } from "../services";
+import { aiService, reportService, settingsService } from "../services";
+import { useAIContextStore } from "../../lib/ai/context";
 
 type View = "overview" | "imports" | "inventory" | "sales" | "expenses" | "audit";
 type ReportGroupId = Exclude<View, "overview" | "audit">;
@@ -42,19 +46,34 @@ function displayValue(value: string, key = "") {
 
 export default function ReportsPage() {
   const today = businessDate();
-  const [view, setView] = useState<View>("overview");
+  const role = useEffectiveRole();
+  const [view, setView] = useState<View>(role === "Sales Executive" ? "sales" : "overview");
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
-  const [tableId, setTableId] = useState("");
-  const [employee, setEmployee] = useState("All employees");
-  const role = useEffectiveRole();
+  const [tableId, setTableId] = useState(role === "Sales Executive" ? "salesperson-performance" : "");
+  const [taDaEmployee, setTaDaEmployee] = useState("All employees");
+  const [salesEmployeeId, setSalesEmployeeId] = useState(role === "Sales Executive" ? "self" : "all");
+  const navigate = useNavigate();
+  const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
   const canAudit = ["Super Admin", "Managing Director", "Accounts"].includes(role);
   const reportQuery = useQuery({
     queryKey: ["reports", from, to],
     queryFn: () => reportService.get(from, to),
     enabled: Boolean(from && to && from <= to)
   });
+  const performanceQuery = useQuery({
+    queryKey: ["reports", "salespeople", from, to, salesEmployeeId],
+    queryFn: () => reportService.salespeople(from, to, salesEmployeeId),
+    enabled: Boolean(from && to && from <= to)
+  });
+  const insightQuery = useQuery({
+    queryKey: ["ai", "report-insights", from, to, role],
+    queryFn: () => aiService.insights({ route: "/app/reports", entityType: "reports", reportFrom: from, reportTo: to }),
+    enabled: Boolean(from && to && from <= to)
+  });
   const auditQuery = useQuery({ queryKey: ["reports", "audit"], queryFn: settingsService.audit, enabled: canAudit });
+
+  useEffect(() => setReportPeriod(from, to), [from, to, setReportPeriod]);
 
   const report = reportQuery.data;
   const groups = useMemo(() => report ? [
@@ -62,21 +81,22 @@ export default function ReportsPage() {
     { id: "inventory" as const, title: "Inventory", icon: PackageSearch, rows: report.inventory, tables: report.tables.inventory },
     { id: "sales" as const, title: "Sales & Collection", icon: ShoppingCart, rows: report.sales, tables: report.tables.sales },
     { id: "expenses" as const, title: "Expense & Cash-Bank", icon: ReceiptText, rows: report.expenses, tables: report.tables.expenses }
-  ] : [], [report]);
+  ].filter((group) => role !== "Sales Executive" || group.id === "sales") : [], [report, role]);
   const selectedGroup = groups.find((group) => group.id === view);
-  const selectedTable = selectedGroup?.tables.find((table) => table.id === tableId) ?? selectedGroup?.tables[0];
+  const selectedTable = tableId === "salesperson-performance" ? undefined : selectedGroup?.tables.find((table) => table.id === tableId) ?? selectedGroup?.tables[0];
 
   useEffect(() => {
-    if (selectedGroup && !selectedGroup.tables.some((table) => table.id === tableId)) {
-      setTableId(selectedGroup.tables[0]?.id ?? "");
+    if (selectedGroup && tableId !== "salesperson-performance" && !selectedGroup.tables.some((table) => table.id === tableId)) {
+      setTableId(selectedGroup.id === "sales" ? "salesperson-performance" : selectedGroup.tables[0]?.id ?? "");
     }
   }, [selectedGroup, tableId]);
 
-  if (reportQuery.isLoading || (canAudit && auditQuery.isLoading)) return <LoadingBlock label="Preparing period reports" />;
-  if (reportQuery.isError || (canAudit && auditQuery.isError)) return <ErrorBlock error={reportQuery.error ?? auditQuery.error} onRetry={() => { void reportQuery.refetch(); if (canAudit) void auditQuery.refetch(); }} />;
+  if (reportQuery.isLoading || performanceQuery.isLoading || (canAudit && auditQuery.isLoading)) return <LoadingBlock label="Preparing period and employee reports" />;
+  if (reportQuery.isError || performanceQuery.isError || (canAudit && auditQuery.isError)) return <ErrorBlock error={reportQuery.error ?? performanceQuery.error ?? auditQuery.error} onRetry={() => { void reportQuery.refetch(); void performanceQuery.refetch(); if (canAudit) void auditQuery.refetch(); }} />;
   if (!report) return <ErrorBlock error={new Error("Report data is unavailable for the selected period.")} />;
 
-  const exportedTables = selectedTable ? [selectedTable] : groups.flatMap((group) => group.tables);
+  const performanceTables = buildPerformanceExportTables(performanceQuery.data);
+  const exportedTables = tableId === "salesperson-performance" ? performanceTables : selectedTable ? [selectedTable] : groups.flatMap((group) => group.tables);
   const exportCsv = () => {
     const lines: string[] = [];
     for (const table of exportedTables) {
@@ -117,12 +137,14 @@ export default function ReportsPage() {
         </div>
       </Panel>
 
+      {insightQuery.data?.[0] ? <div className="flex items-start gap-3 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950" data-testid="report-ai-summary"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-white text-cyan-700"><Sparkles className="h-4 w-4" /></span><div><strong>{insightQuery.data[0].title}</strong><p className="mt-0.5 text-xs leading-5 text-cyan-900">{insightQuery.data[0].summary}</p></div></div> : null}
+
       <Segmented
         value={view}
         onChange={setView}
         ariaLabel="Report groups"
         options={[
-          { value: "overview", label: "Overview" },
+          ...(role === "Sales Executive" ? [] : [{ value: "overview" as const, label: "Overview" }]),
           ...groups.map((group) => ({ value: group.id, label: group.title })),
           ...(canAudit ? [{ value: "audit" as const, label: "Audit" }] : [])
         ]}
@@ -133,12 +155,16 @@ export default function ReportsPage() {
         <ReportWorkspace
           group={selectedGroup}
           selectedTable={selectedTable}
-          tableId={selectedTable?.id ?? ""}
+          tableId={tableId}
           onTableChange={setTableId}
           from={from}
           to={to}
-          employee={employee}
-          onEmployeeChange={setEmployee}
+          taDaEmployee={taDaEmployee}
+          onTaDaEmployeeChange={setTaDaEmployee}
+          performance={performanceQuery.data}
+          salesEmployeeId={performanceQuery.data?.selectedEmployeeId ?? salesEmployeeId}
+          onSalesEmployeeChange={setSalesEmployeeId}
+          onPrintEmployee={(employeeId) => navigate(`/app/print/employee-performance/${employeeId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)}
         />
       ) : null}
       {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}
@@ -180,33 +206,127 @@ function ReportOverview({ groups, onOpen }: { groups: Array<{ id: ReportGroupId;
   );
 }
 
-function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, employee, onEmployeeChange }: {
+function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, salesEmployeeId, onSalesEmployeeChange, onPrintEmployee }: {
   group: { id: ReportGroupId; title: string; rows: { label: string; value: string }[]; tables: ReportTable[] };
   selectedTable?: ReportTable;
   tableId: string;
   onTableChange: (id: string) => void;
   from: string;
   to: string;
-  employee: string;
-  onEmployeeChange: (value: string) => void;
+  taDaEmployee: string;
+  onTaDaEmployeeChange: (value: string) => void;
+  performance?: SalespersonPerformanceData;
+  salesEmployeeId: string;
+  onSalesEmployeeChange: (value: string) => void;
+  onPrintEmployee: (employeeId: string) => void;
 }) {
   const isTaDa = selectedTable?.id === "ta-da";
+  const isSalesPerformance = group.id === "sales" && tableId === "salesperson-performance";
   const employees = isTaDa ? ["All employees", ...new Set(selectedTable.rows.map((row) => row.employee).filter(Boolean))] : [];
-  const visibleRows = isTaDa && employee !== "All employees" ? selectedTable.rows.filter((row) => row.employee === employee) : selectedTable?.rows ?? [];
+  const visibleRows = isTaDa && taDaEmployee !== "All employees" ? selectedTable.rows.filter((row) => row.employee === taDaEmployee) : selectedTable?.rows ?? [];
+  const tableOptions = group.id === "sales" ? [{ value: "salesperson-performance", label: "Salesperson Performance", count: performance?.comparison.length }, ...group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))] : group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }));
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {group.rows.map((row, index) => <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm" key={row.label}><span className="block text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl" style={{ color: colors[index % colors.length] }}>{displayValue(row.value, row.label)}</strong></div>)}
       </div>
-      <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
-        <div className="grid gap-4 border-b border-slate-200 p-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
-          <Segmented value={tableId} onChange={onTableChange} ariaLabel={`${group.title} report types`} options={group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))} />
-          {isTaDa ? <label><span className={labelClass}>Employee</span><select className={inputClass} value={employee} onChange={(event) => onEmployeeChange(event.target.value)}>{employees.map((name) => <option key={name}>{name}</option>)}</select></label> : <div className="flex items-center justify-end gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" /> {visibleRows.length} filtered rows</div>}
+      <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"><Segmented value={tableId} onChange={onTableChange} ariaLabel={`${group.title} report types`} options={tableOptions} /></div>
+      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} employeeId={salesEmployeeId} onEmployeeChange={onSalesEmployeeChange} onPrint={onPrintEmployee} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
+        <div className="flex flex-wrap items-end justify-end gap-4 border-b border-slate-200 p-4">
+          {isTaDa ? <label className="w-full sm:w-64"><span className={labelClass}>Employee</span><select className={inputClass} value={taDaEmployee} onChange={(event) => onTaDaEmployeeChange(event.target.value)}>{employees.map((name) => <option key={name}>{name}</option>)}</select></label> : <div className="flex items-center justify-end gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" /> {visibleRows.length} filtered rows</div>}
         </div>
         {selectedTable ? <ReportDataTable table={selectedTable} rows={visibleRows} /> : <div className="p-8 text-center text-sm text-slate-500">No report is available in this group.</div>}
-      </Panel>
-      {isTaDa && selectedTable ? <TaDaPrintSheet rows={visibleRows} from={from} to={to} employee={employee} /> : null}
+      </Panel>}
+      {isTaDa && selectedTable ? <TaDaPrintSheet rows={visibleRows} from={from} to={to} employee={taDaEmployee} /> : null}
     </>
+  );
+}
+
+const performanceMetricLabels: Array<[keyof SalespersonPerformanceSummary, string, "number" | "money" | "percent"]> = [
+  ["quotationsCreated", "Quotations", "number"],
+  ["quotationValue", "Quotation Value", "money"],
+  ["convertedQuotations", "Converted", "number"],
+  ["ordersCreated", "Orders", "number"],
+  ["ordersDelivered", "Orders Delivered", "number"],
+  ["deliveredSalesValue", "Delivered Sales", "money"],
+  ["collectionsReceived", "Collections", "money"],
+  ["assignedCustomerDue", "Assigned Customer Due", "money"],
+  ["customersHandled", "Customers Handled", "number"],
+  ["unitsDelivered", "Units Delivered", "number"],
+  ["averageOrderValue", "Average Order Value", "money"],
+  ["conversionRate", "Quote to Order", "percent"]
+];
+
+function metricValue(value: string | number, kind: "number" | "money" | "percent") {
+  if (kind === "money") return formatCurrency(value, true);
+  if (kind === "percent") return `${formatNumber(value)}%`;
+  return formatNumber(value);
+}
+
+function comparisonTable(data: SalespersonPerformanceData): ReportTable {
+  return {
+    id: "salesperson-comparison",
+    title: "All Sales Employees Comparison",
+    columns: [
+      { key: "employee", label: "Employee" },
+      { key: "territory", label: "Territory" },
+      { key: "quotes", label: "Quotes", align: "right" },
+      { key: "converted", label: "Converted", align: "right" },
+      { key: "orders", label: "Orders", align: "right" },
+      { key: "sales", label: "Delivered Sales", align: "right" },
+      { key: "collections", label: "Collections", align: "right" },
+      { key: "customers", label: "Customers", align: "right" },
+      { key: "conversion", label: "Conversion", align: "right" }
+    ],
+    rows: data.comparison.map((row) => ({ employee: row.name, territory: row.territory ?? "-", quotes: String(row.quotationsCreated), converted: String(row.convertedQuotations), orders: String(row.ordersCreated), sales: row.deliveredSalesValue, collections: row.collectionsReceived, customers: String(row.customersHandled), conversion: `${row.conversionRate}%` }))
+  };
+}
+
+function buildPerformanceExportTables(data?: SalespersonPerformanceData) {
+  if (!data) return [];
+  if (!data.selected) return [comparisonTable(data)];
+  return [comparisonTable(data), ...Object.values(data.selected.tables)];
+}
+
+function SalespersonPerformanceWorkspace({ data, employeeId, onEmployeeChange, onPrint, from, to }: { data: SalespersonPerformanceData; employeeId: string; onEmployeeChange: (value: string) => void; onPrint: (employeeId: string) => void; from: string; to: string }) {
+  const [detailTableId, setDetailTableId] = useState("quotations");
+  const detail = data.selected;
+  const detailTables = detail ? Object.entries(detail.tables) : [];
+  const selectedTable = detailTables.find(([key]) => key === detailTableId)?.[1] ?? detailTables[0]?.[1];
+  return (
+    <section className="grid gap-4" data-testid="salesperson-performance-report">
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+        <div><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-blue-50 text-blue-800"><Users className="h-4 w-4" /></span><div><h2 className="text-base font-bold text-slate-950">Salesperson Performance</h2><p className="text-xs text-slate-500">Business ownership stays with the executive even when a manager or Accounts posts the action.</p></div></div></div>
+        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:items-end">
+          <label className="w-full sm:w-72"><span className={labelClass}>Employee</span><select className={inputClass} value={employeeId} onChange={(event) => onEmployeeChange(event.target.value)}>{data.employees.length > 1 ? <option value="all">All Sales Employees</option> : null}{data.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name} | {employee.territory ?? employee.title}</option>)}</select></label>
+          {detail ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => onPrint(detail.employee.id)}>Print Employee Report</Button> : null}
+        </div>
+      </div>
+
+      {!detail ? (
+        <>
+          <Panel title="Sales team comparison" subtitle={`${from} to ${to}. Values come from owned quotations, inherited orders/deliveries and attributed collections.`}>
+            <div className="h-72 p-4">
+              <ResponsiveContainer width="100%" height="100%"><BarChart data={data.comparison.map((row) => ({ name: row.name.split(" ")[0], sales: Number(row.deliveredSalesValue), collections: Number(row.collectionsReceived) }))} margin={{ top: 10, right: 10, left: 10, bottom: 15 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} /><Tooltip formatter={(value) => formatCurrency(String(value))} /><Bar dataKey="sales" name="Delivered sales" fill="#075985" radius={[3, 3, 0, 0]} /><Bar dataKey="collections" name="Collections" fill="#059669" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer>
+            </div>
+            <ReportDataTable table={comparisonTable(data)} rows={comparisonTable(data).rows} />
+          </Panel>
+        </>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            {performanceMetricLabels.map(([key, label, kind], index) => <article className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" key={key}><span className="block min-h-8 text-xs leading-4 text-slate-500">{label}</span><strong className="mt-1 block truncate text-lg" style={{ color: colors[index % colors.length] }} title={String(detail.summary[key])}>{metricValue(detail.summary[key], kind)}</strong></article>)}
+          </div>
+          <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 sm:grid-cols-4">
+            <span><b className="block text-slate-900">{detail.summary.sentQuotations}</b> Sent quotations</span><span><b className="block text-slate-900">{detail.summary.acceptedQuotations}</b> Accepted quotations</span><span><b className="block text-slate-900">{formatCurrency(detail.summary.pendingQuotationValue)}</b> Pending quote value</span><span><b className="block text-slate-900">{formatCurrency(detail.summary.totalDiscount)}</b> Total discount</span>
+          </div>
+          <Panel title={`${detail.employee.name} | Activity details`} subtitle={`${detail.employee.title}${detail.employee.territory ? ` | ${detail.employee.territory}` : ""} | ${from} to ${to}`}>
+            <div className="border-b border-slate-200 p-3"><Segmented value={detailTableId} onChange={setDetailTableId} ariaLabel="Employee report details" options={detailTables.map(([key, table]) => ({ value: key, label: table.title, count: table.rows.length }))} /></div>
+            {selectedTable ? <ReportDataTable table={selectedTable} rows={selectedTable.rows} /> : null}
+          </Panel>
+        </>
+      )}
+    </section>
   );
 }
 

@@ -27,6 +27,33 @@ export type Capability =
   | "manage_users"
   | "approve_special_price";
 
+export type DocumentEntityType = "import" | "import-cost" | "expense";
+export type DocumentSource = "UPLOADED" | "GENERATED";
+
+export type DocumentRecord = {
+  id: string;
+  entityType: DocumentEntityType;
+  entityId: string;
+  documentType: string;
+  source: DocumentSource;
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+  previewUrl: string;
+  sensitive: boolean;
+  notes?: string;
+  createdByUserId: string;
+  createdByName: string;
+  createdAt: string;
+};
+
+export type DocumentUpload = {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  fileDataUrl: string;
+};
+
 export type Product = {
   id: string;
   code: string;
@@ -92,12 +119,12 @@ export type ImportCostLine = {
   accountId?: string;
   notes?: string;
   attachmentName?: string;
+  attachment?: DocumentRecord;
   enteredBy: string;
   createdAt: string;
 };
 
-export type ImportDocument = {
-  id: string;
+export type ImportDocument = DocumentRecord & {
   importId: string;
   type: string;
   name: string;
@@ -297,6 +324,7 @@ export type Quotation = {
   customerPhoneSnapshot?: string;
   customerContactSnapshot?: string;
   ownerId: string;
+  createdByUserId?: string;
   validityDays: number;
   paymentTerms: string;
   remarks?: string;
@@ -318,6 +346,7 @@ export type SalesOrder = {
   customerPhoneSnapshot?: string;
   customerContactSnapshot?: string;
   ownerId: string;
+  createdByUserId?: string;
   paymentConditions: string;
   deliveryInstruction: string;
   amountReceived: DecimalString;
@@ -348,6 +377,8 @@ export type Delivery = {
   orderId: string;
   customerId: string;
   customerName: string;
+  salesOwnerId?: string;
+  dispatchedByUserId?: string;
   date: string;
   remarks: string;
   receiverName?: string;
@@ -369,6 +400,7 @@ export type Collection = {
   referenceNumber?: string;
   remarks?: string;
   ownerId: string;
+  postedByUserId?: string;
   status: "Posted" | "Reversed";
 };
 
@@ -386,6 +418,7 @@ export type Expense = {
   daAmount?: DecimalString;
   remarks: string;
   attachmentName?: string;
+  attachment?: DocumentRecord;
   status: "Posted" | "Reversed";
 };
 
@@ -598,4 +631,108 @@ export type ReportData = {
     sales: ReportTable[];
     expenses: ReportTable[];
   };
+};
+
+export type SalespersonEmployee = {
+  id: string;
+  name: string;
+  title: string;
+  territory?: string;
+};
+
+export type SalespersonPerformanceSummary = {
+  quotationsCreated: number;
+  quotationValue: DecimalString;
+  sentQuotations: number;
+  acceptedQuotations: number;
+  convertedQuotations: number;
+  rejectedQuotations: number;
+  pendingQuotationValue: DecimalString;
+  ordersCreated: number;
+  ordersDelivered: number;
+  deliveredSalesValue: DecimalString;
+  unitsDelivered: DecimalString;
+  collectionsReceived: DecimalString;
+  customersHandled: number;
+  assignedCustomerDue: DecimalString;
+  averageOrderValue: DecimalString;
+  conversionRate: DecimalString;
+  totalDiscount: DecimalString;
+  averageDiscount: DecimalString;
+};
+
+export type SalespersonComparisonRow = SalespersonEmployee & SalespersonPerformanceSummary;
+
+export type SalespersonPerformanceDetail = {
+  employee: SalespersonEmployee;
+  summary: SalespersonPerformanceSummary;
+  tables: {
+    quotations: ReportTable;
+    orders: ReportTable;
+    deliveries: ReportTable;
+    collections: ReportTable;
+    customers: ReportTable;
+    products: ReportTable;
+  };
+};
+
+export type SalespersonPerformanceData = {
+  period: { from: string; to: string };
+  selectedEmployeeId: string;
+  employees: SalespersonEmployee[];
+  comparison: SalespersonComparisonRow[];
+  selected?: SalespersonPerformanceDetail;
+};
+
+export type AIContext = {
+  route: string;
+  entityType?: "import" | "inventory" | "sales" | "reports" | "dashboard" | "accounts" | "settings";
+  entityId?: string;
+  reportFrom?: string;
+  reportTo?: string;
+};
+
+export type AISource = {
+  label: string;
+  path: string;
+};
+
+export type AIChatResponse = {
+  answer: string;
+  contextLabel: string;
+  suggestions: string[];
+  sources: AISource[];
+  restricted: boolean;
+};
+
+export type AIInsight = {
+  id: string;
+  title: string;
+  summary: string;
+  severity: "Info" | "Attention" | "Critical";
+  sourceLabel: string;
+  sourcePath?: string;
+};
+
+export type AIRecommendation = AIInsight & {
+  reason: string;
+  recommendedAction: string;
+};
+
+export type AIDocumentExtractionField = {
+  key: string;
+  label: string;
+  value: string;
+  target: "import" | "item";
+  targetId?: string;
+  confidence: DecimalString;
+};
+
+export type AIDocumentExtraction = {
+  importId: string;
+  documentId: string;
+  documentName: string;
+  requiresReview: true;
+  fields: AIDocumentExtractionField[];
+  warnings: string[];
 };

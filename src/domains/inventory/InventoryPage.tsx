@@ -3,10 +3,11 @@ import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, PackageSearc
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Panel, ProductThumb, Segmented, TableFrame, inputClass } from "../components";
-import { inventoryService } from "../services";
+import { aiService, inventoryService } from "../services";
 import { useEffectiveRole } from "../../lib/auth/session";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
@@ -20,6 +21,7 @@ export default function InventoryPage() {
   const stockQuery = useQuery({ queryKey: ["inventory", "stock"], queryFn: inventoryService.stock });
   const batchQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches });
   const movementQuery = useQuery({ queryKey: ["inventory", "movements"], queryFn: inventoryService.movements });
+  const recommendationsQuery = useQuery({ queryKey: ["ai", "inventory", role], queryFn: () => aiService.recommendations({ route: "/app/inventory", entityType: "inventory" }) });
   const loading = stockQuery.isLoading || batchQuery.isLoading || movementQuery.isLoading;
   const error = stockQuery.error ?? batchQuery.error ?? movementQuery.error;
 
@@ -55,6 +57,8 @@ export default function InventoryPage() {
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Tracked batches</span><strong className="mt-1 block text-2xl">{formatNumber(batches.length)}</strong><small className="text-slate-400">oldest receipt is issued first</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">{hasValuation ? "Inventory valuation" : "Expiry attention"}</span><strong className="mt-1 block text-2xl">{hasValuation ? formatCurrency(valuation, true) : formatNumber(expiring)}</strong><small className="text-slate-400">{hasValuation ? "sensitive owner view" : "batches needing review"}</small></div>
       </div>
+
+      {recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Smart FIFO and expiry alerts">{recommendationsQuery.data.filter((item) => item.id.startsWith("fifo-") || item.id.startsWith("expiry-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Segmented value={view} onChange={setView} ariaLabel="Inventory views" options={[{ value: "stock", label: "Stock", count: stockQuery.data?.length }, { value: "batches", label: "Batches", count: batchQuery.data?.length }, { value: "movements", label: "Movements", count: movementQuery.data?.length }]} />

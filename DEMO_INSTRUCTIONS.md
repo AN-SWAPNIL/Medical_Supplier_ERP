@@ -14,22 +14,24 @@ superadmin@mipro.local
 password123
 ```
 
-## Recommended 12-Minute Demo
+## Recommended 15-Minute Demo
 
 1. **Landing:** explain import -> stock -> sale.
 2. **Dashboard:** show six KPIs and actionable lists.
 3. **Imports:** open New Import to show PO-first draft requirements, then open `LC-77612`.
 4. **Commercial & Products:** show one LC with three variants.
-5. **Costs & Allocation:** show different rules and Add Cost.
-6. **Landed-Cost Result:** click Preview and expand an explanation.
-7. **Warehouse Receipt:** explain finalization lock and inherited cost.
-8. **Inventory:** show product images, Opening/Import batches, Movements, split FIFO and expiry.
-9. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery and collection.
-10. **Expenses & Accounts:** show expense isolation and account ledger.
-11. **Reports:** change dates and show actual tables, CSV, TA/DA, realized profit and audit.
-12. **Settings:** show capabilities, aliases, opening-data migration, print calibration and confirmation answers.
+5. **Documents:** open the PI PDF, show the protected viewer, then open Extract Fields and emphasize review before apply.
+6. **Costs & Allocation:** show different rules, Add Cost, and the protected freight attachment.
+7. **Landed-Cost Result:** click Preview and expand an explanation.
+8. **Warehouse Receipt:** explain finalization lock and inherited cost.
+9. **Inventory:** show product images, Opening/Import batches, smart FIFO/expiry alert, Movements and split FIFO.
+10. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
+11. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
+12. **Reports:** set From/To, open Salesperson Performance, compare all employees, select one employee, print, then show TA/DA/audit.
+13. **MIPRO AI:** ask about the open import, then show a Sales Executive receiving a permission-safe cost refusal.
+14. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
 
-End by signing in as Sales Executive to show the minimal own-record view and direct-URL denial.
+End as Sales Executive to show own-record Sales and Reports, direct-URL denial, and no cost/profit leakage.
 
 ## Acceptance Checklist
 
@@ -85,11 +87,24 @@ End by signing in as Sales Executive to show the minimal own-record view and dir
 - [ ] Expense does not change landed cost.
 - [ ] Reports reflect operational records.
 - [ ] Report From/To changes data and CSV contains actual rows.
+- [ ] Salesperson Performance compares all employees and prints one selected employee.
+- [ ] Sales Executive can open only their own performance report.
 - [ ] TA/DA Approved Sheet and owner realized-profit report render.
 - [ ] Settings are Super Admin-only.
 - [ ] Roles show only their permitted navigation.
 - [ ] Unauthorized direct URLs show Access denied.
 - [ ] Sensitive cost is absent for unauthorized roles.
+
+### Documents and contextual AI
+
+- [ ] Import PDF and expense image open in the shared viewer.
+- [ ] Freight/customs attachments return 403 without sensitive-cost permission.
+- [ ] Missing file metadata produces a clear preview error.
+- [ ] Extract Fields opens a review panel with nothing selected by default.
+- [ ] MIPRO AI shows the current role and workspace context on desktop and mobile.
+- [ ] Inventory recommendations agree with deterministic FIFO/expiry data.
+- [ ] Sales follow-up recommendations link to the relevant workspace.
+- [ ] Sales Executive AI refuses landed-cost/profit requests and does not reveal values.
 
 ## Reset Demo Data
 
@@ -138,4 +153,6 @@ Also say:
 
 > Demo changes are temporary because the current API is in-memory. Database, durable file storage and real authentication are the next production phase.
 
-Do not claim that AI, GPS, HR/payroll, fleet, invoice, full accounting, automatic customs calculation or persistent storage are active features.
+The floating AI and extraction are active **rule-backed mock capabilities** behind typed endpoints. Do not present them as a production language model, autonomous approver, or durable document-intelligence service.
+
+Do not claim that GPS, mobile visits, HR/payroll, fleet, invoice, full accounting, automatic customs calculation or persistent storage are active features.

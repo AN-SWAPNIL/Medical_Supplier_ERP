@@ -8,8 +8,10 @@ import type {
   Customer,
   CustomerOpeningBalance,
   Delivery,
+  DocumentRecord,
   Expense,
   ImportCase,
+  ImportDocument,
   Product,
   Quotation,
   SalesOrder,
@@ -33,7 +35,7 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000001",
     avatarUrl: "/mipro-owner.png",
     status: "Active",
-    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "manage_users", "approve_special_price"]
+    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price"]
   },
   {
     id: "u-md",
@@ -150,6 +152,41 @@ export const suppliers: Supplier[] = [
   { id: "sup-safe", name: "Qingdao SafeHand Medical", country: "China", contactPerson: "Mei Zhang", phone: "+86 532 4418 0930", email: "trade@safehand.cn", paymentTerms: "LC 60 days", active: true }
 ];
 
+function uploadedDocument(input: {
+  id: string;
+  entityType: DocumentRecord["entityType"];
+  entityId: string;
+  documentType: string;
+  fileName: string;
+  createdAt: string;
+  createdByUserId?: string;
+  createdByName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  sensitive?: boolean;
+}): DocumentRecord {
+  return {
+    id: input.id,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    documentType: input.documentType,
+    source: "UPLOADED",
+    fileName: input.fileName,
+    mimeType: input.mimeType ?? "application/pdf",
+    sizeBytes: input.sizeBytes ?? 183200,
+    previewUrl: `/api/documents/${input.id}/content`,
+    sensitive: input.sensitive ?? false,
+    createdByUserId: input.createdByUserId ?? "u-import",
+    createdByName: input.createdByName ?? "Tanvir Hasan",
+    createdAt: input.createdAt
+  };
+}
+
+function importDocument(input: { id: string; type: string; name: string; uploadedAt: string; sensitive?: boolean }): ImportDocument {
+  const common = uploadedDocument({ id: input.id, entityType: "import", entityId: "imp-77612", documentType: input.type, fileName: input.name, createdAt: input.uploadedAt, sensitive: input.sensitive });
+  return { ...common, importId: "imp-77612", type: input.type, name: input.name, uploadedAt: input.uploadedAt, uploadedBy: common.createdByName, status: "Available" };
+}
+
 const lcItems = [
   { id: "ii-77612-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "10500", unit: "pcs", currency: "USD", fobUnitForeign: "3.20", exchangeRate: "122.50", fobTotalBdt: "4116000.00", cbmPerCarton: "0.080", cartonCount: "210", totalCbm: "16.80", grossWeight: "4200", netWeight: "3885", hsCode: "9018.90" },
   { id: "ii-77612-2", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "10500", unit: "set", currency: "USD", fobUnitForeign: "0.78", exchangeRate: "122.50", fobTotalBdt: "1003275.00", cbmPerCarton: "0.107", cartonCount: "160", totalCbm: "17.12", grossWeight: "2950", netWeight: "2690", hsCode: "9018.90" },
@@ -160,7 +197,7 @@ export const imports: ImportCase[] = [
   {
     id: "imp-77612", draftReference: "IMP-2026-001", primaryReference: "LC-77612", supplierId: "sup-renhe", supplierName: "Guangzhou Renhe Medical Technology", poNumber: "PO-2026-001", poDate: "2026-05-18", piNumber: "PI-RH-26061", piDate: "2026-05-21", paymentMode: "LC", lcNumber: "LC-77612", bank: "City Bank PLC", currency: "USD", exchangeRate: "122.50", rateDate: "2026-06-02", rateSource: "Bank statement", expectedShipmentDate: "2026-07-18", blNumber: "CN-9982", containerNumber: "MSCU-7391024", containerType: "40 FT", vesselName: "COSCO Shipping Star", etd: "2026-07-20", eta: "2026-08-18", status: "Costing", milestone: "Costing", costingStatus: "In Progress", warehouseStatus: "Not Ready", notes: "Customs assessment received. Cost lines are being reconciled before warehouse receiving.", items: lcItems,
     costs: [
-      { id: "cost-frt", name: "China-Bangladesh Sea Freight", category: "Freight", amountForeign: "3000.00", currency: "USD", exchangeRate: "122.50", amountBdt: "367500.00", allocationMethod: "CBM", appliesToItemIds: [], vendor: "COSCO Shipping", paymentDate: "2026-07-18", notes: "Container freight allocated by product CBM.", attachmentName: "freight-invoice.pdf", enteredBy: "Sadia Karim", createdAt: "2026-08-19T09:00:00.000Z" },
+      { id: "cost-frt", name: "China-Bangladesh Sea Freight", category: "Freight", amountForeign: "3000.00", currency: "USD", exchangeRate: "122.50", amountBdt: "367500.00", allocationMethod: "CBM", appliesToItemIds: [], vendor: "COSCO Shipping", paymentDate: "2026-07-18", notes: "Container freight allocated by product CBM.", attachmentName: "freight-invoice.pdf", attachment: uploadedDocument({ id: "doc-cost-frt", entityType: "import-cost", entityId: "cost-frt", documentType: "Freight Invoice", fileName: "freight-invoice.pdf", createdAt: "2026-08-19T09:00:00.000Z", createdByUserId: "u-super", createdByName: "Sadia Karim", sensitive: true }), enteredBy: "Sadia Karim", createdAt: "2026-08-19T09:00:00.000Z" },
       { id: "cost-duty-d", name: "Customs Duty - Dialyzer", category: "Customs Duty", amountForeign: "525000.00", currency: "BDT", exchangeRate: "1", amountBdt: "525000.00", allocationMethod: "PRODUCT_SPECIFIC", appliesToItemIds: ["ii-77612-1"], vendor: "Bangladesh Customs", notes: "Final assessed amount entered manually.", enteredBy: "Sadia Karim", createdAt: "2026-08-19T09:15:00.000Z" },
       { id: "cost-duty-b", name: "Customs Duty - Blood Line", category: "Customs Duty", amountForeign: "410000.00", currency: "BDT", exchangeRate: "1", amountBdt: "410000.00", allocationMethod: "PRODUCT_SPECIFIC", appliesToItemIds: ["ii-77612-2"], vendor: "Bangladesh Customs", notes: "Final assessed amount entered manually.", enteredBy: "Sadia Karim", createdAt: "2026-08-19T09:20:00.000Z" },
       { id: "cost-duty-a", name: "Customs Duty - AV Fistula", category: "Customs Duty", amountForeign: "92000.00", currency: "BDT", exchangeRate: "1", amountBdt: "92000.00", allocationMethod: "PRODUCT_SPECIFIC", appliesToItemIds: ["ii-77612-3"], vendor: "Bangladesh Customs", notes: "Final assessed amount entered manually.", enteredBy: "Sadia Karim", createdAt: "2026-08-19T09:25:00.000Z" },
@@ -173,10 +210,10 @@ export const imports: ImportCase[] = [
       { id: "cost-labour", name: "Unloading Labour", category: "Labour", amountForeign: "18000.00", currency: "BDT", exchangeRate: "1", amountBdt: "18000.00", allocationMethod: "QUANTITY", appliesToItemIds: [], enteredBy: "Sadia Karim", createdAt: "2026-08-19T10:05:00.000Z" }
     ],
     documents: [
-      { id: "doc-pi", importId: "imp-77612", type: "PI", name: "PI-RH-26061.pdf", uploadedAt: "2026-05-21", uploadedBy: "Tanvir Hasan", status: "Available" },
-      { id: "doc-lc", importId: "imp-77612", type: "LC", name: "LC-77612-swift.pdf", uploadedAt: "2026-06-02", uploadedBy: "Tanvir Hasan", status: "Available" },
-      { id: "doc-bl", importId: "imp-77612", type: "Bill of Lading", name: "CN-9982.pdf", uploadedAt: "2026-07-21", uploadedBy: "Tanvir Hasan", status: "Available" },
-      { id: "doc-assess", importId: "imp-77612", type: "Customs Assessment", name: "customs-assessment-77612.pdf", uploadedAt: "2026-08-19", uploadedBy: "Sadia Karim", status: "Available" }
+      importDocument({ id: "doc-pi", type: "PI", name: "PI-RH-26061.pdf", uploadedAt: "2026-05-21" }),
+      importDocument({ id: "doc-lc", type: "LC", name: "LC-77612-swift.pdf", uploadedAt: "2026-06-02" }),
+      importDocument({ id: "doc-bl", type: "Bill of Lading", name: "CN-9982.pdf", uploadedAt: "2026-07-21" }),
+      importDocument({ id: "doc-assess", type: "Customs Assessment", name: "customs-assessment-77612.pdf", uploadedAt: "2026-08-19", sensitive: true })
     ], createdAt: "2026-05-18T08:00:00.000Z", updatedAt: "2026-08-19T10:05:00.000Z"
   },
   {
@@ -255,7 +292,7 @@ export const expenses: Expense[] = [
   { id: "exp-3", date: "2026-08-02", categoryId: "ec-4", categoryName: "Office Transport", subtype: "General", amount: "310.00", paidFromAccountId: "acc-cash", remarks: "Product delivery to Popular Hospital", status: "Posted" },
   { id: "exp-4", date: "2026-08-05", categoryId: "ec-5", categoryName: "TA", subtype: "TA/DA", amount: "2500.00", paidFromAccountId: "acc-bkash", employee: "Nihad Hasan", designation: "Sales Executive", taAmount: "1800.00", daAmount: "700.00", remarks: "Mymensingh customer visit", status: "Posted" },
   { id: "exp-5", date: "2026-08-10", categoryId: "ec-8", categoryName: "Rent", subtype: "General", amount: "45000.00", paidFromAccountId: "acc-city", remarks: "Office monthly rent", status: "Posted" },
-  { id: "exp-6", date: "2026-08-12", categoryId: "ec-9", categoryName: "Utilities", subtype: "General", amount: "12850.00", paidFromAccountId: "acc-city", remarks: "Office electricity and internet", status: "Posted" }
+  { id: "exp-6", date: "2026-08-12", categoryId: "ec-9", categoryName: "Utilities", subtype: "General", amount: "12850.00", paidFromAccountId: "acc-city", remarks: "Office electricity and internet", attachmentName: "office-utility-receipt.png", attachment: uploadedDocument({ id: "doc-exp-6", entityType: "expense", entityId: "exp-6", documentType: "Expense Receipt", fileName: "office-utility-receipt.png", mimeType: "image/png", sizeBytes: 1967263, createdAt: "2026-08-12", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan" }), status: "Posted" }
 ];
 
 export const accountTransactions: AccountTransaction[] = [

@@ -9,13 +9,15 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import FloatingAIAssistant from "../ai/FloatingAIAssistant";
 import Button from "../ui/Button";
 import Avatar from "../ui/Avatar";
 import Toasts from "../ui/Toasts";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { hasPermission, navSections } from "../../lib/permissions/matrix";
+import { useAIContextStore } from "../../lib/ai/context";
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -25,6 +27,12 @@ export default function AppLayout() {
   const logout = useAuthStore((state) => state.logout);
   const role = useEffectiveRole();
   const navigate = useNavigate();
+  const location = useLocation();
+  const setAIRoute = useAIContextStore((state) => state.setRoute);
+
+  useEffect(() => {
+    setAIRoute(location.pathname + location.search);
+  }, [location.pathname, location.search, setAIRoute]);
 
   const visibleItems = useMemo(
     () => navSections.flatMap((section) => section.items).filter((item) => item.roles.includes(role) && hasPermission(role, item.permission)),
@@ -161,6 +169,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <FloatingAIAssistant />
     </div>
   );
 }
