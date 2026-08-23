@@ -58,11 +58,11 @@ export default function LoginPage() {
         {formError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{formError}</div> : null}
         <label>
           <span className="mb-1 block text-sm font-semibold text-slate-700">Email</span>
-          <input className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" {...register("email")} />
+          <input className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" {...register("email")} />
         </label>
         <label>
           <span className="mb-1 block text-sm font-semibold text-slate-700">Password</span>
-          <input className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" type="password" {...register("password")} />
+          <input className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" type="password" {...register("password")} />
         </label>
         <Button variant="primary" type="submit" icon={<LogIn className="h-4 w-4" />}>
           Sign In
@@ -70,10 +70,10 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-5 flex flex-wrap justify-between gap-2 text-sm">
-        <Link className="font-semibold text-teal-700 hover:text-teal-800" to="/signup">
+        <Link className="font-semibold text-cyan-700 hover:text-cyan-800" to="/signup">
           Request access
         </Link>
-        <Link className="font-semibold text-teal-700 hover:text-teal-800" to="/forgot-password">
+        <Link className="font-semibold text-cyan-700 hover:text-cyan-800" to="/forgot-password">
           Forgot password?
         </Link>
       </div>
@@ -83,7 +83,7 @@ export default function LoginPage() {
         <div className="grid gap-2 sm:grid-cols-2">
           {(demoUsers.data ?? []).map((user) => (
             <button
-              className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50"
+              className="rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-cyan-300 hover:bg-cyan-50"
               key={user.email}
               type="button"
               onClick={() => {

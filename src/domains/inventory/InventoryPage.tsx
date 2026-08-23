@@ -12,15 +12,6 @@ import { formatCurrency, formatNumber } from "../../utils/format";
 
 type View = "stock" | "batches" | "movements";
 
-function expiryTone(date: string) {
-  const days = Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000);
-  if (days < 0) return "Expired";
-  if (days <= 30) return "1 Month Alert";
-  if (days <= 90) return "3 Month Alert";
-  if (days <= 180) return "6 Month Alert";
-  return "Normal";
-}
-
 export default function InventoryPage() {
   const [view, setView] = useState<View>("stock");
   const [search, setSearch] = useState("");
@@ -41,7 +32,7 @@ export default function InventoryPage() {
   if (error) return <ErrorBlock error={error} onRetry={() => { void stockQuery.refetch(); void batchQuery.refetch(); void movementQuery.refetch(); }} />;
 
   const totalUnits = stock.reduce((sum, row) => sum + Number(row.availableQuantity), 0);
-  const expiring = batches.filter((batch) => expiryTone(batch.expiryDate) !== "Normal").length;
+  const expiring = batches.filter((batch) => batch.expiryStatus !== "Normal").length;
   const hasValuation = stock.some((row) => row.inventoryValue !== undefined);
   const valuation = stock.reduce((sum, row) => sum + Number(row.inventoryValue ?? 0), 0);
 
@@ -77,7 +68,7 @@ export default function InventoryPage() {
               <article className="flex min-w-0 gap-3 rounded-md border border-slate-200 p-3" key={row.productId}>
                 <ProductThumb src={row.imageUrl} name={row.productName} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <span className="text-[10px] font-bold uppercase text-red-700">{row.productCode}</span>
+                  <span className="text-[10px] font-bold uppercase text-cyan-800">{row.productCode}</span>
                   <strong className="block truncate text-sm text-slate-950" title={row.productName}>{row.productName}</strong>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs"><span className="rounded bg-slate-50 p-2"><small className="block text-slate-400">Available</small><b>{formatNumber(row.availableQuantity)}</b></span><span className="rounded bg-slate-50 p-2"><small className="block text-slate-400">Sale price</small><b>{formatCurrency(row.standardSalePrice)}</b></span></div>
                   <p className="mt-2 truncate text-xs text-slate-500">FIFO lot: <strong className="text-slate-700">{row.oldestLot}</strong></p>
@@ -93,10 +84,10 @@ export default function InventoryPage() {
         <Panel title="Batch register" subtitle="Rows are ordered by received date so the FIFO sequence is immediately visible.">
           <TableFrame>
             <table className="min-w-[1120px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">FIFO</th><th className="px-4 py-3">Product</th><th className="px-4 py-3">Lot / Batch</th><th className="px-4 py-3">Import</th><th className="px-4 py-3">Received</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3">Location</th><th className="px-4 py-3 text-right">Available</th></tr></thead>
+              <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">FIFO</th><th className="px-4 py-3">Product</th><th className="px-4 py-3">Lot / Batch</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Received</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3">Location</th><th className="px-4 py-3 text-right">Available</th></tr></thead>
               <tbody className="divide-y divide-slate-100">{batches.map((batch, index) => {
-                const isOldest = !batches.slice(0, index).some((other) => other.productId === batch.productId && Number(other.quantityAvailable) > 0);
-                return <tr key={batch.id}><td className="px-4 py-3">{isOldest ? <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">Issue first</span> : <span className="text-xs text-slate-400">Later</span>}</td><td className="px-4 py-3"><strong className="block">{batch.productName}</strong><small className="text-slate-500">{batch.productCode}</small></td><td className="px-4 py-3"><strong>{batch.lotNumber}</strong><small className="block text-slate-500">{batch.batchNumber}</small></td><td className="px-4 py-3 text-slate-600">{batch.sourceReference}</td><td className="px-4 py-3 text-slate-600">{batch.receivedDate}</td><td className="px-4 py-3"><span className="block">{batch.expiryDate}</span><StatusBadge status={expiryTone(batch.expiryDate)} /></td><td className="px-4 py-3 text-slate-600">{batch.warehouse}<small className="block">{batch.location}</small></td><td className="px-4 py-3 text-right font-bold">{formatNumber(batch.quantityAvailable)}</td></tr>;
+                const isOldest = batch.expiryStatus !== "Expired" && !batches.slice(0, index).some((other) => other.productId === batch.productId && other.expiryStatus !== "Expired" && Number(other.quantityAvailable) > 0);
+                return <tr key={batch.id}><td className="px-4 py-3">{isOldest ? <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">Issue first</span> : <span className="text-xs text-slate-400">Later</span>}</td><td className="px-4 py-3"><strong className="block">{batch.productName}</strong><small className="text-slate-500">{batch.productCode}</small></td><td className="px-4 py-3"><strong>{batch.lotNumber}</strong><small className="block text-slate-500">{batch.batchNumber}</small></td><td className="px-4 py-3 text-slate-600">{batch.sourceReference}<small className="block text-cyan-700">{batch.sourceType ?? "Import Receipt"}</small></td><td className="px-4 py-3 text-slate-600">{batch.receivedDate}</td><td className="px-4 py-3"><span className="block">{batch.expiryDate}</span><StatusBadge status={batch.expiryStatus} /></td><td className="px-4 py-3 text-slate-600">{batch.warehouse}<small className="block">{batch.location}</small></td><td className="px-4 py-3 text-right font-bold">{formatNumber(batch.quantityAvailable)}</td></tr>;
               })}</tbody>
             </table>
           </TableFrame>

@@ -104,11 +104,14 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 1. Open **Imports**.
 2. Point to search and status filters.
 3. Point to draft references and LC/TT primary references.
-4. Open **LC-77612**.
+4. Open **New Import** briefly and show that only supplier, PO, product lines, optional target date and notes are required.
+5. Return to the register and open **LC-77612**.
 
 ### Say
 
 > Each row is one shipment or consignment, and it may contain several products. Before an LC exists the system generates an internal reference such as IMP-2026-001.
+
+> Work begins from PO before PI or LC. When the PI arrives it is added inside the same workspace; when the bank opens LC, that number becomes the visible reference.
 
 > When the LC is opened, LC-77612 becomes the main visible business reference. The internal record stays the same, so no data is copied into a second module.
 
@@ -123,15 +126,20 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 3. Show supplier, PO, PI, and three product variants with images.
 4. Point to each product's quantity, FOB, cartons, and CBM.
 5. Expand **LC / TT & Shipment**.
-6. Show bank, rate snapshot, BL, container, vessel, ETD, and ETA.
+6. Show LC amount/open/expiry, bank, rate snapshot, commercial invoice, follow-up, BL, container, vessel, ETD, and ETA.
+7. Point to the controlled next-milestone action and explain Cancel/Close without activating them.
 
 ### Say
 
 > The milestone shows where this consignment currently sits, from draft and PI through LC, production, shipment, port, costing and receiving.
 
+> Status is not a free dropdown. PI, LC, cost finalization and receipt derive their own states; production, shipment, port, cancellation and closure use controlled actions. Closed or cancelled records become read-only.
+
 > One record contains Dialyzer, Blood Line Sets and AV Fistula. Each has its own quantity, FOB value, cartons, CBM and assessed duty basis. That difference is essential because shared cost cannot be divided correctly with one simple quantity formula.
 
 > The exchange rate is stored as a historical transaction snapshot. A future market-rate change does not silently alter a finalized historical landed cost.
+
+> The browser gives an immediate preview, but the API recomputes FOB and CBM from quantity, rate and cartons with Decimal arithmetic. A user cannot submit a fake authoritative total.
 
 ---
 
@@ -140,7 +148,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 ### Show
 
 1. Expand **Documents**.
-2. Point to PI, LC, BL and customs assessment entries.
+2. Point to PI, LC/Swift, commercial invoice, packing list, certificate, BL and customs evidence types.
 3. Click the upload icon and briefly show the metadata form, then close it.
 
 ### Say
@@ -166,7 +174,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 > Sea freight can use CBM. A shared bank charge can use FOB value. Handling can use quantity. Final customs duty is entered against the assessed product. An exceptional documented case can use a manual split.
 
-> Common and local transport costs still require an explicit choice on every row because the client has not confirmed permanent defaults.
+> Local covered-van transport now defaults to CBM because the latest meeting confirmed volume-based treatment. Common bank, insurance and C&F costs still require an explicit method because their permanent default is not confirmed.
 
 > The system stores foreign amount, currency, exchange-rate snapshot, BDT amount, scope, vendor, payment information, notes and attachment metadata. Office rent, salaries, utilities and TA/DA never belong here.
 
@@ -192,7 +200,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 > Customs duty itself is not guessed by the software. The user enters the final official assessed amount per product.
 
-> Finalize creates an immutable landed-cost snapshot. Warehouse receipts inherit this cost. Reopening requires an owner capability, a reason, and an audit entry; it never rewrites history invisibly.
+> Finalize creates an immutable landed-cost snapshot. Before receiving, the owner can reopen with capability and a reason while the previous snapshot remains in history. After the first warehouse receipt, ordinary reopen is blocked so inherited stock valuation cannot contradict the import record.
 
 ---
 
@@ -222,7 +230,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 1. Open **Inventory**.
 2. Show Stock cards with product image, canonical code, available quantity, FIFO lot and nearest expiry.
 3. Open **Batches**.
-4. Point to Issue First, receipt date, lot, batch, expiry and location.
+4. Point to Import Receipt versus Opening Stock source, Issue First, receipt date, lot, batch, expiry and location.
 5. Open **Movements**.
 
 ### Say
@@ -230,6 +238,8 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 > Inventory is the bridge between imports and sales. Product names are canonical variants so spelling differences from old worksheets do not create duplicate stock.
 
 > Dispatch uses FIFO: the oldest eligible matching receipt is recommended first. Expiry is still visible and alertable. Choosing a newer lot while an older lot has stock creates a warning. A capable user needs a written reason to override it, and that action is audited.
+
+> One order line can consume several lots. If the oldest lot has 30 pieces and the next has 30, a 60-piece request returns two allocation rows. Expired stock is visible for control but is never recommended.
 
 ---
 
@@ -240,11 +250,15 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 1. Open **Sales**.
 2. Stay on **Customers**.
 3. Point to customer type, territory, contact, sales, collected, due and progress.
-4. Open **New Customer**, then close it.
+4. Use **Open detailed ledger** for one customer.
+5. Point to the opening due, delivered sales, collections and running balance.
+6. Open **New Customer**, then close it.
 
 ### Say
 
 > The old customer-specific spreadsheet tabs are normalized into one customer table and one transaction ledger. Search and reports no longer depend on opening a different sheet for each hospital, clinic, dealer or pharmacy.
+
+> Legacy sales and collections can be reconciled as one opening balance at cutover. New deliveries and collections continue the same running due without creating another customer worksheet.
 
 ---
 
@@ -255,14 +269,17 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 1. Open **Quotations & Orders**.
 2. Click **New Quotation**.
 3. Select a customer and product.
-4. Point to quantity, historical selling price and total.
-5. Save if desired.
-6. Show the quotation print icon.
-7. Show the Convert action on an accepted quotation.
+4. Point to quantity, price, discount and total.
+5. As Super Admin, run the owner profit preview and show FIFO expected cost, profit per unit, margin, and loss warning behavior.
+6. Save if desired.
+7. Open the quotation print icon; show supplied MIPRO digital letterhead, preprinted-paper mode and the LED TRACKERS identity selector.
+8. Show the Convert action on an accepted quotation and the Order Receiving Sheet print.
 
 ### Say
 
 > Sales selects a customer and canonical product, creates the quotation and prints either a digital-letterhead or preprinted-letterhead version from the same record.
+
+> Only an authorized owner receives the expected FIFO landed cost and profit/loss preview. A Sales Executive can propose the sale but cannot see confidential cost.
 
 > When accepted, Convert creates the order with the same line items. No one retypes product, quantity or price. Invoice is not forced into the flow because that requirement is still awaiting client confirmation.
 
@@ -275,15 +292,16 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 1. Open **Deliveries**.
 2. Click **New Delivery** if available.
 3. Choose an undelivered order.
-4. Point to the recommended batch and expiry.
-5. Select a newer lot temporarily to show the FIFO warning, then return to the recommended lot.
-6. Point to receiver and challan print.
+4. Point to the automatic oldest-first allocation plan and each expiry.
+5. Explain how the plan splits a quantity across batches when one lot is insufficient.
+6. Select a newer preferred lot temporarily to show the FIFO warning, then return to Auto FIFO.
+7. Point to receiver and challan print.
 
 ### Say
 
-> A delivery selects the actual physical batch. The API validates available quantity and the FIFO recommendation before posting.
+> A delivery requests a quantity; the API returns the actual physical batch plan. It validates non-expired available stock and can produce several delivery lines for one ordered product.
 
-> Posting the challan creates a stock-out movement, reduces the chosen batch, updates the order status and records the amount as customer due.
+> Posting the challan creates stock-out movements, reduces every allocated batch, updates the order status and records the delivered amount as customer due.
 
 ---
 
@@ -292,7 +310,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 ### Show
 
 1. Open **Collections**.
-2. Click **Record Collection**.
+2. Click **Post Collection**.
 3. Select customer, related order, amount, payment method and account.
 4. Point to Cash, bKash/mobile banking, bank transfer and cheque options.
 5. Show an existing money-receipt print.
@@ -301,7 +319,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 > A collection can be full or partial. Posting reduces both the customer due and related order due, then adds a credit to the selected cash or bank account.
 
-> The money receipt comes from the same collection record. Outstanding credit simply remains visible as due.
+> A real active destination account is mandatory, and non-cash modes require their bank, mobile or cheque reference. Credit is not a collection mode; an unpaid amount simply remains visible as due. The money receipt comes from the same posted collection.
 
 ---
 
@@ -315,6 +333,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 4. Point to category, general or TA/DA subtype, account, amount, remarks and attachment.
 5. Show cash/bank accounts and transaction ledger.
 6. Point to a reversal action.
+7. Mention the Daily Expenditure and monthly category report, then show the TA/DA Approved Sheet under Reports.
 
 ### Say
 
@@ -331,14 +350,16 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 ### Show
 
 1. Open **Reports**.
-2. Move across Import & Cost, Inventory, Sales & Collection, Expense & Cash/Bank.
-3. Point to the chart and CSV/print commands.
-4. Open the narrow Audit view.
-5. Open one print preview in another tab if convenient.
+2. Change From/To dates and point to the Applied Scope line.
+3. Move across Import & Cost, Inventory, Sales & Collection, Expense & Cash/Bank.
+4. Open actual detail tables such as landed cost history, expiry, sales by product, running ledger and daily expenditure.
+5. Point to owner-only realized gross profit, actual-row CSV export and print.
+6. Filter TA/DA by employee and show the printable Approved Sheet.
+7. Open the narrow Audit view.
 
 ### Say
 
-> Reports use the same operational records; they are not manually maintained copies. Users see only the report groups and sensitive values their role permits.
+> Reports use the same operational records and API-applied date range; they are not manually maintained copies. CSV exports the visible filtered rows. Users see only the groups and sensitive values their role permits.
 
 > The narrow audit focuses on important risk: cost finalization or reopening, receiving, FIFO override, stock dispatch, collection, expense reversal and permission changes.
 
@@ -350,15 +371,16 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 1. Open **Settings**.
 2. Show **Client Confirmation Queue**.
-3. Point to each pending decision and its currently disabled behavior.
-4. Open Users & Capabilities, Products, Suppliers and Business Setup.
-5. Point to user image, fixed role, capabilities, product images, accounts, warehouse and print identity.
+3. Point to a confirmed answer with source/value and a pending decision with disabled behavior.
+4. Open Users & Capabilities, Products & Aliases, Suppliers and Business Setup.
+5. Open Data Migration and show Opening Batch plus Customer Balance forms.
+6. Point to user image, fixed role, capabilities, product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
 
 ### Say
 
-> Settings is owner-only. It manages users and capabilities, products, suppliers, accounts, warehouse, expense categories, cost presets and print identity.
+> Settings is owner-only. It manages users and capabilities, canonical products and legacy aliases, suppliers, accounts, warehouse, expense categories, cost presets, actual stationery identities and opening-data migration.
 
-> The confirmation queue is deliberate. Questions such as invoice requirement, accounting depth, warehouse count, sales tax and finalization authority are visible rather than silently hard-coded.
+> Confirmed decisions retain the actual answer, notes, source, user and time. Local transport CBM and FIFO are confirmed. Invoice requirement, common-cost default, accounting depth, warehouse count, sales tax and finalization authority remain visible rather than silently hard-coded.
 
 ---
 
@@ -385,7 +407,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ### Say
 
-> This release completes the latest simplified frontend scope: one multi-product import workspace, deterministic landed cost, finalized receiving, FIFO batch stock, quotation through collection, operational expenses, reports, settings, role access and print views.
+> This release completes the latest audited frontend scope: PO-first imports with controlled milestones, authoritative landed cost, protected receiving history, opening and imported batch stock, multi-batch FIFO, quotation profit preview through collection, operational expenses, detailed reports, migration/settings, role access and supplied-stationery print views.
 
 > Every screen uses typed API services and validated responses, so a persistent backend can replace the in-memory Express demo without rebuilding the frontend workflow.
 
@@ -416,7 +438,7 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - Do not say the prototype is a production database.
 - Do not claim AI, GPS, HR, payroll, fleet, invoice, full accounting or automatic customs calculation.
 - If a table is wide on mobile, demonstrate its intentional horizontal scroll area.
-- If product images do not appear, verify `/medical-products.png` is deployed.
+- If product images do not appear, verify the individual files under `/public/products/` are deployed.
 - If an API request fails locally, confirm both ports are running and `/api/health` succeeds.
 
 ---
@@ -427,18 +449,25 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - [ ] Role cannot be changed after login.
 - [ ] Exactly seven possible main destinations are explained.
 - [ ] Dashboard has no more than six KPIs.
+- [ ] PO-first draft creation and later PI/LC progression are explained.
+- [ ] Status is action-derived; Cancel/Close are controlled terminal actions.
 - [ ] LC-77612 shows several products.
 - [ ] All five allocation methods are mentioned.
 - [ ] Allocation explanation and exact reconciliation are shown.
 - [ ] Customs formulas are explicitly not automated.
 - [ ] Finalization and receiving connection is explained.
-- [ ] FIFO and expiry awareness are both explained.
+- [ ] Post-receipt landed-cost reopening is explicitly blocked.
+- [ ] Opening stock, multi-batch FIFO and expired-stock exclusion are explained.
+- [ ] Owner-only quotation profit/loss preview is shown.
 - [ ] Quotation lines carry into order.
-- [ ] Delivery reduces an actual batch.
+- [ ] Delivery can reduce several FIFO-allocated batches.
 - [ ] Collection reduces due and updates an account.
+- [ ] Customer running ledger is opened.
 - [ ] Operating expenses remain separate from landed cost.
+- [ ] Date-filtered report tables, actual CSV and TA/DA sheet are shown.
+- [ ] MIPRO digital, preprinted and Order Receiving Sheet views are shown.
 - [ ] Settings confirmation queue is shown.
+- [ ] Opening stock/customer balance migration and product aliases are shown.
 - [ ] Sales Executive access denial is demonstrated.
 - [ ] Temporary mock persistence is stated honestly.
 - [ ] Backend-ready API boundary is explained in plain language.
-

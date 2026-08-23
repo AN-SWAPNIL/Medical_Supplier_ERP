@@ -46,6 +46,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
+@page {
+  size: A4;
+  margin: 0;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -61,7 +66,9 @@ button:disabled {
 }
 
 @media print {
+  html,
   body {
+    width: 210mm;
     background: #ffffff !important;
   }
 
@@ -74,12 +81,37 @@ button:disabled {
   }
 
   main {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
     padding: 0 !important;
   }
 
+  .print-preview {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
   .print-sheet {
+    width: 210mm !important;
+    min-height: 297mm !important;
     border: 0 !important;
     box-shadow: none !important;
     page-break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  main:has(> .print-report-sheet) > :not(.print-report-sheet) {
+    display: none !important;
+  }
+
+  .print-report-sheet {
+    display: block !important;
+    width: 210mm;
+    min-height: 297mm;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

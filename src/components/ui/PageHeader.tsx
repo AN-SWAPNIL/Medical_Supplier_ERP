@@ -9,9 +9,9 @@ type PageHeaderProps = {
 
 export default function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between">
       <div>
-        {eyebrow ? <span className="text-xs font-bold uppercase tracking-wide text-teal-700">{eyebrow}</span> : null}
+        {eyebrow ? <span className="text-xs font-bold uppercase tracking-wide text-cyan-700">{eyebrow}</span> : null}
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{title}</h1>
         {subtitle ? <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">{subtitle}</p> : null}
       </div>

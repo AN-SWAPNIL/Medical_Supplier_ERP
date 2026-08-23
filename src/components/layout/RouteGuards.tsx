@@ -32,8 +32,8 @@ export function AccessDenied({ permission }: { permission?: PermissionKey }) {
   const role = useEffectiveRole();
 
   return (
-    <div className="mx-auto mt-12 max-w-2xl rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-rose-50 text-rose-700">
+    <div className="mx-auto mt-12 max-w-2xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-rose-50 text-rose-700">
         <LockKeyhole className="h-7 w-7" />
       </div>
       <h1 className="mt-5 text-2xl font-bold text-slate-950">Access denied</h1>
