@@ -1,12 +1,12 @@
-import { ArrowRight, Bot, Boxes, FileText, ShieldCheck, Truck } from "lucide-react";
+import { ArrowRight, Boxes, Calculator, FileText, ShieldCheck, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 
 const modules = [
-  ["Procurement", "Supplier inquiry, PI, PO, LC/TT and supplier performance.", FileText],
-  ["Shipment & Customs", "BL, container, vessel, ETA, documents and landed cost.", Truck],
-  ["Warehouse", "GRN, BIN, batch, LOT, expiry and FEFO stock issue.", Boxes],
-  ["AI Agents", "Document extraction, risk alerts and executive summaries.", Bot]
+  ["Connected Imports", "PI, PO, LC/TT, shipment, documents, costing and receipt in one case.", FileText],
+  ["Shipment Control", "BL, container, vessel, ETA and final customs assessment records.", Truck],
+  ["FIFO Inventory", "Warehouse receipt, batch, LOT, location, expiry and FIFO dispatch.", Boxes],
+  ["Landed Cost", "CBM, FOB, quantity, product-specific and manual allocation.", Calculator]
 ];
 
 export default function LandingPage() {
@@ -39,7 +39,7 @@ export default function LandingPage() {
         <section className="relative overflow-hidden bg-slate-950 px-4 py-20 text-white">
           <img
             className="absolute inset-0 h-full w-full object-cover opacity-28"
-            src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1800&q=80"
+            src="/mipro-warehouse.png"
             alt="Medical warehouse"
           />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/90 to-teal-950/75" />
@@ -47,11 +47,11 @@ export default function LandingPage() {
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-teal-300">Frontend ERP Prototype</p>
               <h1 className="mt-5 max-w-4xl text-4xl font-bold leading-tight sm:text-6xl">
-                Complete medical import, warehouse, sales, accounts and AI control surface.
+                Medical import, inventory, sales and operational accounts in one connected system.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
                 Built for Mipro HealthCare-style operations: China procurement, customs clearance, landed cost, batch traceability,
-                hospital sales, collection and management reporting.
+                hospital sales, collection, operating expenditure and management reporting.
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur">

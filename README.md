@@ -1,139 +1,201 @@
-﻿# Mipro Medical Import & Distribution ERP
+# MIPRO Medical Supplier ERP
 
-A production-grade frontend prototype for a Bangladeshi medical device importer/distributor. The app is built with React, Vite, TypeScript, Tailwind CSS, React Router, TanStack Query, Zustand, React Hook Form, Zod, Recharts, Lucide icons, and an Express mock backend.
+A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. The latest simplified plan is the source of truth.
 
-The prototype covers the complete business flow from supplier inquiry to accounts closing:
+## Current Scope
 
-Supplier Inquiry -> PI -> PO -> LC/TT -> Shipment -> Customs/Landed Cost -> GRN -> Inventory -> Quotation -> Sales Order -> Challan -> Invoice -> Collection -> Accounts -> Reports.
+The application connects:
 
-It also includes the refined mobile-sales frontend scope: GPS visit logs, a no-key OpenStreetMap route tracking view, offline queue mock, order entry, collection entry, manager sync, and role-safe AI answers.
+```text
+Import case -> landed-cost snapshot -> warehouse batch stock
+-> quotation -> order -> delivery -> collection
+```
 
-## Run
+Operating expenses and cash/bank transactions are tracked separately. The active application has a maximum of seven areas:
+
+`Dashboard`, `Imports`, `Inventory`, `Sales`, `Expenses & Accounts`, `Reports`, `Settings`.
+
+AI, GPS, mobile field sales, HR/payroll, fleet and full accounting are intentionally deferred by the latest requirement.
+
+## Stack
+
+- React, Vite and TypeScript
+- Tailwind CSS
+- React Router
+- TanStack Query for server state
+- Zustand for authenticated session/UI state
+- React Hook Form and Zod
+- Decimal.js for financial allocation
+- Recharts for report visualization
+- Express mock API
+- Playwright browser smoke tests
+
+## Run Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-This starts:
+The normal local URLs are:
 
 - Frontend: `http://localhost:5173`
-- Mock API: `http://localhost:4174`
+- API: `http://localhost:4174`
+- Health check: `http://localhost:5173/api/health`
 
-Useful scripts:
+Vite may choose the next frontend port when 5173 is occupied; use the URL printed in the terminal.
 
-```bash
-npm run dev:web
-npm run dev:api
-npm run dev:server
-npm run server
-npm run lint
-npm run build
-npm run smoke
+## Demo Login
+
+All active users use `password123`.
+
+| Role | Email |
+|---|---|
+| Super Admin | `superadmin@mipro.local` |
+| Managing Director | `md@mipro.local` |
+| Accounts | `accounts@mipro.local` |
+| Import Officer | `import@mipro.local` |
+| Warehouse Manager | `warehouse@mipro.local` |
+| Sales Manager | `salesmanager@mipro.local` |
+| Sales Executive | `sales1@mipro.local` |
+
+Roles are selected only at login for demonstration. There is no role switch inside the application.
+
+## Important Routes
+
+```text
+/
+/login
+/app/dashboard
+/app/imports
+/app/imports/new
+/app/imports/:importId
+/app/inventory
+/app/sales
+/app/accounts
+/app/reports
+/app/settings
+/app/profile
+/app/print/:documentType/:id
 ```
 
-## Demo Users
-
-All passwords are `password123`.
-
-| Email | Role |
-| --- | --- |
-| `superadmin@mipro.local` | Super Admin |
-| `md@mipro.local` | Managing Director |
-| `accounts@mipro.local` | Accounts |
-| `import@mipro.local` | Import Officer |
-| `warehouse@mipro.local` | Warehouse Manager |
-| `salesmanager@mipro.local` | Sales Manager |
-| `sales1@mipro.local` | Sales Executive |
-| `sales2@mipro.local` | Sales Executive |
+Relevant older module URLs redirect into the new workspaces.
 
 ## Architecture
 
-- `src/components` contains reusable layout, table, form, report, print, AI, and UI primitives.
-- `src/features` contains feature pages for auth, dashboard, modules, reports, AI agents, audit/security, settings, users, and print previews.
-- `src/lib/api` contains the backend-ready API client.
-- `src/lib/auth` contains localStorage-backed mock session state using Zustand.
-- `src/lib/permissions` contains the central RBAC matrix and navigation model.
-- `src/data/seed.ts` contains mock seed data used by the Express backend only.
-- `server/index.ts` exposes REST endpoints with `{ success, message, data, meta }` responses.
+```text
+src/domains/
+  imports/       one case workspace and deterministic costing
+  inventory/     stock, batch and movement views
+  sales/         customer, quote/order, delivery and collection
+  accounts/      expenses, accounts, transactions and dues
+  reports/       grouped operational reports
+  settings/      users, capabilities and master/setup records
+  print/         business document previews
+  erp.types.ts   shared DTO contracts
+  schemas.ts     Zod API response schemas
+  services.ts    typed domain service boundary
 
-## RBAC
-
-The permission matrix controls:
-
-- Sidebar visibility
-- Route protection
-- Create/edit/delete/approve/post/export buttons
-- Sales Executive data scoping
-- Super Admin-only view-as-role demo mode
-
-Sales Executives only see their own customers, quotations, orders, challans, invoices, visits, targets, and collections.
-
-## Mock API
-
-Core endpoints include:
-
-- `POST /api/auth/login`
-- `POST /api/auth/signup-request`
-- `GET /api/me`
-- `GET /api/dashboard`
-- `GET /api/products`
-- `GET /api/customers`
-- `GET /api/purchase-orders`
-- `GET /api/shipments`
-- `GET /api/customs/landed-cost`
-- `GET /api/grn`
-- `GET /api/inventory/stock`
-- `GET /api/sales/invoices`
-- `GET /api/accounts/vouchers`
-- `GET /api/reports/summary`
-- `GET /api/ai/recommendations`
-- `GET /api/audit-logs`
-
-Most collections support list/detail/create/update/delete and action routes such as approve, reject, post, and cancel.
-
-## Future Integration Points
-
-- Replace Express endpoints with Supabase tables, auth, storage, and edge functions.
-- Replace mock AI recommendation endpoints with LangChain/LangGraph services.
-- Move localStorage session handling to Supabase auth session management.
-- Connect print/export actions to real PDF generation.
-
-## Deploy To Vercel
-
-The repo includes `vercel.json` plus serverless API entrypoints under `api/`.
-
-Recommended Vercel settings:
-
-- Framework Preset: `Vite`
-- Build Command: `npm run build`
-- Output Directory: `dist`
-- Install Command: `npm install`
-- Environment Variables: none required for same-project mock API
-
-Do not set `VITE_API_BASE_URL` on Vercel for this prototype. The frontend should call relative `/api/*` routes in the same Vercel project. If `VITE_API_BASE_URL` is set to `http://localhost:4174`, deployed browsers will fail because `localhost` means the visitor's computer, not the Vercel function.
-
-The frontend calls relative `/api/*` routes by default. On Vercel those routes are handled by `api/[...path].ts`, which imports the Express mock app.
-
-CLI deploy:
-
-```bash
-npm i -g vercel
-vercel login
-vercel
-vercel --prod
+server/
+  index.ts       explicit Express domain endpoints and rules
+  data.ts        normalized client-like in-memory fixtures
 ```
 
-After pushing to GitHub, the easiest path is Vercel Dashboard -> Add New Project -> Import Git Repository -> select this repo -> keep the Vite settings above -> Deploy. Test `/login`, `/app/dashboard`, `/app/sales/mobile-control`, `/api/health`, and `/api/v1/dashboard/summary` after the deployment finishes.
+Components do not import fixtures. Every screen reads and writes through a domain service and TanStack Query. Responses are validated with Zod before reaching page components.
 
-## Verification
+## Landed-Cost Rules
 
-The current prototype passes:
+One `ImportCase` represents one shipment/consignment with one or more `ImportItem` rows. A generated `IMP-YYYY-NNN` reference exists before LC opening. LC or TT becomes the primary visible reference later without recreating the record.
+
+Cost rows support:
+
+- CBM
+- FOB value
+- Quantity
+- Product-specific
+- Manual split
+
+Decimal-string values and Decimal.js avoid authoritative floating-point money calculations. Final BDT allocation rounds to two decimals and uses deterministic largest-fractional-remainder distribution. Finalization stores an immutable snapshot.
+
+Customs duty is entered as the final assessed amount per product. The application does not calculate duty, VAT, AIT or HS-code formulas.
+
+## Inventory And Sales Rules
+
+- Receiving is available only after landed-cost finalization.
+- Receipt cost is inherited server-side from the snapshot.
+- Lot, batch, manufacturing date, expiry and location are required.
+- FIFO recommends the oldest eligible receipt while expiry remains visible.
+- A newer-lot override requires capability, reason and audit.
+- Quotation lines carry into the order without re-entry.
+- Delivery posts stock-out from the selected batch and creates customer due.
+- Collection reduces customer/order due and credits the selected account.
+- Operating expenses never affect landed cost.
+
+## Commands
 
 ```bash
 npm run lint
+npm run typecheck:api
+npm test
+npm run test:flows
 npm run build
 npm run smoke
 ```
 
-Smoke tests capture desktop/mobile screenshots under `artifacts/` and verify Sales Executive scoping plus account access denial.
+`npm run test:flows` needs the local API running on port 4174. Override with `API_TEST_BASE_URL` when necessary.
+
+`npm run smoke` needs the frontend and API running. Override the frontend origin with:
+
+```powershell
+$env:SMOKE_BASE_URL = "http://localhost:5174"
+npm run smoke
+```
+
+Screenshots are written to `artifacts/`.
+
+## Vercel Deployment
+
+This repository is configured as one Vercel project:
+
+- Vite builds the frontend into `dist`.
+- `api/index.ts` exposes Express as a Vercel function.
+- `vercel.json` rewrites same-origin `/api/*` requests to that function.
+- SPA routes rewrite to `index.html`.
+
+Recommended project settings:
+
+```text
+Framework Preset: Vite
+Build Command: npm run build
+Output Directory: dist
+Install Command: npm install
+Node.js: current supported LTS
+```
+
+For this same-project deployment, do **not** set `VITE_API_BASE_URL`. The browser should call relative `/api/*` paths on the deployed domain. Only set that variable when the backend is deployed on a separate origin.
+
+After pushing to the connected GitHub branch, Vercel deploys automatically. Verify:
+
+```text
+https://YOUR-PROJECT.vercel.app/api/health
+https://YOUR-PROJECT.vercel.app/login
+```
+
+The health endpoint should return `mipro-simplified-erp-api`.
+
+## Prototype Persistence
+
+The mock API is functional but in-memory:
+
+- edits work while the process remains alive;
+- API restart/redeployment resets fixtures;
+- Vercel instances may not share memory;
+- uploads store metadata, not durable file content.
+
+The backend phase should replace this with persistent authentication, Postgres/Supabase, storage, row-level security, durable audit and transactional business operations.
+
+## Presentation Material
+
+- `PRESENTATION.md`: complete business/data/API explanation
+- `VIDEO_PRESENTATION_SCRIPT.md`: timed visual walkthrough
+- `DEMO_INSTRUCTIONS.md`: practical UAT and live-demo checklist

@@ -1,24 +1,24 @@
-export function formatCurrency(value: number, compact = false) {
+export function formatCurrency(value: number | string, compact = false) {
   return new Intl.NumberFormat("en-BD", {
     style: "currency",
     currency: "BDT",
     maximumFractionDigits: 0,
     notation: compact ? "compact" : "standard"
-  }).format(value);
+  }).format(Number(value));
 }
 
-export function formatUsd(value: number) {
+export function formatUsd(value: number | string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0
-  }).format(value);
+  }).format(Number(value));
 }
 
-export function formatNumber(value: number) {
+export function formatNumber(value: number | string) {
   return new Intl.NumberFormat("en-BD", {
     maximumFractionDigits: 0
-  }).format(value);
+  }).format(Number(value));
 }
 
 export function formatDate(value: string) {

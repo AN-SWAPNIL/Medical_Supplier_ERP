@@ -14,7 +14,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
         <section className="relative hidden overflow-hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <img
             className="absolute inset-0 h-full w-full object-cover opacity-32"
-            src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1800&q=80"
+            src="/mipro-warehouse.png"
             alt="Medical distribution warehouse"
           />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900/92 to-teal-950/78" />
@@ -29,7 +29,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
               </div>
             </div>
             <h1 className="mt-20 max-w-3xl text-5xl font-bold leading-tight">
-              Connected import, warehouse, sales, accounts, reporting and AI-assisted control.
+              Connected import cases, FIFO inventory, sales, collections and operational accounts.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
               Built for Bangladeshi medical suppliers managing China procurement, customs, landed cost, batch traceability,

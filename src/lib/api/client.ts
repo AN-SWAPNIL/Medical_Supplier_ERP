@@ -1,8 +1,17 @@
-import type { AiChatResponse, AiRecommendation, ApiResponse, DashboardSummary, EntityRecord, Role, Session } from "../../types";
-import { COMPANY_SCOPE_KEY } from "../company/scope";
+import type { ApiResponse, Role, Session } from "../../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const SESSION_KEY = "mipro-erp-session";
+
+type SignupRequest = {
+  id: string;
+  name: string;
+  email: string;
+  requestedRole: Role;
+  phone: string;
+  company: string;
+  status: "Pending";
+};
 
 function sessionHeaders(): Record<string, string> {
   const raw = window.localStorage.getItem(SESSION_KEY);
@@ -15,8 +24,7 @@ function sessionHeaders(): Record<string, string> {
     return {
       Authorization: `Bearer ${session.token}`,
       "x-user-id": session.user.id,
-      "x-role": session.user.role,
-      "x-company-id": window.localStorage.getItem(COMPANY_SCOPE_KEY) ?? "cmp-001"
+      "x-role": session.user.role
     };
   } catch {
     return {};
@@ -56,8 +64,8 @@ export const apiClient = {
   async demoUsers() {
     return request<Pick<Session["user"], "email" | "name" | "role" | "title">[]>("/api/auth/demo-users");
   },
-  async signupRequest(payload: EntityRecord) {
-    return request<EntityRecord>("/api/auth/signup-request", {
+  async signupRequest(payload: SignupRequest) {
+    return request<SignupRequest>("/api/auth/signup-request", {
       method: "POST",
       body: JSON.stringify(payload)
     });
@@ -76,60 +84,6 @@ export const apiClient = {
   },
   async me() {
     return request<Session>("/api/me");
-  },
-  async getDashboard() {
-    return request<DashboardSummary>("/api/dashboard");
-  },
-  async list(endpoint: string) {
-    return request<EntityRecord[]>(endpoint);
-  },
-  async detail(endpoint: string, id: string) {
-    return request<EntityRecord>(`${endpoint}/${id}`);
-  },
-  async create(endpoint: string, payload: EntityRecord) {
-    return request<EntityRecord>(endpoint, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  },
-  async update(endpoint: string, id: string, payload: EntityRecord) {
-    return request<EntityRecord>(`${endpoint}/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload)
-    });
-  },
-  async remove(endpoint: string, id: string) {
-    return request<{ id: string }>(`${endpoint}/${id}`, {
-      method: "DELETE"
-    });
-  },
-  async action(endpoint: string, id: string, action: "submit" | "approve" | "reject" | "post" | "cancel") {
-    return request<EntityRecord>(`${endpoint}/${id}/${action}`, {
-      method: "POST"
-    });
-  },
-  async reports() {
-    return request<EntityRecord[]>("/api/reports/summary");
-  },
-  async aiRecommendations() {
-    return request<AiRecommendation[]>("/api/ai/recommendations");
-  },
-  async aiAction(id: string, action: "approve" | "reject") {
-    return request<AiRecommendation>(`/api/ai/recommendations/${id}/${action}`, {
-      method: "POST"
-    });
-  },
-  async aiChat(message: string, role: Role) {
-    return request<AiChatResponse>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify({ message, role })
-    });
-  },
-  async landedCostPreview(payload: EntityRecord) {
-    return request<EntityRecord>("/api/v1/customs/landed-cost-preview", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
   }
 };
 

@@ -1,0 +1,208 @@
+import { Plus, Save, Trash2, Truck } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import Button from "../../components/ui/Button";
+import type {
+  CashBankAccount,
+  Collection,
+  Customer,
+  Delivery,
+  Product,
+  Quotation,
+  SalesLine,
+  SalesOrder,
+  StockBatch
+} from "../erp.types";
+import { inputClass, labelClass, textareaClass } from "../components";
+import { inventoryService } from "../services";
+import { formatCurrency, formatNumber } from "../../utils/format";
+
+export function CustomerForm({ customer, busy, onSubmit }: { customer?: Customer; busy: boolean; onSubmit: (payload: Partial<Customer>) => void }) {
+  const [form, setForm] = useState({
+    name: customer?.name ?? "",
+    type: customer?.type ?? "Hospital",
+    contactPerson: customer?.contactPerson ?? "",
+    phone: customer?.phone ?? "",
+    address: customer?.address ?? "",
+    territory: customer?.territory ?? "Dhaka North",
+    paymentTerms: customer?.paymentTerms ?? "30 days",
+    creditLimit: customer?.creditLimit ?? "0.00",
+    active: customer?.active ?? true
+  });
+  const change = (key: keyof typeof form, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  return (
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form as Partial<Customer>); }}>
+      <label className="sm:col-span-2"><span className={labelClass}>Customer / Organization</span><input className={inputClass} required value={form.name} onChange={(event) => change("name", event.target.value)} /></label>
+      <label><span className={labelClass}>Customer Type</span><select className={inputClass} value={form.type} onChange={(event) => change("type", event.target.value)}>{["Hospital", "Clinic", "Dealer", "Pharmacy", "Other"].map((value) => <option key={value}>{value}</option>)}</select></label>
+      <label><span className={labelClass}>Contact Person</span><input className={inputClass} required value={form.contactPerson} onChange={(event) => change("contactPerson", event.target.value)} /></label>
+      <label><span className={labelClass}>Phone</span><input className={inputClass} required value={form.phone} onChange={(event) => change("phone", event.target.value)} /></label>
+      <label><span className={labelClass}>Territory</span><input className={inputClass} required value={form.territory} onChange={(event) => change("territory", event.target.value)} /></label>
+      <label><span className={labelClass}>Payment Terms</span><input className={inputClass} required value={form.paymentTerms} onChange={(event) => change("paymentTerms", event.target.value)} /></label>
+      <label><span className={labelClass}>Credit Limit</span><input className={inputClass} type="number" min="0" step="0.01" required value={form.creditLimit} onChange={(event) => change("creditLimit", event.target.value)} /></label>
+      <label className="sm:col-span-2"><span className={labelClass}>Address</span><textarea className={textareaClass} required value={form.address} onChange={(event) => change("address", event.target.value)} /></label>
+      {customer ? <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2"><input type="checkbox" checked={form.active} onChange={(event) => change("active", event.target.checked)} /> Active customer</label> : null}
+      <div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Save Customer</Button></div>
+    </form>
+  );
+}
+
+type EditableLine = Pick<SalesLine, "id" | "productId" | "quantity" | "unitPrice" | "discount">;
+
+export function QuotationForm({
+  quotation,
+  customers,
+  products,
+  busy,
+  onSubmit
+}: {
+  quotation?: Quotation;
+  customers: Customer[];
+  products: Product[];
+  busy: boolean;
+  onSubmit: (payload: Partial<Quotation>) => void;
+}) {
+  const [customerId, setCustomerId] = useState(quotation?.customerId ?? "");
+  const [date, setDate] = useState(quotation?.date ?? new Date().toISOString().slice(0, 10));
+  const [validityDays, setValidityDays] = useState(String(quotation?.validityDays ?? 15));
+  const [paymentTerms, setPaymentTerms] = useState(quotation?.paymentTerms ?? "30 days");
+  const [remarks, setRemarks] = useState(quotation?.remarks ?? "");
+  const [status, setStatus] = useState(quotation?.status ?? "Draft");
+  const [lines, setLines] = useState<EditableLine[]>(quotation?.lines.map((line) => ({ id: line.id, productId: line.productId, quantity: line.quantity, unitPrice: line.unitPrice, discount: line.discount })) ?? [{ id: "line-" + Date.now(), productId: "", quantity: "1", unitPrice: "", discount: "0" }]);
+  const customer = customers.find((entry) => entry.id === customerId);
+  const updateLine = (id: string, key: keyof EditableLine, value: string) => setLines((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
+  const totals = useMemo(() => lines.reduce((summary, line) => {
+    const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+    return { subtotal: summary.subtotal + gross, discount: summary.discount + Number(line.discount || 0), total: summary.total + gross - Number(line.discount || 0) };
+  }, { subtotal: 0, discount: 0, total: 0 }), [lines]);
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!customer || lines.some((line) => !line.productId || Number(line.quantity) <= 0 || Number(line.unitPrice) <= 0)) return;
+    const normalized: SalesLine[] = lines.map((line) => {
+      const product = products.find((entry) => entry.id === line.productId)!;
+      const total = Number(line.quantity) * Number(line.unitPrice) - Number(line.discount || 0);
+      return { id: line.id, productId: product.id, productCode: product.code, productName: product.name, quantity: line.quantity, unitPrice: line.unitPrice, discount: Number(line.discount || 0).toFixed(2), lineTotal: total.toFixed(2) };
+    });
+    onSubmit({ customerId: customer.id, customerName: customer.name, date, validityDays: Number(validityDays), paymentTerms, remarks, status, lines: normalized, subtotal: totals.subtotal.toFixed(2), discountTotal: totals.discount.toFixed(2), total: totals.total.toFixed(2) });
+  };
+  return (
+    <form className="grid gap-4" onSubmit={submit}>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="sm:col-span-2"><span className={labelClass}>Customer</span><select className={inputClass} required value={customerId} onChange={(event) => { const next = customers.find((entry) => entry.id === event.target.value); setCustomerId(event.target.value); if (next) setPaymentTerms(next.paymentTerms); }}><option value="">Select customer</option>{customers.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
+        <label><span className={labelClass}>Quotation Date</span><input className={inputClass} type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label>
+        <label><span className={labelClass}>Validity (days)</span><input className={inputClass} type="number" min="1" step="1" required value={validityDays} onChange={(event) => setValidityDays(event.target.value)} /></label>
+        <label className="sm:col-span-2"><span className={labelClass}>Payment Terms</span><input className={inputClass} required value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} /></label>
+        {quotation ? <label><span className={labelClass}>Status</span><select className={inputClass} value={status} onChange={(event) => setStatus(event.target.value as Quotation["status"])}>{["Draft", "Sent", "Accepted", "Rejected"].map((value) => <option key={value}>{value}</option>)}</select></label> : null}
+      </div>
+      <div className="overflow-x-auto rounded-md border border-slate-200">
+        <table className="min-w-[900px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-2">Product</th><th className="px-3 py-2">Quantity</th><th className="px-3 py-2">Unit Price</th><th className="px-3 py-2">Discount</th><th className="px-3 py-2 text-right">Line Total</th><th className="w-12 px-3 py-2" /></tr></thead>
+          <tbody className="divide-y divide-slate-100">{lines.map((line) => { const product = products.find((entry) => entry.id === line.productId); const total = Number(line.quantity || 0) * Number(line.unitPrice || 0) - Number(line.discount || 0); return <tr key={line.id}><td className="px-3 py-2"><select className={inputClass} required value={line.productId} onChange={(event) => { const next = products.find((entry) => entry.id === event.target.value); updateLine(line.id, "productId", event.target.value); if (next && !line.unitPrice) updateLine(line.id, "unitPrice", next.standardSalePrice); }}><option value="">Select product</option>{products.map((entry) => <option key={entry.id} value={entry.id}>{entry.code} · {entry.name}</option>)}</select>{product ? <small className="mt-1 block text-slate-400">Standard {formatCurrency(product.standardSalePrice)}</small> : null}</td><td className="px-3 py-2"><input className={inputClass} type="number" min="1" step="1" value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} required /></td><td className="px-3 py-2"><input className={inputClass} type="number" min="0.01" step="0.01" value={line.unitPrice} onChange={(event) => updateLine(line.id, "unitPrice", event.target.value)} required /></td><td className="px-3 py-2"><input className={inputClass} type="number" min="0" max={Number(line.quantity || 0) * Number(line.unitPrice || 0)} step="0.01" value={line.discount} onChange={(event) => updateLine(line.id, "discount", event.target.value)} /></td><td className="px-3 py-2 text-right font-bold">{formatCurrency(total)}</td><td className="px-3 py-2"><Button type="button" variant="ghost" icon={<Trash2 className="h-4 w-4 text-red-600" />} onClick={() => setLines((current) => current.filter((entry) => entry.id !== line.id))} disabled={lines.length === 1} aria-label="Remove line" title="Remove line" /></td></tr>; })}</tbody>
+        </table>
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <Button type="button" icon={<Plus className="h-4 w-4" />} onClick={() => setLines((current) => [...current, { id: "line-" + Date.now(), productId: "", quantity: "1", unitPrice: "", discount: "0" }])}>Add Line</Button>
+        <dl className="grid min-w-64 gap-1 text-sm"><div className="flex justify-between gap-6"><dt className="text-slate-500">Subtotal</dt><dd className="font-semibold">{formatCurrency(totals.subtotal)}</dd></div><div className="flex justify-between gap-6"><dt className="text-slate-500">Discount</dt><dd className="font-semibold">{formatCurrency(totals.discount)}</dd></div><div className="flex justify-between gap-6 border-t border-slate-200 pt-2 text-base"><dt className="font-bold">Quotation Total</dt><dd className="font-bold text-red-700">{formatCurrency(totals.total)}</dd></div></dl>
+      </div>
+      <label><span className={labelClass}>Remarks</span><textarea className={textareaClass} value={remarks} onChange={(event) => setRemarks(event.target.value)} /></label>
+      <div className="flex justify-end"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Save Quotation</Button></div>
+    </form>
+  );
+}
+
+export function DeliveryForm({
+  orders,
+  deliveries,
+  batches,
+  canOverride,
+  busy,
+  onSubmit
+}: {
+  orders: SalesOrder[];
+  deliveries: Delivery[];
+  batches: StockBatch[];
+  canOverride: boolean;
+  busy: boolean;
+  onSubmit: (payload: Partial<Delivery>) => void;
+}) {
+  const activeOrders = orders.filter((order) => !["Delivered", "Cancelled"].includes(order.status));
+  const [orderId, setOrderId] = useState(activeOrders[0]?.id ?? "");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [remarks, setRemarks] = useState("");
+  const [receiverName, setReceiverName] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [rows, setRows] = useState<Record<string, { quantity: string; batchId: string }>>({});
+  const [warning, setWarning] = useState("");
+  const order = orders.find((entry) => entry.id === orderId);
+  const deliveredFor = (productId: string) => deliveries.filter((delivery) => delivery.orderId === orderId).flatMap((delivery) => delivery.lines).filter((line) => line.productId === productId).reduce((sum, line) => sum + Number(line.quantity), 0);
+  const rowFor = (line: SalesLine) => {
+    const remaining = Math.max(0, Number(line.quantity) - deliveredFor(line.productId));
+    const existing = rows[line.id];
+    const eligible = batches.filter((batch) => batch.productId === line.productId && Number(batch.quantityAvailable) > 0).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate));
+    return { remaining, eligible, quantity: existing?.quantity ?? String(remaining), batchId: existing?.batchId ?? eligible[0]?.id ?? "" };
+  };
+  const update = (lineId: string, line: SalesLine, key: "quantity" | "batchId", value: string) => {
+    const current = rowFor(line);
+    setRows((state) => ({ ...state, [lineId]: { quantity: key === "quantity" ? value : current.quantity, batchId: key === "batchId" ? value : current.batchId } }));
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!order) return;
+    const lines = order.lines.flatMap((line) => {
+      const row = rowFor(line);
+      if (Number(row.quantity) <= 0) return [];
+      const batch = batches.find((entry) => entry.id === row.batchId);
+      if (!batch) return [];
+      return [{ ...line, quantity: row.quantity, lineTotal: (Number(row.quantity) * Number(line.unitPrice) - Number(line.discount || 0)).toFixed(2), batchId: batch.id, batchNumber: batch.batchNumber }];
+    });
+    try {
+      const previews = await Promise.all(lines.map((line) => inventoryService.dispatchPreview({ productId: line.productId, batchId: line.batchId, quantity: line.quantity })));
+      const warnings = previews.map((preview) => preview.warning).filter(Boolean);
+      if (warnings.length && (!canOverride || !overrideReason.trim())) {
+        setWarning(warnings.join(" "));
+        return;
+      }
+      setWarning(warnings.join(" "));
+      onSubmit({ orderId: order.id, customerId: order.customerId, customerName: order.customerName, date, remarks, receiverName, overrideReason: warnings.length ? overrideReason : undefined, lines });
+    } catch (error) {
+      setWarning(error instanceof Error ? error.message : "Stock validation failed.");
+    }
+  };
+  return (
+    <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+      {warning ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{warning}</div> : null}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="sm:col-span-2"><span className={labelClass}>Sales Order</span><select className={inputClass} required value={orderId} onChange={(event) => { setOrderId(event.target.value); setRows({}); setWarning(""); }}><option value="">Select ready order</option>{activeOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.orderNumber} · {entry.customerName}</option>)}</select></label>
+        <label><span className={labelClass}>Dispatch Date</span><input className={inputClass} type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label>
+        <label><span className={labelClass}>Receiver Name</span><input className={inputClass} value={receiverName} onChange={(event) => setReceiverName(event.target.value)} /></label>
+      </div>
+      {order ? <div className="grid gap-3">{order.lines.map((line) => { const row = rowFor(line); return <fieldset className="rounded-md border border-slate-200 p-3" key={line.id}><legend className="px-1 text-sm font-bold">{line.productCode} · {line.productName}</legend><div className="grid gap-3 sm:grid-cols-3"><label><span className={labelClass}>Delivery Qty (max {formatNumber(row.remaining)})</span><input className={inputClass} type="number" min="0" max={row.remaining} step="1" value={row.quantity} onChange={(event) => update(line.id, line, "quantity", event.target.value)} /></label><label className="sm:col-span-2"><span className={labelClass}>Actual Batch · FIFO oldest first</span><select className={inputClass} required value={row.batchId} onChange={(event) => update(line.id, line, "batchId", event.target.value)}>{row.eligible.map((batch, index) => <option key={batch.id} value={batch.id}>{index === 0 ? "Recommended · " : ""}{batch.lotNumber} · received {batch.receivedDate} · expiry {batch.expiryDate} · {formatNumber(batch.quantityAvailable)} available</option>)}</select>{!row.eligible.length ? <small className="mt-1 block font-semibold text-red-600">No available batch for this product.</small> : null}</label></div></fieldset>; })}</div> : null}
+      <div className="grid gap-4 sm:grid-cols-2"><label><span className={labelClass}>Delivery Remarks</span><textarea className={textareaClass} value={remarks} onChange={(event) => setRemarks(event.target.value)} /></label><label><span className={labelClass}>FIFO Override Reason</span><textarea className={textareaClass} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} disabled={!canOverride} placeholder={canOverride ? "Required only when a newer batch is selected" : "This role cannot override FIFO"} /></label></div>
+      <div className="flex justify-end"><Button type="submit" variant="primary" icon={<Truck className="h-4 w-4" />} disabled={busy || !order}>Validate FIFO & Dispatch</Button></div>
+    </form>
+  );
+}
+
+export function CollectionForm({ customers, orders, accounts, busy, onSubmit }: { customers: Customer[]; orders: SalesOrder[]; accounts: CashBankAccount[]; busy: boolean; onSubmit: (payload: Partial<Collection>) => void }) {
+  const [customerId, setCustomerId] = useState("");
+  const [orderId, setOrderId] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amount, setAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState<Collection["paymentMode"]>("Bank Transfer");
+  const [accountId, setAccountId] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const customer = customers.find((entry) => entry.id === customerId);
+  const relatedOrders = orders.filter((order) => order.customerId === customerId && Number(order.due) > 0);
+  return (
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (!customer) return; onSubmit({ customerId, customerName: customer.name, orderId: orderId || undefined, date, amount, paymentMode, accountId: paymentMode === "Credit" ? undefined : accountId, referenceNumber, remarks }); }}>
+      <label className="sm:col-span-2"><span className={labelClass}>Customer</span><select className={inputClass} required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setOrderId(""); const selected = customers.find((entry) => entry.id === event.target.value); setAmount(selected?.currentDue ?? ""); }}><option value="">Select customer</option>{customers.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · due {formatCurrency(entry.currentDue)}</option>)}</select></label>
+      <label><span className={labelClass}>Sales Order (optional)</span><select className={inputClass} value={orderId} onChange={(event) => { setOrderId(event.target.value); const selected = orders.find((entry) => entry.id === event.target.value); if (selected) setAmount(selected.due); }}><option value="">Customer-level collection</option>{relatedOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.orderNumber} · {formatCurrency(entry.due)}</option>)}</select></label>
+      <label><span className={labelClass}>Date</span><input className={inputClass} type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label>
+      <label><span className={labelClass}>Amount</span><input className={inputClass} type="number" min="0.01" max={paymentMode === "Credit" ? undefined : customer?.currentDue} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+      <label><span className={labelClass}>Payment Mode</span><select className={inputClass} value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as Collection["paymentMode"])}><option>Cash</option><option>bKash</option><option>Bank Transfer</option><option>Cheque</option><option value="Credit">Outstanding Credit (no cash)</option></select></label>
+      {paymentMode !== "Credit" ? <label><span className={labelClass}>Deposit Account</span><select className={inputClass} required value={accountId} onChange={(event) => setAccountId(event.target.value)}><option value="">Select cash / bank ledger</option>{accounts.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.type}</option>)}</select></label> : <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Credit records the outstanding amount only and creates no cash/bank movement.</div>}
+      <label><span className={labelClass}>Cheque / Transfer Ref</span><input className={inputClass} value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} /></label>
+      <label className="sm:col-span-2"><span className={labelClass}>Remarks</span><textarea className={textareaClass} value={remarks} onChange={(event) => setRemarks(event.target.value)} /></label>
+      <div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy || !customer}>Post Collection</Button></div>
+    </form>
+  );
+}
