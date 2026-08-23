@@ -39,7 +39,7 @@ export function AccessDenied({ permission }: { permission?: PermissionKey }) {
       <h1 className="mt-5 text-2xl font-bold text-slate-950">Access denied</h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         {role} cannot view {permission ? permission.replace("-", " ") : "this module"} under the ERP permission plan.
-        Sign in with an authorized demo user or use Super Admin view-as mode.
+        Sign in with an authorized user. Roles and additional capabilities are assigned by the Super Admin in Settings.
       </p>
       <div className="mt-5 flex justify-center gap-2">
         <Button variant="primary" onClick={() => navigate("/app/dashboard")}>

@@ -12,11 +12,11 @@ export default function ForgotPasswordPage() {
   const { register, handleSubmit } = useForm<{ email: string }>({ defaultValues: { email: "accounts@mipro.local" } });
 
   return (
-    <AuthShell title="Forgot password" subtitle="Mock reset email flow for future Supabase auth compatibility.">
+    <AuthShell title="Forgot password" subtitle="Request password recovery for an assigned ERP account.">
       {sent ? (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 text-blue-800">
           <strong>Reset link generated.</strong>
-          <p className="mt-2 text-sm">For demo, continue to the reset page and set a mock password.</p>
+          <p className="mt-2 text-sm">Continue to the reset page to choose a new password for this running demo session.</p>
           <Link className="mt-4 inline-block font-bold underline" to="/reset-password">
             Open reset password
           </Link>

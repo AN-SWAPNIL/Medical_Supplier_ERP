@@ -14,10 +14,10 @@ export default function ResetPasswordPage() {
   });
 
   return (
-    <AuthShell title="Reset password" subtitle="Mock password reset screen. Production auth can swap this for Supabase without changing route flow.">
+    <AuthShell title="Reset password" subtitle="Choose a new password for an assigned ERP account.">
       {done ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
-          <strong>Password reset saved for demo.</strong>
+          <strong>Password updated for this running demo session.</strong>
           <Link className="mt-4 block font-bold underline" to="/login">
             Return to login
           </Link>

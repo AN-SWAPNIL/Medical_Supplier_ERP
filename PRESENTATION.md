@@ -1,1282 +1,658 @@
-# Mipro HealthCare ERP Presentation Guide
+# MIPRO Medical Supplier ERP
 
-## Purpose
+## Client Presentation Guide
 
-This document is the presenter guide for the Mipro HealthCare ERP frontend prototype. It explains how the system connects departments, what data enters each module, where that data flows next, who can create/edit/delete records, who approves or posts transactions, and how to demonstrate the system clearly to the client.
+**Build:** Simplified workflow-driven frontend replacement
 
-This is a functional frontend prototype with a mock API. It is not a static UI. Screens load through `/api/*` endpoints, role-based navigation is enforced, records can be created/edited/deleted where allowed, workflow actions change record status, Sales Executive data is scoped to own records, and sensitive cost/profit fields are hidden by role.
+**Primary requirement:** `files/Medical_Supplier_ERP_Simplified_Plan.md`
+**Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
-## Source Priority
+---
 
-1. Primary requirement: `files/Project_Requirements_Presentation.pdf`
-2. Seed data and formulas: `files/Mipro HealthCare Corp.xlsx`
-3. Background context: `files/Project_Meeting_Minutes.pdf`
-4. Older base plans: `files/Medical_Supplier_ERP_Plan.pdf` and `files/Medical_Supplier_ERP_Plan_Details.pdf`
+## 1. The One-Minute Explanation
 
-Important: the meeting-minute idea about altered/fake company data should not be presented. The prototype supports legitimate company/branch scope and can support a clearly marked sandbox company later.
-
-## Demo Access
-
-Live URL:
+MIPRO ERP connects two real business flows through warehouse stock:
 
 ```text
-https://medical-supplier-erp.vercel.app
+IMPORT AND LANDED COST
+Supplier -> PO/PI -> LC or TT -> Shipment -> Costs -> Finalized landed cost
+                                                             |
+                                                             v
+                                                    WAREHOUSE STOCK
+                                                             |
+                                                             v
+SALES AND COLLECTION
+Customer -> Quotation -> Order -> Delivery Challan -> Collection -> Customer due
 ```
 
-Local frontend:
+One import record represents one shipment or consignment and may contain many products. The record begins with an internal reference such as `IMP-2026-001`. When an LC is opened, its LC number becomes the main visible reference without recreating the record.
 
-```text
-http://localhost:5173
-```
+Each shipment cost has its own allocation rule. Finalized landed cost flows into warehouse batches. A delivery consumes an actual batch, and a collection updates both the customer due and the chosen cash or bank account. Daily operating expenses remain separate from product landed cost.
 
-Local mock API:
+---
 
-```text
-http://localhost:4174
-```
+## 2. Why This Version Is Different
 
-All demo users use:
+The latest client meetings and actual spreadsheets showed that the earlier prototype was too broad. This replacement is organized around connected work instead of dozens of generic modules.
 
-```text
-password123
-```
+### Current application
 
-| Role | Email | Main Demo Purpose |
+- Exactly seven possible main destinations.
+- One import workspace instead of separate PI, PO, LC, shipment, customs, costing, and GRN pages.
+- One sales workspace instead of disconnected quotation, order, challan, and collection pages.
+- FIFO issue recommendation with expiry always visible.
+- Sensitive product cost and profit protected by explicit capability.
+- Narrow operational accounts, not a premature full accounting package.
+- Realistic local medical product images and client-like sample records.
+
+### Intentionally deferred
+
+- AI command center and floating chatbot
+- GPS and field-sales map
+- Native mobile application
+- HR and payroll
+- Fleet management
+- Full general ledger, trial balance, and balance sheet
+- Automatic customs, VAT, AIT, or HS-code duty formulas
+
+These are not missing implementation. They are excluded by the latest simplified scope so the prototype follows the client's real workflow.
+
+---
+
+## 3. Main Navigation
+
+| Area | Business purpose |
+|---|---|
+| Dashboard | Role-safe KPIs and items requiring action |
+| Imports | One case from commercial setup through cost and receiving |
+| Inventory | Stock, batches, expiry awareness, and movement history |
+| Sales | Customers, quotations/orders, deliveries, and collections |
+| Expenses & Accounts | Operating expenses, cash/bank, dues, and transaction ledger |
+| Reports | Grouped operational reports and narrow audit history |
+| Settings | Users, capabilities, master data, setup, print identity, and open client decisions |
+
+Workflow stages appear inside these areas as sections or segmented views. They are not extra navigation modules.
+
+---
+
+## 4. Role Access
+
+A user chooses the appropriate demo identity only while signing in. The role cannot be changed inside the application. In production, the Super Admin creates users and assigns roles/capabilities in Settings.
+
+| Role | Main navigation visible | Contextual access |
 |---|---|---|
-| Super Admin | `superadmin@mipro.local` | Full system control, users, roles, settings, audit, all modules |
-| Managing Director | `md@mipro.local` | Executive dashboard, approvals, P&L, bank, reports |
-| Accounts | `accounts@mipro.local` | Vouchers, cash book, bank book, GL, receivables, payables, payroll |
-| Import Officer | `import@mipro.local` | Supplier inquiry, PI, PO, LC/TT, shipment, customs, landed cost |
-| Warehouse Manager | `warehouse@mipro.local` | GRN, stock, batches, movements, physical count, FEFO |
-| Sales Manager | `salesmanager@mipro.local` | Team sales, customer oversight, targets, discounts, collections |
-| Sales Executive | `sales1@mipro.local` | Own customers, own sales documents, own visits, own collections only |
+| Super Admin / Owner | All seven areas | All owner-authorized actions |
+| Managing Director | Dashboard, Imports, Inventory, Sales, Expenses & Accounts, Reports | Review and operational visibility |
+| Import Officer | Dashboard, Imports | Commercial/import maintenance; sensitive costing only if explicitly granted |
+| Warehouse Manager | Dashboard, Inventory | Finalized import receiving reference and delivery work |
+| Accounts | Dashboard, Sales, Expenses & Accounts, Reports | Customer dues, collections, expenses, cash/bank |
+| Sales Manager | Dashboard, Inventory, Sales, Reports | Available stock and commercial records |
+| Sales Executive | Dashboard, Sales | Own customers, quotations/orders, and collections only |
 
-## One-Sentence Positioning
+Directly typing an unauthorized URL still shows **Access denied**. The server also checks the role and capability; hiding a menu item is not the only control.
 
-This is a connected medical import and distribution ERP that carries data from supplier inquiry to landed cost, warehouse stock, hospital sales, collection, accounts, management reports, AI recommendations and audit trail without duplicate manual entry.
+### Sensitive capabilities
 
-## How To Explain The System Simply
+- `view_sensitive_cost`
+- `edit_sensitive_cost`
+- `finalize_landed_cost`
+- `reopen_landed_cost`
+- `view_profit`
+- `approve_stock_override`
+- `manage_users`
+- `approve_special_price`
 
-Use this explanation for non-technical people:
+The Super Admin is the temporary sole landed-cost finalizer/reopener until the client confirms another authority.
 
-> Think of each screen as a department desk. The department fills a form, presses save, and the system sends that data to the central ERP service. The next department does not retype it. They receive the approved record, add their own part, and pass it forward.
+---
 
-Use this explanation for the API:
+## 5. Demo Login
 
-> An API is the controlled communication line between the screen and the company data. When I open the dashboard, the screen asks the API for dashboard numbers. When I save a PO, the screen sends the PO data to the API. In this prototype the API is mocked for presentation, but the frontend already talks through real API-style endpoints, so the production database can be connected later without rebuilding every screen.
-
-Use this explanation for role security:
-
-> The user role is sent with every request. The API and frontend both use that role to decide what menu items, records, buttons and sensitive fields should be visible.
-
-Use this explanation for temporary demo data:
-
-> For the presentation, saved records remain in the mock API runtime. It proves the forms, actions and workflow behavior. In production, the same API calls will write to permanent database tables with audit logs, backup and row-level security.
-
-Avoid saying:
+All active demo users use:
 
 ```text
-This is just static design.
+Password: password123
 ```
 
-Say instead:
+| Role | Email |
+|---|---|
+| Super Admin | `superadmin@mipro.local` |
+| Managing Director | `md@mipro.local` |
+| Accounts | `accounts@mipro.local` |
+| Import Officer | `import@mipro.local` |
+| Warehouse Manager | `warehouse@mipro.local` |
+| Sales Manager | `salesmanager@mipro.local` |
+| Sales Executive | `sales1@mipro.local` |
 
-```text
-This is a working frontend prototype connected to a mock ERP API. The production phase replaces the mock storage with a real backend and database.
-```
+Use Super Admin for the complete presentation. Sign out and use one other role near the end to prove access control.
 
-## What Happens When You Click
+---
 
-This is the easiest mental model for presenting the frontend:
+## 6. Responsibility And Approval Matrix
 
-| User Action | What The User Sees | What The System Does | API Style |
-|---|---|---|---|
-| Open landing page | Public product-style ERP introduction | No login required; shows positioning and key modules | Static frontend route `/` |
-| Login | Role-based account starts | Sends email/password, receives session token and role | `POST /api/auth/login` |
-| Open dashboard | KPIs, charts, alerts, pipeline | Sends role headers, returns role-safe dashboard data | `GET /api/dashboard` |
-| Open a module table | Searchable operational list | Fetches records for that module and filters by role/company | `GET /api/<module>` |
-| Open record details | Drawer with fields, workflow and documents | Uses selected row data and document archive | `GET /api/documents` plus module data |
-| Create record | Form modal opens, save button stores draft | Sends new form payload to mock API | `POST /api/<module>` |
-| Edit record | Existing data opens in form | Sends changed fields to mock API if role and status allow | `PATCH /api/<module>/:id` |
-| Delete record | Row disappears after permission check | Sends delete command only if role/status allows | `DELETE /api/<module>/:id` |
-| Submit | Status changes to pending approval | Workflow action changes record status | `POST /api/<module>/:id/submit` |
-| Approve | Status changes to approved | Approval action is recorded by authorized role | `POST /api/<module>/:id/approve` |
-| Post | Status changes to posted | Finance/stock effect is treated as finalized in demo | `POST /api/<module>/:id/post` |
-| Print document | Print-ready page opens | Opens template using module key and record id | `/app/print/:template/:moduleKey/:id` |
-| Ask AI | Bottom-right floating chat answers using role context | Sends question and current role, returns scoped answer | `POST /api/ai/chat` |
-
-Presenter line:
-
-> I am not only clicking screens. Each click represents a real ERP transaction: view, create, edit, approve, post, print, or audit.
-
-## Full Data Flow
-
-```text
-Master Data
-  -> Supplier Inquiry
-  -> PI
-  -> Purchase Order
-  -> LC / TT
-  -> Shipment
-  -> Customs & Landed Cost
-  -> GRN
-  -> Batch / LOT / BIN Inventory
-  -> Quotation
-  -> Sales Order
-  -> Delivery Challan
-  -> Sales Invoice
-  -> Collection
-  -> Voucher / Cash Book / Bank Book / GL
-  -> Receivable / Payable / P&L / Balance Sheet / Cash Flow
-  -> Dashboard / Reports / AI / Audit
-```
-
-The important story: every department adds its part, and the next department receives structured data instead of retyping spreadsheets.
-
-## Core Record Handoffs
-
-| Stage | Main Data Entered | Created By | Approved / Posted By | Used By Next | Business Result |
+| Record or action | Who enters it | Who may edit it | Delete/cancel rule | Who approves/posts | Result |
 |---|---|---|---|---|---|
-| Company, branch, warehouse, BIN | Company profile, branches, warehouse capacity, BIN code | Super Admin | Super Admin | All modules | Operating structure is ready |
-| Product / SKU | Product code, category, unit, brand, manufacturer, purchase/sales price, image | Super Admin or Import Officer | Super Admin / MD for final master policy | Procurement, inventory, sales | One SKU master for import, stock and sales |
-| Supplier | Supplier country, contact, product category, payment terms, rating | Import Officer | Super Admin / MD if required | Inquiry, PI, PO, LC/TT | Approved supplier base |
-| Customer / CRM | Hospital/clinic/dealer/pharmacy, credit limit, territory, sales owner | Sales Manager or Sales Executive | Sales Manager for credit/territory control | Quotation, invoice, collection, visits | Customer record and ownership |
-| Supplier Inquiry | Supplier, product, requested qty, target price | Import Officer | Import Officer / MD review | PI and PO | Procurement starts from a traceable request |
-| PI | PI number, supplier, product, amount, currency, approval owner | Import Officer | Managing Director | PO, LC/TT | Supplier commercial offer approved |
-| Purchase Order | PO number, supplier, products, qty, currency, exchange rate, total value | Import Officer | Managing Director | LC/TT, shipment, landed cost | Confirmed overseas order |
-| LC / TT | Bank, LC/TT number, amount, expiry, shipment date, Swift copy | Import Officer / Accounts | Managing Director and Accounts | Shipment and payables | Payment instrument tracked |
-| Shipment | BL, container, vessel, ETD, ETA, supplier, PO reference | Import Officer | Import Officer updates status | Customs and warehouse | Goods in transit are visible |
-| Customs / Landed Cost | FOB, freight, duty, VAT, AIT, C&F, transport, insurance, total landed cost | Import Officer | Managing Director / Accounts review | GRN, stock valuation, profit reports | True cost per product is calculated |
-| GRN | Received qty, rejected qty, batch, LOT, expiry, BIN, warehouse | Warehouse Manager | Warehouse Manager posts; Super Admin override | Stock, batch ledger, movements | Inventory is officially received |
-| Batch / LOT / BIN | Batch number, LOT, expiry date, FEFO rank, BIN location | Warehouse Manager | Warehouse Manager | Sales issue, recall, expiry alerts | Medical traceability is preserved |
-| Stock Movement | Stock in/out, transfer, adjustment, sale, return | Warehouse Manager | Warehouse Manager posts | Stock reports, audit | Inventory movement ledger |
-| Physical Count | System qty, counted qty, variance | Warehouse Manager | Warehouse Manager / MD for large variance | Adjustment and audit | Stock accuracy check |
-| Quotation | Customer, product, quantity, unit price, discount | Sales Executive / Sales Manager | Sales Manager or MD for discount | Sales Order | Price offer controlled |
-| Sales Order | Confirmed customer order and amount | Sales Executive / Sales Manager | Sales Manager | Delivery Challan and warehouse dispatch | Sales demand confirmed |
-| Delivery Challan | Order reference, delivery date, vehicle, status | Sales / Warehouse / Transport | Warehouse Manager or Sales Manager | Invoice and transport cost | Delivery proof |
-| Sales Invoice | Customer, product, qty, unit price, revenue, tax/profit fields | Sales Executive / Sales Manager | Accounts posts financial effect | Receivable, collection, GL | Customer billing |
-| Collection | Receipt, invoice, customer, amount, method | Sales Executive / Sales Manager / Accounts | Accounts posts | Cash book, bank book, voucher | Money received and matched |
-| Voucher | Journal, contra, payment, receipt voucher | Accounts | Accounts posts; MD can review | GL, cash/bank, P&L | Accounting entry |
-| Payables | Supplier due date, amount, currency | Accounts / Import | Accounts posts, MD reviews | Bank planning | Supplier liability visibility |
-| Expenses | Rent, utility, fuel, TA/DA, salary, marketing, maintenance | Accounts | Accounts posts; MD review if needed | P&L and cash/bank | Expense control |
-| HR / Payroll | Employees, attendance, leave, salary, advance, payslip | Accounts / HR role in production | Accounts posts payroll | Expense, cash/bank, reports | Back-office payroll workflow |
-| Transport | Vehicle, driver, trip, fuel, delivery cost | Transport/Admin role in production; Super Admin demo | Accounts posts cost allocation | Delivery cost and P&L | Delivery cost visibility |
-| Reports / Dashboard | Aggregated sales, stock, bank, receivable, payable, profit | System generated | Viewed by authorized roles | Management decisions | Real-time decision intelligence |
-| AI Recommendations | Risks, extracted fields, expiry, reconciliation, collection warnings | System generated | Human approves/rejects | Relevant module action | Assisted control, not automatic posting |
-| Audit Log | User, role, action, module, record, IP/device | System generated | Super Admin monitors | Compliance | Who did what, when and where |
+| Product | Super Admin | Super Admin | Delete only when unreferenced; otherwise deactivate | Super Admin | Canonical item used by import, stock, and sales |
+| Supplier | Super Admin | Super Admin | Delete only when unreferenced | Super Admin | Reused by import cases |
+| Import commercial data | Import Officer or Super Admin | Same roles before finalization | Draft/unposted case only | No separate approval | One connected import case |
+| Import product line | Import Officer or Super Admin | Same roles before finalization | Before cost finalization | No separate approval | Quantity, FOB, CBM, and HS reference |
+| Import document metadata | Import users | Import users | Protected after transaction use | No separate approval | PI, LC, BL, customs, and other document reference |
+| Import cost line | User with `edit_sensitive_cost` | Same capability before finalization | Before finalization | Owner reviews through preview | Named cost and allocation rule |
+| Landed-cost snapshot | System calculates | Immutable after finalization | Never physically deleted | `finalize_landed_cost` | Historical per-product/per-unit cost |
+| Reopen landed cost | Not applicable | Authorized owner with reason | Old snapshot remains in history | `reopen_landed_cost` | Audited correction cycle |
+| Warehouse receipt | Warehouse Manager or Super Admin | Posted as a receipt transaction | No silent delete | Receiving user posts | Batch/lot stock and stock-in movement |
+| Customer | Sales Manager, Sales Executive, Super Admin | Owner-scoped for Sales Executive | Only when no protected transactions | No approval in current scope | One normalized customer ledger |
+| Quotation | Sales Manager, Sales Executive, Super Admin | Draft/active quote owner | Draft/rejected only | Accepted quote converts to order | Carries lines forward |
+| Sales order | Created from accepted quotation | No duplicate line entry | Cancel rules belong to production backend | Conversion action | Delivery-ready commercial commitment |
+| Delivery challan | Warehouse Manager, Sales Manager, Super Admin | Posted transaction | No silent delete | Dispatch user posts | Actual batch stock-out and customer due |
+| FIFO override | Authorized dispatch user | Reason is required | Audit event is permanent | `approve_stock_override` | Newer lot may be used exceptionally |
+| Collection | Accounts, Sales Manager, Sales Executive, Super Admin | Production will use reversal/correction | No silent delete | Posting user | Reduces due and increases chosen account |
+| Expense | Accounts or Super Admin | Correct through reversal | Reverse with reason | Accounts/Super Admin posts | Reduces selected cash/bank account |
+| Expense category | Super Admin | Super Admin | Protect referenced categories | Super Admin | Dynamic daily expense classification |
+| User/capabilities | Super Admin | Super Admin | Deactivate rather than erase history | Super Admin | Route, action, and sensitive-field access |
+| Client decision | Super Admin records confirmation | Super Admin | Audit-worthy status change | Client confirms externally | Prevents assumptions being hard-coded |
 
-## Approval Model
+---
 
-The prototype uses a generic workflow action model:
+## 7. How Data Connects
+
+### 7.1 Master data starts the chain
 
 ```text
-Draft -> Submit -> Pending Approval -> Approve / Reject -> Approved -> Post -> Posted
+Settings
+  Products -----------+
+  Suppliers ----------+--> Import Case
+  Cost Presets -------+
+  Warehouse ----------+--> Warehouse Receipt
+  Customers ----------+--> Quotation
+  Cash/Bank Accounts -+--> Collection and Expense
+  Print Configuration +--> Printed documents
 ```
 
-Some operational records use additional statuses:
+Users select existing records instead of repeatedly typing names. Product variants such as Dialyzer 1.7H and 1.7L remain distinct canonical products.
+
+### 7.2 Import creates stock
 
 ```text
-Ready, Delivered, Cancelled, Shipped, Customs, Cleared, Warehouse Received,
-Normal, Low Stock, Hold, Expired, Reconciled
+ImportCase
+  + ImportItems
+  + Documents
+  + ImportCostLines
+       |
+       v
+Cost Preview -> Exact allocations -> Finalized LandedCostSnapshot
+                                             |
+                                             v
+                                   WarehouseReceipt
+                                             |
+                                             v
+                                  StockBatch + StockIn Movement
 ```
 
-Presenter explanation:
+The receiving user enters received/rejected quantity, lot, batch, manufacturing date, expiry, warehouse, and location. Product identity, import reference, and landed cost are inherited from the finalized snapshot.
 
-> Each department can prepare its own transaction, but sensitive steps such as purchase approval, landed cost approval, voucher posting and finalized data changes are controlled by authorized roles.
-
-## Who Inputs, Approves, Posts and Deletes
-
-| Role | Inputs / Creates | Edits | Deletes | Approves / Posts | Cannot See / Cannot Do |
-|---|---|---|---|---|---|
-| Super Admin | All setup and all module records | All records, including finalized demo records | All records in demo, including override | Can approve/post/export in every module | No restrictions in prototype |
-| Managing Director | Mainly review notes and executive approvals | Limited executive edits depending on module | No routine delete | Approves procurement, PI, PO, landed cost, sales/discount exceptions, AI recommendations | Does not manage daily data entry |
-| Accounts | Vouchers, receivables, payables, cash book, bank book, GL, expenses, payroll | Draft finance and payroll entries | No routine delete in current matrix | Posts vouchers, cash/bank entries, payroll, expenses | Cannot access import/warehouse operational entry screens except read-only summaries |
-| Import Officer | Suppliers, inquiries, PI, PO, LC, TT, shipments, customs/landed cost drafts | Import/procurement/shipment/customs drafts | Can delete allowed non-finalized import records | Can submit/prepare approvals; MD/Accounts review final sensitive steps | Cannot post accounts or change finalized finance |
-| Warehouse Manager | GRN, BIN, stock movements, batches, physical counts | Warehouse/inventory drafts and operational stock records | No routine delete in current matrix | Posts GRN, stock movements, physical count workflow | Cannot see full accounts or sales profit |
-| Sales Manager | Customers, quotations, orders, challans, invoices, returns, visits, targets | Sales/team records, non-finalized | Can delete allowed non-finalized sales records | Approves sales workflow, discounts, returns, collection oversight | Purchase cost, landed cost and profit fields are hidden |
-| Sales Executive | Own customers, quotations, orders, invoices, collections, visits | Own non-finalized sales records | No delete permission in current matrix | Can submit own sales activity; manager/accounts approve/post | Cannot see other reps' records, company-wide sales, accounts, landed cost, purchase cost or profit |
-
-Finalized lock rule:
-
-- Approved, Posted, Delivered, Closed, Cancelled, Archived, Reconciled and Sent records are locked for normal users.
-- Super Admin can override in the prototype.
-- Production should enforce this in the database and audit every override.
-
-## Privacy and Data Protection Story
-
-The client specifically requested sales privacy. Demonstrate it live:
-
-1. Login as `superadmin@mipro.local`.
-2. Open `/app/sales/invoices`.
-3. Show all invoices and profit/cost fields.
-4. Logout.
-5. Login as `sales1@mipro.local`.
-6. Open `/app/sales/invoices`.
-7. Show only own invoices.
-8. Confirm purchase cost, landed cost and profit are hidden.
-9. Try `/app/accounts/vouchers`.
-10. Show access denied.
-
-Talk track:
-
-> Sales executives can continue working with customers, orders, invoices, visits and collections, but management-sensitive margin and company-wide information remains protected.
-
-## Module Connections
-
-### Master Data
-
-Master data is the foundation. Products, suppliers, customers, warehouses, BINs, users and roles feed every later transaction.
-
-Data goes to:
-
-- Supplier and product data flow into inquiry, PI, PO, customs and landed cost.
-- Product and warehouse data flow into GRN, batches, stock and sales.
-- Customer and territory data flow into quotation, invoice, visits, targets and receivables.
-- User roles control screens, actions and field visibility.
-
-### Import and Procurement
-
-Import Officer starts the procurement cycle:
+### 7.3 Sales consumes stock
 
 ```text
-Supplier Inquiry -> PI -> PO -> LC/TT -> Shipment -> Customs
+Customer -> Quotation -> Accepted -> SalesOrder
+                                      |
+                                      v
+                            Delivery + selected StockBatch
+                                      |
+                         +------------+-------------+
+                         v                          v
+                StockOut Movement             Customer Due
+                                                    |
+                                                    v
+                                               Collection
+                                             /      |       \
+                                          Cash    bKash    Bank/Cheque
+                                                    |
+                                                    v
+                                           Account Transaction
 ```
 
-MD approves commercial commitments such as PI/PO and landed cost. Accounts is involved where payment, bank, LC/TT or payable impact exists.
+Line items carry forward from quotation to order. The warehouse chooses the actual batch at delivery. The API checks quantity and FIFO before reducing stock.
 
-Key demo data from Excel:
-
-- PO: `PO-2026-001`
-- Consignment: `CN-9982`
-- LC: `LC-77612`
-- Products: `Mip001`, `Mip002`, `Mip003`
-
-### Landed Cost
-
-Formula shown in the prototype:
+### 7.4 Expenses stay isolated
 
 ```text
-Product Import Value
-+ Freight
-+ Insurance
-+ Duty
-+ VAT
-+ AIT
-+ Port Charges
-+ C&F Charges
-+ Transport Charges
-+ Other Approved Expenses
-= Total Landed Cost
+Daily Expense or TA/DA -> Selected Cash/Bank Account -> Account Transaction
+
+No connection to ImportCostLine or LandedCostSnapshot
 ```
 
-Landed cost goes to:
+Rent, salaries, utilities, office transport, entertainment, and TA/DA never change product landed cost.
 
-- Inventory valuation
-- Unit COGS
-- Margin preview
-- Profit and loss reporting
-- Sales privacy redaction
+---
 
-### Warehouse and Inventory
+## 8. Import Workspace Walkthrough
 
-Warehouse receives goods after customs:
+Open **Imports**, then select **LC-77612**. The page represents one multi-product consignment.
+
+### Milestone header
+
+The status path includes:
 
 ```text
-Customs Cleared -> GRN -> Batch / LOT / BIN -> Stock -> Movements -> Physical Count
+Draft -> PI Received -> LC/TT Opened -> In Production -> Shipped
+-> At Port -> Costing -> Cost Finalized -> Partially Received
+-> Received -> Closed
 ```
 
-Warehouse Manager enters:
+Cancelled is also supported.
 
-- Received quantity
-- Rejected quantity
-- Batch number
-- LOT number
-- Expiry date
-- BIN location
-- Warehouse
+### Six sections
 
-The system then supports:
+1. **Commercial & Products**
+   Supplier, PO, PI, payment mode, products, quantities, FOB, cartons, and CBM.
 
-- FEFO issue recommendation
-- 6-month, 3-month and 1-month expiry alerts
-- Stock movement ledger
-- Recall-ready batch traceability
-- Physical count variance review
+2. **LC / TT & Shipment**
+   LC/TT reference, bank, rate snapshot, BL, container, vessel, ETD, and ETA.
 
-### Sales, CRM and Mobile Sales
+3. **Documents**
+   File metadata for PI, LC, BL, customs assessment, and other evidence.
 
-Sales starts from customer and CRM activity:
+4. **Costs & Allocation**
+   Any number of named costs with currency, historical exchange rate, vendor/payment metadata, attachment, product scope, and an explicit allocation method.
+
+5. **Landed-Cost Result**
+   Exact shipment reconciliation, final product total, landed cost per unit, and expandable explanations.
+
+6. **Warehouse Receipt & Activity**
+   Receiving unlocks only after cost finalization. Partial and final receipts remain connected to the same import case.
+
+### Five allocation methods
+
+| Method | Typical use | Formula basis |
+|---|---|---|
+| CBM | Sea freight, volume-related local transport | Product CBM / eligible total CBM |
+| FOB value | Shared bank or institutional costs | Product FOB value / eligible FOB total |
+| Quantity | Shared handling/labour where chosen | Product quantity / eligible total quantity |
+| Product-specific | Final customs duty assessed for one or selected products | Only selected products receive the cost |
+| Manual split | Exceptional documented business split | User-entered BDT amounts must exactly equal the cost |
+
+Foreign currency is converted using the stored exchange-rate snapshot. Final allocations round to two decimal places. Any residual poisha is assigned by the largest fractional remainder, with stable item-ID tie-breaking. The sum always reconciles to the original cost row.
+
+### What the system does not calculate
+
+The user enters the final assessed customs duty per product from official customs evidence. The ERP does not guess HS-code duty, VAT, AIT, or customs formulas.
+
+---
+
+## 9. Inventory Walkthrough
+
+Inventory has only three internal views:
+
+- **Stock:** available quantity by canonical product, with image, sale price, FIFO lot, and nearest expiry.
+- **Batches:** lot, batch, import reference, receipt date, manufacturing/expiry, warehouse location, and available quantity.
+- **Movements:** stock-in and stock-out transaction history.
+
+### FIFO with expiry awareness
+
+FIFO means the oldest eligible matching receipt is recommended first. Expiry is always shown. Selecting a newer batch while an older eligible batch still has stock produces a warning.
+
+An authorized override requires:
+
+1. `approve_stock_override` capability.
+2. A written reason.
+3. A permanent audit event.
+
+The server prevents negative stock, receipt quantities beyond the import quantity, and an expiry date earlier than manufacturing date.
+
+---
+
+## 10. Sales Walkthrough
+
+Sales has four internal views:
+
+1. **Customers**
+2. **Quotations & Orders**
+3. **Deliveries**
+4. **Collections**
+
+### Customer ledger
+
+The customer's historical spreadsheet tab becomes one customer row plus connected transactions. It shows total sales, total collected, outstanding due, credit limit, territory, contact, and collection progress.
+
+### Quotation to collection
 
 ```text
-Customer -> Visit -> Quotation -> Sales Order -> Challan -> Invoice -> Collection
+Create quotation
+-> Accept and convert
+-> Order created with the same line items
+-> Select actual batch for delivery
+-> Delivery challan posts stock-out
+-> Order value becomes customer due
+-> Post cash/bKash/bank/cheque collection
+-> Customer and order due decrease
+-> Cash/bank transaction is created
 ```
 
-Sales Executive can input own customer activity. Sales Manager can oversee team activity, targets and approvals.
+Outstanding credit is supported by leaving part of the order due unpaid. Invoice generation is intentionally shown as pending client confirmation and is not inserted as a mandatory stage.
 
-Mobile Sales Control shows:
+### Print outputs
 
-- Own customer list
-- GPS check-in
-- OpenStreetMap route tracking
-- Order entry mock
-- Collection entry mock
-- Visit remarks
-- Offline queue
-- Manager sync
+One record can produce:
 
-Sales data goes to:
-
-- Warehouse delivery planning
-- Receivables
-- Cash/bank collection
-- Sales target achievement
-- Commission preview
-- Dashboard and reports
-
-### Accounts and Finance
-
-Accounts receives financial impact from sales, import and expenses:
-
-```text
-Invoice -> Receivable
-Collection -> Receipt Voucher -> Cash Book / Bank Book
-Supplier Due -> Payable -> Payment Voucher -> Bank Book
-Expense -> Voucher -> GL
-Payroll -> Payslip -> Expense / Cash / Bank
-```
-
-Accounts can create and post finance records. MD can view executive finance summaries. Sales Executive cannot access accounts.
-
-Reports generated:
-
-- P&L snapshot
-- Balance sheet preview
-- Cash flow preview
-- Receivables aging
-- Payables position
-- Bank balance
-- Inventory valuation
-
-### HR, Payroll, Expense and Transport
-
-These are included because the refined requirement mentions back-office operations.
-
-Data links:
-
-- Attendance and leave affect payroll readiness.
-- Payroll becomes salary expense.
-- Fuel and trip cost become transport/delivery expense.
-- Transport can relate to delivery challans.
-- Expenses appear in finance reports and cash/bank ledgers after posting.
-
-### Reports, Dashboard and AI
-
-Reports are not separate data entry. They consume data from all modules.
-
-Dashboard shows:
-
-- Today sales
-- Monthly sales
-- Gross margin
-- Net profit
-- Bank balance
-- Receivables
-- Payables
-- Inventory valuation
-- Import pipeline
-- Expiry alerts
-- Target vs achievement
-- AI executive summary
-
-AI agents assist with:
-
-- Import document extraction
-- Landed cost validation
-- Expiry and FEFO risk
-- Collection risk
-- Finance reconciliation
-- Executive insight
-
-Important presentation line:
-
-> AI suggests and explains; authorized humans still approve, post and take responsibility.
-
-AI locations in the UI:
-
-- Bottom-right floating chat: always available after login and answers using the current signed-in role.
-- `/app/ai`: full AI Agents page with recommendations, approve/reject actions and module-specific AI controls.
-
-## A-to-Z Presentation Script
-
-Use this order when you need to explain the whole system clearly from start to finish.
-
-### Step 1: Company Control
-
-Show:
-
-```text
-/app/master/companies
-/app/master/warehouses
-/app/warehouse/bin-locations
-/app/users
-/app/roles
-```
-
-Say:
-
-> Before daily work starts, the company defines branches, warehouses, BIN locations, users and roles. This controls where stock is stored, which branch/company owns the data, and who can access each operation.
-
-Data created here:
-
-- Company and branch
-- Warehouse and BIN
-- Users and roles
-- Permission matrix
-
-Data used by:
-
-- Product stock
-- GRN
-- Sales territory
-- User access control
-- Audit and reports
-
-### Step 2: Product, Supplier and Customer Foundation
-
-Show:
-
-```text
-/app/products
-/app/suppliers
-/app/customers
-```
-
-Say:
-
-> Products, suppliers and customers are master data. Once they are created correctly, the same product and party information flows into import, stock, sales and accounts.
-
-Data created here:
-
-- Product code, name, category, price, reorder level and image
-- Supplier country, payment terms and rating
-- Customer type, territory, credit limit and assigned sales executive
-
-Approver/control:
-
-- Super Admin controls master setup.
-- MD may review policy-level product/supplier decisions.
-- Sales Manager controls territory/customer ownership.
-
-### Step 3: Import Starts From Inquiry
-
-Show:
-
-```text
-/app/procurement/inquiries
-/app/import/pi
-/app/procurement/purchase-orders
-```
-
-Say:
-
-> Import starts before the shipment. The Import Officer records supplier inquiry, PI and purchase order. MD approval is needed before the company commits to major purchase value.
-
-Data created here:
-
-- Supplier inquiry
-- PI
-- PO
-- Product quantity and commercial value
-- Currency and exchange rate
-
-Approver/control:
-
-- Import Officer inputs.
-- Managing Director approves PI/PO.
-- Accounts will later use this for payable and bank planning.
-
-### Step 4: Payment and Shipment Tracking
-
-Show:
-
-```text
-/app/import/lc
-/app/import/tt
-/app/import/shipments
-```
-
-Say:
-
-> After PO approval, the payment method and shipment are tracked. LC/TT connects import with bank/accounting, and shipment connects import with customs and warehouse receiving.
-
-Data created here:
-
-- LC or TT number
-- Bank and amount
-- Swift copy reference
-- BL, container, vessel, ETD, ETA
-- Shipment status
-
-Approver/control:
-
-- Import Officer updates shipment data.
-- Accounts/MD review financial exposure.
-- Warehouse uses ETA and container reference for receiving.
-
-### Step 5: Customs and Landed Cost
-
-Show:
-
-```text
-/app/customs/landed-cost
-```
-
-Say:
-
-> Landed cost is one of the most important controls. It converts overseas purchase price into true local product cost by adding freight, insurance, duty, VAT, C&F, transport and bank/LC cost.
-
-Data created here:
-
-- FOB cost
-- Freight
-- Duty, VAT, AIT
-- C&F and port charges
-- Local transport
-- Per-unit landed cost
-- Margin preview
-
-Approver/control:
-
-- Import Officer prepares the cost.
-- MD or Accounts reviews before it affects valuation.
-- Sales roles cannot see sensitive cost/profit fields.
-
-API call to mention:
-
-```text
-POST /api/v1/customs/landed-cost-preview
-```
-
-### Step 6: Warehouse Receiving and Batch Control
-
-Show:
-
-```text
-/app/warehouse/grn
-/app/inventory/stock
-/app/inventory/batches
-/app/inventory/movements
-/app/inventory/physical-counts
-```
-
-Say:
-
-> Once customs is cleared, warehouse receives the goods through GRN. Medical product traceability starts here: batch number, LOT, expiry date and BIN location are captured before sale.
-
-Data created here:
-
-- GRN
-- Received and rejected quantity
-- Batch and LOT
-- Expiry date
-- BIN location
-- Stock movement
-- Physical count variance
-
-Approver/control:
-
-- Warehouse Manager posts GRN and stock movements.
-- Super Admin can override in demo.
-- Large variances should be reviewed by management in production.
-
-### Step 7: Sales and CRM
-
-Show:
-
-```text
-/app/customers
-/app/sales/visits
-/app/sales/quotations
-/app/sales/orders
-/app/sales/challans
-/app/sales/invoices
-/app/sales/collections
-/app/sales/returns
-/app/sales/targets
-```
-
-Say:
-
-> Sales starts from customer relationship work. A field user can visit a hospital, create a quotation, convert it to order, deliver by challan, invoice the customer and record collection.
-
-Data created here:
-
-- Visit log and GPS-ready check-in
-- Quotation
+- Quotation on digital letterhead
+- Quotation for preprinted letterhead
 - Sales order
 - Delivery challan
-- Invoice
-- Collection receipt
-- Sales return
-- Target and commission data
+- Money receipt
+- Import cost statement
 
-Approver/control:
+---
 
-- Sales Executive inputs own activity only.
-- Sales Manager reviews team activity and discounts.
-- Accounts posts financial collection impact.
-- Sales Executive cannot see other salespeople's data or company profit.
+## 11. Expenses And Accounts Walkthrough
 
-### Step 8: Accounts and Finance
+This is an operational money view, not a full general ledger.
 
-Show:
+Internal views include:
 
-```text
-/app/accounts/receivables
-/app/accounts/payables
-/app/accounts/vouchers
-/app/accounts/cash-book
-/app/accounts/bank-book
-/app/accounts/general-ledger
-/app/expenses
-```
+- Daily expenses
+- Cash and bank accounts
+- Account transaction ledger
+- Customer dues and collections
 
-Say:
+Expense entry supports dynamic categories and a TA/DA subtype. Posting creates a debit against the selected cash/bank account. Collections create credits. Posted expenses are reversed with a reason instead of silently deleted.
 
-> Accounts receives the financial impact from import, sales, collection, expense and payroll. The goal is not double entry by every department. Operational records create the basis for receivable, payable, voucher, cash, bank and ledger control.
+---
 
-Data created here:
+## 12. Reports And Audit
 
-- Receivables and aging
-- Supplier payables
-- Receipt/payment/journal/contra vouchers
-- Cash book
-- Bank book
-- General ledger
-- Expenses
+Reports remain one destination grouped into:
 
-Approver/control:
+- Import and landed cost
+- Inventory
+- Sales and collection
+- Expense and cash/bank
+- Narrow audit
 
-- Accounts creates and posts finance entries.
-- MD reviews executive finance and exceptions.
-- Sales and warehouse do not get full accounts access.
+Reports read the same records used by operations. There is no duplicate reporting dataset. CSV export and print are available where appropriate.
 
-### Step 9: HR, Payroll and Transport
+The narrow audit captures high-risk actions such as:
 
-Show:
+- landed-cost finalization or reopening
+- allocation changes
+- warehouse receiving
+- FIFO override
+- stock dispatch
+- collection posting
+- expense reversal
+- capability changes
 
-```text
-/app/hr/employees
-/app/hr/attendance
-/app/hr/leave-advances
-/app/hr/payroll
-/app/transport
-```
+---
 
-Say:
+## 13. Settings And Client Confirmation Queue
 
-> The refined requirement also includes back-office operations. HR and payroll support salary control. Transport supports delivery cost, fuel and vehicle movement.
+Settings is for Super Admin only.
 
-Data created here:
+It contains:
 
-- Employees
-- Attendance and leave
-- Salary advance/loan request
-- Payroll
-- Vehicle/trip/fuel/delivery cost
+- Users and capabilities
+- Products with medical product imagery
+- Suppliers
+- Cash and bank accounts
+- Main warehouse
+- Expense categories
+- Import cost presets
+- Print identity/configuration
+- Client Confirmation Queue
 
-Data used by:
+The queue makes unresolved requirements visible:
 
-- Expenses
-- Cash/bank
-- P&L
-- Delivery cost review
+- Default allocation for common costs
+- Default allocation for local transport
+- Invoice requirement
+- Accounting depth
+- Number of warehouses
+- Selling-price approval
+- Sales VAT/tax
+- Cost-finalization authority
 
-### Step 10: Reports, AI and Audit
+The prototype does not silently convert these questions into permanent business rules.
 
-Show:
+---
 
-```text
-/app/reports
-/app/ai
-/app/audit
-/app/settings
-/app/profile
-```
+## 14. What An API Call Means
 
-Say:
+For a non-technical audience, describe the API as the system's controlled messenger.
 
-> Reports and AI do not replace human approval. They summarize the connected ERP data so management can see risk, profit, stock, dues and operational status. Audit keeps a trace of sensitive actions.
-
-Data shown here:
-
-- P&L, balance sheet and cash flow previews
-- Sales, collection and target reports
-- Inventory valuation and expiry alerts
-- AI recommendations
-- Login and action audit trail
-- Profile and security placeholders
-
-Approver/control:
-
-- MD and Super Admin see the widest intelligence view.
-- Sales Executive AI answers are scoped to own permissions.
-- Super Admin monitors audit and settings.
-
-## Recommended Demo Path
-
-### 1. Start With Landing Page
-
-Route:
+Example:
 
 ```text
-/
+User clicks "Preview landed cost"
+        |
+        v
+The page sends the import ID to the API
+        |
+        v
+The API validates permission and calculation inputs
+        |
+        v
+The costing engine allocates every cost
+        |
+        v
+The API returns a structured result
+        |
+        v
+The page displays totals and explanations
 ```
 
-Say:
+The frontend never reads a hidden mock spreadsheet directly. Every screen calls a typed domain service. Zod validates the returned structure before a component uses it. A future real database/backend can replace Express without rewriting the pages.
 
-> This is not a generic ERP landing page. It is positioned around medical device import, landed cost, warehouse batch traceability, sales control, accounts and management reporting.
+### Why show this to the client
 
-### 2. Login as Super Admin
+You are not showing code for its own sake. You are proving:
 
-Route:
+- the screens are connected, not static pictures;
+- permission rules are checked at the data boundary;
+- one action updates downstream records;
+- the frontend is ready for a real backend;
+- calculations have one deterministic source of truth.
 
-```text
-/login
-```
+---
 
-Show:
+## 15. API Map
 
-- Role-based sign-in
-- Demo account list
-- No role switcher inside the app
+### Session and dashboard
 
-### 3. Executive Dashboard
-
-Route:
-
-```text
-/app/dashboard
-```
-
-Show Mipro workbook numbers:
-
-- BDT 3,970,000 sales revenue
-- BDT 1,286,145 inventory valuation
-- 17,500 units in stock
-- Import pipeline and expiry alerts
-
-### 4. Import-to-Warehouse Flow
-
-Routes:
-
-```text
-/app/procurement/inquiries
-/app/import/pi
-/app/procurement/purchase-orders
-/app/import/lc
-/app/import/shipments
-/app/customs/landed-cost
-/app/warehouse/grn
-/app/inventory/stock
-/app/inventory/batches
-```
-
-Demo actions:
-
-- Open a PO record.
-- Show workflow actions.
-- Show document archive.
-- Open landed cost calculator.
-- Show GRN with batch/LOT/expiry/BIN.
-- Show stock and batch alerts.
-
-### 5. Sales-to-Accounts Flow
-
-Routes:
-
-```text
-/app/customers
-/app/sales/quotations
-/app/sales/orders
-/app/sales/challans
-/app/sales/invoices
-/app/sales/collections
-/app/accounts/receivables
-/app/accounts/vouchers
-/app/accounts/cash-book
-/app/accounts/bank-book
-```
-
-Demo actions:
-
-- Create or open a quotation.
-- Explain conversion to order, challan and invoice.
-- Show collection posting.
-- Show receivable aging.
-- Show voucher/cash/bank connection.
-
-### 6. Mobile Sales Control
-
-Route:
-
-```text
-/app/sales/mobile-control
-```
-
-Show:
-
-- GPS check-in
-- Map/route tracking
-- Visit evidence
-- Offline queue
-- Manager team table
-- Order, collection and visit mock actions
-
-### 7. Role Privacy Test
-
-Login:
-
-```text
-sales1@mipro.local
-password123
-```
-
-Show:
-
-- Own customers only
-- Own invoices only
-- No landed cost/profit fields
-- Accounts route blocked
-- AI answer scoped to own data
-
-### 8. Reports, AI and Audit
-
-Routes:
-
-```text
-/app/reports
-/app/ai
-/app/audit
-/app/roles
-/app/settings
-```
-
-Show:
-
-- Report library
-- P&L, balance sheet, cash flow previews
-- AI recommendations with approve/reject
-- Bottom-right floating AI chat for role-aware questions
-- Audit log
-- Role matrix
-- User-level permission toggles
-- 2FA/IP/backup/document settings placeholders
-
-## CRUD and Temporary Data Behavior
-
-The prototype supports functional frontend CRUD:
-
-- Create records
-- Edit allowed records
-- Delete where role permits
-- Submit/approve/reject/post/cancel workflow actions
-- Search, filter, export and print
-
-Current limitation:
-
-- Data persists only in the current mock API process.
-- There is no production database yet.
-- Production backend should store all records in a database with audit and row-level permissions.
-
-Presenter wording:
-
-> The forms and workflows are functional for prototype validation. In production, the same API contracts will connect to persistent database tables, file storage and real authentication.
-
-## Backend-Ready API Boundary
-
-Frontend screens call API endpoints rather than importing fixtures directly. This is important because the prototype is not locked into fake hardcoded page data. The backend can be replaced later while keeping the same frontend screens and user workflows.
-
-Simple architecture:
-
-```text
-User clicks frontend screen
-  -> React component calls apiClient
-  -> apiClient sends request to /api/*
-  -> request includes session token, user id, role and company id headers
-  -> Express mock API checks role/company visibility
-  -> API returns JSON
-  -> React Query refreshes the table, dashboard, chart or drawer
-```
-
-Important request headers:
-
-| Header | Meaning | Why It Matters |
-|---|---|---|
-| `Authorization` | Demo bearer token from login | Production backend will verify real authentication |
-| `x-user-id` | Current signed-in user id | Used for own-data filtering, especially Sales Executive |
-| `x-role` | Current role | Used for route, action and field visibility |
-| `x-company-id` | Active company scope | Allows future multi-company or branch separation |
-
-Standard response shape:
-
-```json
-{
-  "success": true,
-  "message": "OK",
-  "data": []
-}
-```
-
-Important endpoint examples:
-
-```text
-POST /api/auth/login
-GET /api/auth/demo-users
-GET /api/dashboard
-GET /api/products
-GET /api/customers
-GET /api/imports/pipeline
-GET /api/customs/landed-cost
-POST /api/v1/customs/landed-cost-preview
-GET /api/inventory/stock
-GET /api/sales/invoices
-GET /api/accounts/vouchers
-GET /api/reports/summary
-POST /api/ai/chat
-```
-
-The API accepts both `/api/...` and `/api/v1/...` style paths. The `/api/v1/...` paths show the future production contract. The mock server normalizes them internally for this prototype.
-
-## API Endpoint Map By Business Area
-
-| Business Area | Frontend Routes | API Calls | What Data Moves |
-|---|---|---|---|
-| Authentication | `/login`, `/signup`, `/forgot-password`, `/reset-password` | `POST /api/auth/login`, `GET /api/auth/demo-users`, `POST /api/auth/signup-request`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `GET /api/me` | User session, requested role, password reset demo state |
-| Dashboard | `/app/dashboard` | `GET /api/dashboard` and `GET /api/v1/dashboard/summary` | KPIs, sales, stock, bank, receivable, payable, import pipeline, expiry alerts, AI summary |
-| User and Role Control | `/app/users`, `/app/roles` | `GET/POST/PATCH/DELETE /api/users` | Users, roles, department, active/inactive status, role matrix presentation |
-| Company Setup | `/app/master/companies` | `GET/POST/PATCH/DELETE /api/companies` | Company, branch and operating scope |
-| Warehouse Setup | `/app/master/warehouses`, `/app/warehouse/bin-locations` | `GET/POST/PATCH/DELETE /api/warehouses`, `GET/POST/PATCH/DELETE /api/bin-locations` | Warehouse locations, capacity, BIN code, zone |
-| Product Master | `/app/products` | `GET/POST/PATCH/DELETE /api/products` | Product code, name, category, unit, brand, manufacturer, image, purchase/sales price, reorder level |
-| Supplier Master | `/app/suppliers` | `GET/POST/PATCH/DELETE /api/suppliers` | Supplier country, contact, product category, payment terms, rating |
-| Customer CRM | `/app/customers` | `GET/POST/PATCH/DELETE /api/customers` | Hospital/clinic/dealer/pharmacy details, territory, credit limit, assigned sales executive |
-| Supplier Inquiry | `/app/procurement/inquiries` | `GET/POST/PATCH/DELETE /api/supplier-inquiries` | Supplier request, product, quantity, target price, negotiation status |
-| Purchase Order | `/app/procurement/purchase-orders` | `GET/POST/PATCH/DELETE /api/purchase-orders`, `POST /api/purchase-orders/:id/approve` | PO number, supplier, product, quantity, currency, exchange rate, total value, approval status |
-| PI | `/app/import/pi` | `GET/POST/PATCH/DELETE /api/proforma-invoices` | PI number, supplier, product, amount, currency, approval owner |
-| LC | `/app/import/lc` | `GET/POST/PATCH/DELETE /api/lc-records` | LC number, bank, amount, expiry, shipment date |
-| TT Payment | `/app/import/tt` | `GET/POST/PATCH/DELETE /api/tt-payments` | TT number, supplier, amount, Swift copy reference, approval status |
-| Shipment | `/app/import/shipments` | `GET/POST/PATCH/DELETE /api/shipments` | BL, container, vessel, ETD, ETA, PO reference, shipment status |
-| Customs and Landed Cost | `/app/customs/landed-cost` | `GET/POST/PATCH/DELETE /api/customs/landed-cost`, `POST /api/v1/customs/landed-cost-preview` | FOB, freight, insurance, duty, VAT, C&F, transport, bank/LC cost, per-unit landed cost, margin preview |
-| GRN | `/app/warehouse/grn` | `GET/POST/PATCH/DELETE /api/grn`, `POST /api/grn/:id/post` | Received qty, rejected qty, batch, LOT, expiry, BIN, warehouse |
-| Stock | `/app/inventory/stock` | `GET/POST/PATCH/DELETE /api/inventory/stock` and `GET /api/v1/inventory/batches` | Current stock, sold qty, landed cost, stock asset value, warehouse |
-| Batches | `/app/inventory/batches` | `GET/POST/PATCH/DELETE /api/inventory/batches` | Batch, LOT, expiry, FEFO rank, BIN, quantity, expiry alert |
-| Movements | `/app/inventory/movements` | `GET/POST/PATCH/DELETE /api/inventory/movements` and `GET /api/v1/inventory/movements` | Stock in/out, transfer, adjustment, sale, return |
-| Physical Count | `/app/inventory/physical-counts` | `GET/POST/PATCH/DELETE /api/inventory/physical-counts` | System qty, counted qty, variance, approval status |
-| Sales Quotation | `/app/sales/quotations` | `GET/POST/PATCH/DELETE /api/sales/quotations` | Customer, product, quantity, price, discount, conversion status |
-| Sales Order | `/app/sales/orders` | `GET/POST/PATCH/DELETE /api/sales/orders` and `GET /api/v1/sales/orders` | Confirmed customer order, quantity, amount, order status |
-| Delivery Challan | `/app/sales/challans` | `GET/POST/PATCH/DELETE /api/sales/challans` | Order, customer, delivery date, vehicle, delivery status |
-| Sales Invoice | `/app/sales/invoices` | `GET/POST/PATCH/DELETE /api/sales/invoices` | Invoice, customer, product, sale price, revenue, hidden profit/cost fields by role |
-| Collection | `/app/sales/collections` | `GET/POST/PATCH/DELETE /api/sales/collections` | Receipt, invoice, customer, collection date, amount, method |
-| Sales Return | `/app/sales/returns` | `GET/POST/PATCH/DELETE /api/sales/returns` | Return number, invoice, product, quantity, reason, approval status |
-| Visits and GPS | `/app/sales/visits`, `/app/sales/mobile-control` | `GET/POST/PATCH/DELETE /api/sales/visits` | Visit date, customer, check-in time, GPS lat/lng, accuracy, follow-up |
-| Targets and Commission | `/app/sales/targets` | `GET/POST/PATCH/DELETE /api/sales/targets` | Sales rep, territory, monthly target, achieved amount, commission rate |
-| Accounts | `/app/accounts/*` | `/api/accounts/vouchers`, `/api/accounts/receivables`, `/api/accounts/payables`, `/api/accounts/cash-book`, `/api/accounts/bank-book`, `/api/accounts/general-ledger` | Voucher, receivable, payable, cash, bank and GL records |
-| Expenses | `/app/expenses` | `GET/POST/PATCH/DELETE /api/expenses` | Department expenses, category, amount, approval/posting status |
-| HR and Payroll | `/app/hr/*` | `/api/employees`, `/api/payroll`, `/api/attendance`, `/api/hr/leave-advances` | Employee, attendance, leave, salary advance, payroll |
-| Transport | `/app/transport` | `GET/POST/PATCH/DELETE /api/trips` | Vehicle, driver, trip, fuel cost, delivery cost |
-| Reports | `/app/reports` | `GET /api/reports/summary` and `GET /api/v1/reports/summary` | P&L, balance sheet, cash flow, stock, sales, collection and management reports |
-| AI | Bottom-right floating chat, `/app/ai` | `GET /api/ai/recommendations`, `POST /api/ai/recommendations/:id/approve`, `POST /api/ai/chat` | Role-aware recommendations, warnings, explanation and approval actions |
-| Audit and Security | `/app/audit`, `/app/settings`, `/app/profile` | `GET /api/audit-logs`, `GET /api/login-activity` | User action history, login activity, security settings placeholders, profile data |
-
-## How To Show API Calls In The Meeting
-
-Use this only if the client asks "Is it really connected?" or if you want to show backend readiness.
-
-1. Open the live site.
-2. Press `F12` in the browser.
-3. Open the `Network` tab.
-4. Filter by `Fetch/XHR`.
-5. Login with `superadmin@mipro.local`.
-6. Click Dashboard, Products, Sales Invoices or Landed Cost.
-7. Select one API request, such as `/api/dashboard`.
-8. Show the `Response` tab.
-
-Non-technical explanation while showing Network:
-
-> This line is the screen asking for data. The response is JSON, which is the structured data format a real backend sends to the frontend. Today this comes from the mock API. In production, the same request will come from the database.
-
-What to show:
-
-```text
-/api/auth/login              proves role-based login
-/api/dashboard               proves dashboard is data-driven
-/api/products                proves product table is API-loaded
-/api/sales/invoices          proves sales and profit fields are controlled
-/api/v1/customs/landed-cost-preview  proves calculator request/response behavior
-/api/ai/chat                 proves bottom-right role-aware assistant communication
-```
-
-What not to over-explain:
-
-- Do not spend too long inside technical headers.
-- Do not call the mock API a weakness.
-- Do not promise the database is already live.
-- Focus on the business value: the frontend is already prepared for real backend integration.
-
-## API Call Examples You Can Explain Out Loud
-
-Login request:
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "superadmin@mipro.local",
-  "password": "password123"
-}
-```
-
-What it means:
-
-> The frontend sends the user's login details. The API returns a session with name, role and permission context. After that, the navbar and pages are based on that role.
-
-Dashboard request:
-
-```http
-GET /api/dashboard
-x-role: Managing Director
-x-user-id: user-md
-```
-
-What it means:
-
-> The dashboard asks for management numbers. The API returns only what this role should see, such as sales, bank, stock, import status, receivable and payable.
-
-Sales Executive invoice request:
-
-```http
-GET /api/sales/invoices
-x-role: Sales Executive
-x-user-id: user-sales-1
-```
-
-What it means:
-
-> The API receives the user's role and id, so it returns only that person's own invoices. Cost, landed cost and profit fields are removed before the data reaches the screen.
-
-Create record request:
-
-```http
-POST /api/sales/quotations
-Content-Type: application/json
-
-{
-  "quotationNo": "QT-DEMO-001",
-  "customer": "Demo Hospital",
-  "product": "Dialyzer",
-  "quantity": 100,
-  "unitPrice": 850,
-  "status": "Draft"
-}
-```
-
-What it means:
-
-> The form is not decorative. It sends a new quotation record. In the prototype it stays temporarily in mock memory. In production it will be inserted into the database.
-
-Approve request:
-
-```http
-POST /api/purchase-orders/po-001/approve
-x-role: Managing Director
-```
-
-What it means:
-
-> The same record moves from pending to approved. This is how management control is represented in the workflow.
-
-Landed cost preview:
-
-```http
-POST /api/v1/customs/landed-cost-preview
-Content-Type: application/json
-
-{
-  "purchaseUnitFob": 50,
-  "seaFreightUnit": 4,
-  "customsDutyUnit": 8,
-  "cfCostUnit": 2,
-  "localTransportUnit": 1,
-  "bankLcInsuranceUnit": 1.5
-}
-```
-
-What it means:
-
-> The frontend sends the cost components. The API calculates the landed cost preview and returns the per-unit cost used for inventory valuation and margin analysis.
-
-On Vercel, `/api/:path*` is routed through the single mock API function at `api/index.ts`.
-
-Do not set `VITE_API_BASE_URL` for same-project Vercel deployment unless there is a separate backend domain. If it is set, it must be only the origin, not `/api`.
-
-Correct:
-
-```text
-VITE_API_BASE_URL=
-```
-
-Also acceptable:
-
-```text
-VITE_API_BASE_URL=https://medical-supplier-erp.vercel.app
-```
-
-Wrong:
-
-```text
-VITE_API_BASE_URL=http://localhost:4174
-VITE_API_BASE_URL=https://medical-supplier-erp.vercel.app/api
-```
-
-## Requirement Coverage
-
-| Requirement | Prototype Status |
+| Method and path | Purpose |
 |---|---|
-| Web ERP frontend | Complete functional prototype |
-| Role-based login/logout | Complete |
-| Role-specific navbar and route guards | Complete |
-| Super Admin, MD, Accounts, Import, Warehouse, Sales Manager, Sales Executive roles | Complete |
-| Sales Executive own-data restriction | Complete |
-| Hide purchase cost, landed cost and profit from sales roles | Complete |
-| User-level permission toggles | Complete frontend mock |
-| Company/branch/warehouse setup | Complete frontend/API mock |
-| Product/SKU master with demo images | Complete |
-| Supplier database | Complete |
-| Customer CRM | Complete |
-| Supplier inquiry, PI, PO | Complete |
-| LC and TT tracking | Complete |
-| Shipment BL/container/vessel/ETA tracking | Complete |
-| Customs landed cost calculator | Complete |
-| Document archive mock | Complete |
-| GRN with rejected qty | Complete |
-| BIN, batch, LOT, expiry | Complete |
-| FEFO and expiry alerts | Complete |
-| Stock movement ledger | Complete |
-| Physical count and variance | Complete |
-| Quotation/order/challan/invoice/collection | Complete |
-| Sales return | Complete |
-| Visits and GPS tracking | Complete frontend with map route view |
-| Sales targets and commission | Complete |
-| Cash book, bank book, GL, vouchers | Complete |
-| Receivables and payables | Complete |
-| P&L, balance sheet, cash flow previews | Complete |
-| Expense management | Complete |
-| HR, attendance, leave, advance, payroll | Complete |
-| Transport trip/fuel/delivery cost | Complete |
-| Reports center | Complete |
-| AI agents and floating role-aware AI chat | Complete frontend/mock API |
-| Audit, security, settings and profile | Complete |
-| Vercel deployment | Complete |
+| `POST /api/auth/login` | Start a role-based session |
+| `GET /api/auth/demo-users` | Populate demo identities |
+| `GET /api/me` | Read the current user |
+| `GET /api/dashboard` | Return role-safe KPIs and action lists |
 
-## What Is Demo vs Production
+### Imports
 
-Already demonstrated:
+| Method and path | Purpose |
+|---|---|
+| `GET/POST /api/imports` | List or create import cases |
+| `GET/PATCH/DELETE /api/imports/:id` | Read, edit, or remove an eligible draft |
+| `POST/PATCH/DELETE /api/imports/:id/items/*` | Maintain products within the same case |
+| `POST/PATCH/DELETE /api/imports/:id/costs/*` | Maintain sensitive named cost rows |
+| `POST /api/imports/:id/documents` | Attach document metadata |
+| `POST /api/imports/:id/cost-preview` | Calculate and explain allocations |
+| `POST /api/imports/:id/finalize` | Create immutable snapshot |
+| `POST /api/imports/:id/reopen` | Reopen with capability and reason |
+| `POST /api/imports/:id/receive` | Create receipt, batch, and stock-in movement |
+| `GET /api/imports/:id/receipts` | Read partial/final receiving history |
 
-- Functional UI flows
-- API-loaded data
-- Role-based route/action protection
-- Role-based data scoping
-- Cost/profit field hiding
-- Workflow actions
-- Search/filter/export/print
-- Mock AI and document archive
-- Deployed Vercel prototype
+### Inventory
 
-Production phase still needs:
+| Method and path | Purpose |
+|---|---|
+| `GET /api/inventory/stock` | Product-level availability |
+| `GET /api/inventory/batches` | Lot/batch/expiry stock |
+| `GET /api/inventory/movements` | Stock transaction history |
+| `POST /api/inventory/dispatch-preview` | Check quantity and FIFO recommendation |
 
-- Real database
-- Real authentication and password reset
-- Real file upload/storage for documents
-- Real GPS capture from mobile device
-- Real AI/OCR integration
-- Real PDF generation
-- Native or PWA mobile app packaging
-- Production audit immutability
-- Backup, encryption and infrastructure hardening
+### Sales
 
-## Presentation Wording
+| Method and path | Purpose |
+|---|---|
+| `GET/POST/PATCH/DELETE /api/customers/*` | Customer master/ledger |
+| `GET/POST/PATCH/DELETE /api/quotations/*` | Quotation workflow |
+| `POST /api/quotations/:id/convert` | Carry quote lines into an order |
+| `GET /api/orders` | List sales orders |
+| `GET/POST /api/deliveries` | Post actual batch delivery and stock-out |
+| `GET/POST /api/collections` | Post money receipt and reduce due |
 
-Use:
+### Accounts, reports, and settings
 
-> This prototype models your real import-to-accounts workflow. It shows where each department enters data, who approves, how landed cost becomes inventory valuation, how stock flows into sales, how collections flow into accounts, and how management gets live reports.
+| Method and path | Purpose |
+|---|---|
+| `GET/POST /api/expenses` | Read/post operating expense |
+| `POST /api/expenses/:id/reverse` | Reverse with reason |
+| `GET /api/accounts` | Cash/bank positions |
+| `GET /api/account-transactions` | Simple transaction ledger |
+| `GET /api/reports` | Grouped role-safe report values |
+| `GET/POST/PATCH/DELETE /api/products/*` | Product master |
+| `GET/POST/PATCH/DELETE /api/suppliers/*` | Supplier master |
+| `/api/settings/*` | Users, decisions, accounts, warehouse, presets, and print |
+| `GET /api/audit` | Narrow high-risk audit trail |
 
-Use:
+---
 
-> The backend is mocked for the presentation, but the frontend is already built around API contracts so the production backend can replace the mock without redesigning the screens.
+## 16. Temporary Data Behavior
 
-Avoid:
+This release is a complete functional frontend backed by an in-memory Express API.
 
-```text
-This is only a demo UI.
-```
+During a running demo, create/edit/delete/finalize/receive/deliver/collect/reverse actions work and connected screens update. The data is temporary:
 
-Avoid:
+- a local API restart resets the seed;
+- a Vercel function cold start or redeployment may reset it;
+- different serverless instances may not share the same memory;
+- uploaded files are metadata only.
 
-```text
-Production database, real GPS, real file storage and real AI are already live.
-```
+This is correct for frontend workflow approval. Production requires persistent authentication, database, storage, authorization, audit retention, backups, and transactions, with Supabase/Postgres being the planned replacement.
 
-## Client Questions and Answers
+---
 
-Q: Can sales executives see company profit?
+## 17. Four Acceptance Scenarios
 
-A: No. Sales Executive and Sales Manager views hide purchase cost, landed cost, COGS and profit fields. Sales Executive also sees only own customers and documents.
+### A. Multi-product import costing
 
-Q: Can users delete finalized data?
+- One LC contains Dialyzer, Blood Line Sets, and AV Fistula.
+- Products have different quantities, FOB values, CBM, and assessed duty.
+- Costs use all five allocation methods.
+- Every cost and final shipment total reconcile exactly.
+- Finalization creates an immutable snapshot.
+- Partial and final receipt create stock at inherited cost.
 
-A: Normal users cannot edit/delete finalized records. Super Admin has override in the prototype; production should audit overrides strictly.
+### B. FIFO stock selection
 
-Q: Can import cost automatically affect stock valuation?
+- An older lot and newer lot both have stock.
+- Dispatch recommends the older lot.
+- Selecting the newer lot shows a warning.
+- Authorized override requires a reason and audit entry.
 
-A: Yes. Landed cost is calculated before GRN/stock valuation. In production, approved landed cost would become the unit cost used in inventory and profit reports.
+### C. Quotation to collection
 
-Q: Can management see field team location?
+- Create a quotation.
+- Convert it without re-entering lines.
+- Post delivery from an actual batch.
+- Stock decreases.
+- Customer due increases.
+- Collection reduces due and updates the chosen account.
 
-A: The prototype shows mobile sales control with GPS check-in and route review. Production mobile app can capture real device GPS and sync it to the ERP.
+### D. Expense isolation
 
-Q: Does AI make final decisions?
+- Post general office expense and TA/DA.
+- Expense/account reports update.
+- Finalized import and product landed costs do not change.
 
-A: No. AI recommends, extracts, warns and summarizes. Human approval remains required.
+These scenarios are covered by automated unit, API-flow, role, and browser smoke tests.
 
-Q: Is the deployed prototype connected to a real database?
+---
 
-A: No. It uses a mock API for presentation. The production phase replaces mock storage with a real database, authentication and file storage.
+## 18. Recommended Live Presentation Order
 
-## Verification
+1. Landing page: explain the two flows and shared warehouse bridge.
+2. Login: choose Super Admin and explain fixed role identity.
+3. Dashboard: show no more than six KPIs and action lists.
+4. Imports: open LC-77612.
+5. Import sections: show one record accumulating all commercial, shipment, document, cost, result, and receipt data.
+6. Cost preview: expand an allocation explanation and explain exact reconciliation.
+7. Inventory: show product images, stock, batches, expiry, and FIFO.
+8. Sales: show customer ledger and quotation-to-order connection.
+9. Deliveries: explain actual batch selection and stock-out.
+10. Collections: explain due and account update.
+11. Expenses & Accounts: prove operating costs stay separate.
+12. Reports: show grouped summaries and narrow audit.
+13. Settings: show users/capabilities and pending client decisions.
+14. Sign out and sign in as Sales Executive: prove the smaller own-record navigation and direct-URL denial.
 
-Run before presenting locally:
+---
 
-```bash
-npm run lint
-npm run build
-npm run smoke
-```
+## 19. Honest Production Position
 
-Live API checks:
+### Complete in this release
 
-```text
-https://medical-supplier-erp.vercel.app/api/health
-https://medical-supplier-erp.vercel.app/api/auth/demo-users
-https://medical-supplier-erp.vercel.app/api/v1/dashboard/summary
-```
+- Simplified route and navigation architecture
+- Role and capability-aware frontend/server behavior
+- Connected import, costing, receipt, stock, sales, collection, expense, report, and settings flows
+- Deterministic Decimal.js allocation engine
+- Typed DTO/domain services and Zod response validation
+- Print previews
+- Responsive desktop/mobile frontend
+- Vercel-compatible same-origin mock API
+- Automated acceptance coverage
 
-Expected:
+### Required for production backend phase
 
-- Each returns JSON with `"success": true`.
-- Login works with demo accounts.
-- Dashboard opens after login.
+- Persistent database and file storage
+- Real authentication and password/email delivery
+- Server/database transactions and row-level security
+- Durable audit history
+- PDF generation/storage and document upload
+- Excel migration/import tooling
+- Backups, monitoring, and operational deployment controls
 
-## Best Closing Line
+The frontend is ready for client workflow approval and backend integration. It must not be represented as a live production database.
 
-> We have already mapped the client business from overseas supplier inquiry to landed cost, warehouse batch traceability, hospital sales, collection, accounts and executive reporting. The next step is final SRS confirmation and replacing the mock API with the production backend.
+---
+
+## 20. Likely Client Questions
+
+**Why are there fewer tabs now?**
+
+Because PO, PI, LC, shipment, costs, and receiving are stages of one import job. Fewer destinations reduce duplicate entry and training effort.
+
+**Can one LC contain multiple products?**
+
+Yes. LC-77612 demonstrates different products, quantities, FOB values, CBM, and duty under one import case.
+
+**Can we add a new type of import cost?**
+
+Yes. Use `+ Add Cost`, name it, enter currency/rate/payment details, and explicitly choose its allocation rule.
+
+**Does the system calculate customs duty?**
+
+No. It stores the final officially assessed amount per product and allocates it per unit. It does not invent customs formulas.
+
+**Can sales staff see landed cost?**
+
+Not by default. Sensitive values require explicit capabilities.
+
+**Does FIFO ignore expiry?**
+
+No. FIFO controls recommendation order; expiry remains visible and alertable at every batch decision.
+
+**Can a newer batch be used?**
+
+Yes, only for a capable user with a written reason. The override is audited.
+
+**Where is invoice generation?**
+
+The latest client flow is quotation -> order -> challan -> collection. Invoice is shown in the confirmation queue until the client defines whether it is mandatory or optional.
+
+**Where are AI, GPS, HR, and fleet?**
+
+They were intentionally retired from this phase by the latest simplified plan. The core web data model can support later mobile/AI phases after the operational flow is approved.
+
+**Will demo changes remain forever?**
+
+No. They remain during the running mock session and reset with the serverless process. Persistence is the next backend phase.
