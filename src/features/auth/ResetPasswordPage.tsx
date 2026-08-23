@@ -16,7 +16,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthShell title="Reset password" subtitle="Choose a new password for an assigned ERP account.">
       {done ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
           <strong>Password updated for this running demo session.</strong>
           <Link className="mt-4 block font-bold underline" to="/login">
             Return to login

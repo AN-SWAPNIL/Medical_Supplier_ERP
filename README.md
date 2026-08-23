@@ -1,6 +1,6 @@
 # MIPRO Medical Supplier ERP
 
-A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. The latest simplified plan is the source of truth.
+A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. The simplified plan plus `files/Medical_Supplier_ERP_Simplified_Plan_update1.md` are the current source of truth.
 
 ## Current Scope
 
@@ -10,6 +10,8 @@ The application connects:
 Import case -> landed-cost snapshot -> warehouse batch stock
 -> quotation -> order -> delivery -> collection
 ```
+
+Import cases begin at PO stage before PI/LC, statuses are action-derived, and authoritative item/cost math runs on the API. Legacy stock/customer balances can be migrated through Settings.
 
 Operating expenses and cash/bank transactions are tracked separately. The active application has a maximum of seven areas:
 
@@ -123,13 +125,18 @@ Customs duty is entered as the final assessed amount per product. The applicatio
 
 - Receiving is available only after landed-cost finalization.
 - Receipt cost is inherited server-side from the snapshot.
+- Ordinary landed-cost reopen is blocked after the first receipt.
 - Lot, batch, manufacturing date, expiry and location are required.
-- FIFO recommends the oldest eligible receipt while expiry remains visible.
+- FIFO can split one dispatch across several oldest non-expired eligible batches while expiry remains visible.
 - A newer-lot override requires capability, reason and audit.
+- Opening stock joins the same FIFO sequence; product aliases normalize legacy names.
 - Quotation lines carry into the order without re-entry.
-- Delivery posts stock-out from the selected batch and creates customer due.
-- Collection reduces customer/order due and credits the selected account.
+- Authorized owners can preview expected FIFO COGS/profit; realized report profit uses dispatched batch cost.
+- Delivery uses the API-proposed oldest eligible batch plan, can split one line across several batches, posts stock-out, and creates customer due.
+- Collection requires a real active account, reduces customer/order due and credits that account.
 - Operating expenses never affect landed cost.
+- Reports apply API-side date filters and export actual detail rows.
+- Digital/preprinted A4 prints use the supplied MIPRO/LED stationery and Order Receiving Sheet structure.
 
 ## Commands
 
@@ -142,7 +149,7 @@ npm run build
 npm run smoke
 ```
 
-`npm run test:flows` needs the local API running on port 4174. Override with `API_TEST_BASE_URL` when necessary.
+`npm run test:flows` starts an isolated mock API automatically. Set `API_TEST_BASE_URL` only when intentionally testing an already-running API.
 
 `npm run smoke` needs the frontend and API running. Override the frontend origin with:
 

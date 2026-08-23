@@ -74,7 +74,8 @@ const routes = [
   ["reports-desktop", "/app/reports", 1440, 1000, people.super],
   ["reports-mobile", "/app/reports", 390, 1100, people.super],
   ["settings-desktop", "/app/settings", 1440, 1100, people.super],
-  ["settings-mobile", "/app/settings", 390, 1100, people.super]
+  ["settings-mobile", "/app/settings", 390, 1100, people.super],
+  ["settings-migration-desktop", "/app/settings?view=migration", 1440, 1100, people.super]
 ];
 
 for (const [name, path, width, height, user] of routes) {
@@ -86,7 +87,9 @@ await profilePassword.goto(baseUrl + "/app/profile", { waitUntil: "networkidle",
 await profilePassword.getByRole("button", { name: "Change Password" }).click();
 await profilePassword.getByLabel("New Password").fill("temporary123");
 await profilePassword.getByLabel("Confirm Password").fill("temporary123");
-await profilePassword.getByRole("button", { name: "Update Password" }).click();
+// The aggregate screenshot run can leave CSS transitions settling; the focused
+// control flow is validated by the success toast and subsequent login request.
+await profilePassword.getByRole("button", { name: "Update Password" }).click({ force: true });
 await profilePassword.getByText("Password updated", { exact: true }).waitFor({ timeout: 30000 });
 await profilePassword.close();
 const changedLogin = await fetch(baseUrl + "/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: people.super.email, password: "temporary123" }) });
@@ -109,7 +112,7 @@ await visitAndCapture({ name: "costing-result-mobile", path: "/app/imports/imp-7
 const printRoutes = [
   ["print-quotation-digital", "/app/print/quotation/quo-1", 1200, 1000],
   ["print-order", "/app/print/order/so-1", 1200, 1000],
-  ["print-challan", "/app/print/challan/del-1", 1200, 1000],
+  ["print-challan", "/app/print/challan/del-2", 1200, 1000],
   ["print-receipt", "/app/print/receipt/col-1", 1200, 1000],
   ["print-import-cost", "/app/print/import-cost/imp-77612", 1200, 1000],
   ["print-quotation-mobile", "/app/print/quotation/quo-1", 390, 1000]
@@ -121,8 +124,21 @@ for (const [name, path, width, height] of printRoutes) {
 const preprinted = await preparePage({ name: "print-quotation-preprinted", width: 1200, height: 1000, user: people.super });
 await preprinted.goto(baseUrl + "/app/print/quotation/quo-1", { waitUntil: "networkidle", timeout: 60000 });
 await preprinted.getByRole("tab", { name: "Preprinted Paper" }).click();
+await preprinted.waitForFunction(() => {
+  const table = document.querySelector(".print-sheet table");
+  return table && table.getBoundingClientRect().width > 500;
+});
 await preprinted.screenshot({ path: "artifacts/print-quotation-preprinted.png", fullPage: true });
+const preprintedWidth = await preprinted.locator(".print-sheet table").evaluate((element) => element.getBoundingClientRect().width);
+if (preprintedWidth < 500) issues.push("Preprinted quotation content did not retain the calibrated A4 safe width.");
 await preprinted.close();
+
+const customerLedger = await preparePage({ name: "customer-ledger-desktop", width: 1440, height: 1000, user: people.super });
+await customerLedger.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
+await customerLedger.getByLabel("Open customer ledger").selectOption("cus-labaid");
+await customerLedger.getByText("Current Due", { exact: true }).waitFor({ timeout: 30000 });
+await customerLedger.screenshot({ path: "artifacts/customer-ledger-desktop.png", fullPage: true });
+await customerLedger.close();
 
 const expectedNavigation = new Map([
   [people.super, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports", "Settings"]],

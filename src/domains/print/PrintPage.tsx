@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Ruler, Stamp } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
-import { ErrorBlock, LoadingBlock, Segmented, TableFrame } from "../components";
+import { ErrorBlock, LoadingBlock, Segmented } from "../components";
 import { importService, printService, salesService } from "../services";
-import type { Collection, Delivery, ImportCase, Quotation, SalesOrder } from "../erp.types";
+import type { Collection, Delivery, ImportCase, PrintIdentity, Quotation, SalesOrder } from "../erp.types";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
 type LetterheadMode = "digital" | "preprinted";
@@ -14,76 +14,85 @@ type Printable = Quotation | SalesOrder | Delivery | Collection | ImportCase;
 export default function PrintPage() {
   const { documentType = "", id = "" } = useParams();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<LetterheadMode>("digital");
+  const [mode, setMode] = useState<LetterheadMode | "">("");
+  const [identityId, setIdentityId] = useState("");
   const configQuery = useQuery({ queryKey: ["print", "configuration"], queryFn: printService.configuration });
   const recordQuery = useQuery({
     queryKey: ["print", documentType, id],
     queryFn: async (): Promise<Printable> => {
-      if (documentType === "quotation") {
-        const rows = await salesService.quotations();
-        const record = rows.find((row) => row.id === id);
-        if (record) return record;
-      }
-      if (documentType === "order") {
-        const rows = await salesService.orders();
-        const record = rows.find((row) => row.id === id);
-        if (record) return record;
-      }
-      if (documentType === "challan") {
-        const rows = await salesService.deliveries();
-        const record = rows.find((row) => row.id === id);
-        if (record) return record;
-      }
-      if (documentType === "receipt") {
-        const rows = await salesService.collections();
-        const record = rows.find((row) => row.id === id);
-        if (record) return record;
-      }
+      if (documentType === "quotation") return find(await salesService.quotations(), id);
+      if (documentType === "order") return find(await salesService.orders(), id);
+      if (documentType === "challan") return find(await salesService.deliveries(), id);
+      if (documentType === "receipt") return find(await salesService.collections(), id);
       if (documentType === "import-cost") return importService.get(id);
       throw new Error("Printable record not found or unavailable for this role.");
     }
   });
 
-  if (configQuery.isLoading || recordQuery.isLoading) return <LoadingBlock label="Preparing print view" />;
+  if (configQuery.isLoading || recordQuery.isLoading) return <LoadingBlock label="Preparing calibrated A4 print view" />;
   if (configQuery.isError || recordQuery.isError || !recordQuery.data || !configQuery.data) return <ErrorBlock error={configQuery.error ?? recordQuery.error} />;
   const config = configQuery.data;
   const record = recordQuery.data;
-  const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "SALES ORDER" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : "IMPORT LANDED COST";
+  const identity = config.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config.identities[0];
+  const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "ORDER RECEIVING SHEET" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : "IMPORT LANDED COST";
+  const effectiveMode: LetterheadMode = mode || (config.defaultLetterheadMode === "Digital" ? "digital" : "preprinted");
+  const digital = effectiveMode === "digital";
 
   return (
     <>
-      <div className="no-print flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="no-print flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between">
         <Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(-1)}>Back</Button>
-        {documentType === "quotation" ? <Segmented value={mode} onChange={setMode} ariaLabel="Letterhead mode" options={[{ value: "digital", label: "Digital Letterhead" }, { value: "preprinted", label: "Preprinted Paper" }]} /> : null}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><Stamp className="h-4 w-4" /><select className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm" value={identity.id} onChange={(event) => setIdentityId(event.target.value)}>{config.identities.map((entry) => <option value={entry.id} key={entry.id}>{entry.displayName}</option>)}</select></label>
+          <Segmented value={effectiveMode} onChange={setMode} ariaLabel="Letterhead mode" options={[{ value: "digital", label: "Digital Letterhead" }, { value: "preprinted", label: "Preprinted Paper" }]} />
+        </div>
         <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button>
       </div>
 
-      <article className={"print-sheet mx-auto min-h-[1120px] w-full max-w-[900px] bg-white px-4 pb-10 shadow-lg sm:px-14 " + (mode === "preprinted" && documentType === "quotation" ? "pt-52" : "pt-10")}>
-        {mode === "digital" || documentType !== "quotation" ? (
-          <header className="flex flex-col items-start gap-4 border-b-2 border-red-700 pb-5 sm:flex-row sm:justify-between sm:gap-6">
-            <img className="h-16 max-w-52 object-contain object-left" src={config.logoUrl} alt={config.companyName} />
-            <div className="max-w-full break-words text-left text-xs leading-5 text-slate-600 sm:text-right"><strong className="block text-base text-slate-950">{config.companyName}</strong><span className="block">{config.address}</span><span className="block">{config.phone} · {config.email}</span><span className="block">{config.website}</span></div>
-          </header>
-        ) : null}
-
-        <div className="mt-8 flex items-start justify-between gap-6">
-          <div><h1 className="text-2xl font-bold text-slate-950">{title}</h1><div className="mt-1 h-1 w-16 bg-red-700" /></div>
-          <DocumentReference type={documentType} record={record} />
-        </div>
-
-        <div className="mt-8">
-          {documentType === "quotation" ? <QuotationDocument record={record as Quotation} /> : null}
-          {documentType === "order" ? <OrderDocument record={record as SalesOrder} /> : null}
-          {documentType === "challan" ? <ChallanDocument record={record as Delivery} /> : null}
-          {documentType === "receipt" ? <ReceiptDocument record={record as Collection} /> : null}
-          {documentType === "import-cost" ? <ImportCostDocument record={record as ImportCase} /> : null}
-        </div>
-
-        <footer className="mt-16 grid grid-cols-2 gap-16 text-xs text-slate-500"><div className="border-t border-slate-400 pt-2">Received / Accepted By</div><div className="border-t border-slate-400 pt-2 text-right">{config.authorizedSignatory}</div></footer>
-        <div className="mt-10 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-400">{config.footerText}</div>
-      </article>
+      <div className="print-preview overflow-x-auto rounded-md bg-slate-200 p-3 sm:p-6">
+        <article
+          className="print-sheet relative mx-auto overflow-hidden bg-white text-slate-950 shadow-xl"
+          data-document-type={documentType}
+          data-letterhead-mode={effectiveMode}
+          data-print-identity={identity.id}
+          style={{
+            width: "210mm",
+            minHeight: "297mm",
+            backgroundImage: digital ? `url(${identity.backgroundImageUrl})` : "none",
+            backgroundPosition: "top left",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "210mm 297mm"
+          }}
+        >
+          <div style={{ paddingTop: `${identity.safeArea.topMm}mm`, paddingRight: `${identity.safeArea.rightMm}mm`, paddingBottom: `${identity.safeArea.bottomMm}mm`, paddingLeft: `${identity.safeArea.leftMm}mm` }}>
+            {!digital ? <PreprintedGuide identity={identity} /> : null}
+            <div className="flex items-start justify-between gap-8 border-b border-blue-900 pb-3">
+              <div><h1 className="text-[18px] font-black tracking-normal text-blue-950">{title}</h1><div className="mt-1 h-1 w-14 bg-cyan-500" /></div>
+              <DocumentReference type={documentType} record={record} />
+            </div>
+            <div className="mt-5">
+              {documentType === "quotation" ? <QuotationDocument record={record as Quotation} /> : null}
+              {documentType === "order" ? <OrderReceivingSheet record={record as SalesOrder} identity={identity} /> : null}
+              {documentType === "challan" ? <ChallanDocument record={record as Delivery} /> : null}
+              {documentType === "receipt" ? <ReceiptDocument record={record as Collection} /> : null}
+              {documentType === "import-cost" ? <ImportCostDocument record={record as ImportCase} /> : null}
+            </div>
+          </div>
+        </article>
+      </div>
+      <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Physical calibration:</strong> 210 x 297 mm, zero browser margin, content safe area {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm. Choose "Actual size / 100%" in the print dialog.</p></div>
     </>
   );
+}
+
+function find<T extends { id: string }>(rows: T[], id: string) {
+  const record = rows.find((row) => row.id === id);
+  if (!record) throw new Error("Printable record not found or unavailable for this role.");
+  return record;
+}
+
+function PreprintedGuide({ identity }: { identity: PrintIdentity }) {
+  return <div className="no-print absolute left-2 top-2 border border-dashed border-cyan-400 bg-cyan-50 p-2 text-[9px] text-cyan-900">Preprinted {identity.displayName}: artwork omitted; calibrated content only.</div>;
 }
 
 function DocumentReference({ type, record }: { type: string; record: Printable }) {
@@ -94,41 +103,47 @@ function DocumentReference({ type, record }: { type: string; record: Printable }
   if (type === "challan") { reference = (record as Delivery).challanNumber; date = (record as Delivery).date; }
   if (type === "receipt") { reference = (record as Collection).receiptNumber; date = (record as Collection).date; }
   if (type === "import-cost") { reference = (record as ImportCase).primaryReference; date = (record as ImportCase).snapshot?.finalizedAt.slice(0, 10) ?? ""; }
-  return <dl className="grid gap-1 text-right text-xs"><div><dt className="inline text-slate-500">Reference: </dt><dd className="inline font-bold text-slate-900">{reference}</dd></div><div><dt className="inline text-slate-500">Date: </dt><dd className="inline font-bold text-slate-900">{date}</dd></div></dl>;
+  return <dl className="grid gap-1 text-right text-[10px]"><div><dt className="inline text-slate-500">Reference: </dt><dd className="inline font-bold">{reference}</dd></div><div><dt className="inline text-slate-500">Date: </dt><dd className="inline font-bold">{date}</dd></div></dl>;
 }
 
-function CustomerBlock({ name, terms }: { name: string; terms?: string }) {
-  return <div className="mb-6 rounded border border-slate-200 p-4"><span className="text-[10px] font-bold uppercase text-slate-400">Prepared For</span><strong className="mt-1 block text-base">{name}</strong>{terms ? <span className="text-xs text-slate-500">Terms: {terms}</span> : null}</div>;
+function CustomerBlock({ name, address, phone, contact, terms }: { name: string; address?: string; phone?: string; contact?: string; terms?: string }) {
+  return <div className="mb-4 border border-slate-300 bg-white/90 p-3"><span className="text-[8px] font-bold uppercase text-blue-700">Prepared For</span><strong className="mt-1 block text-[13px]">{name}</strong>{address ? <span className="block text-[10px] text-slate-600">{address}</span> : null}<span className="block text-[10px] text-slate-600">{[contact, phone].filter(Boolean).join(" | ")}</span>{terms ? <span className="mt-1 block text-[10px] text-slate-600"><b>Terms:</b> {terms}</span> : null}</div>;
 }
 
-function LinesTable({ lines, showBatch = false }: { lines: Array<{ id: string; productCode: string; productName: string; quantity: string; unitPrice: string; discount: string; lineTotal: string; batchNumber?: string }>; showBatch?: boolean }) {
-  return <><div className="grid gap-2 sm:hidden">{lines.map((line, index) => <article className="rounded border border-slate-200 p-3 text-xs" key={line.id}><div className="flex items-start justify-between gap-3"><div><span className="text-slate-400">#{index + 1}</span><strong className="ml-2">{line.productName}</strong><span className="ml-2 text-slate-500">{line.productCode}</span></div><strong className="shrink-0">{formatCurrency(line.lineTotal)}</strong></div><dl className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2"><div><dt className="text-slate-500">Quantity</dt><dd className="font-semibold">{formatNumber(line.quantity)}</dd></div><div><dt className="text-slate-500">Unit price</dt><dd className="font-semibold">{formatCurrency(line.unitPrice)}</dd></div><div><dt className="text-slate-500">Discount</dt><dd className="font-semibold">{formatCurrency(line.discount)}</dd></div>{showBatch ? <div><dt className="text-slate-500">Batch</dt><dd className="font-semibold">{line.batchNumber}</dd></div> : null}</dl></article>)}</div><div className="hidden sm:block"><TableFrame><table className="min-w-full border-collapse text-xs"><thead><tr className="bg-slate-900 text-white"><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">Product</th>{showBatch ? <th className="px-3 py-2 text-left">Batch</th> : null}<th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Unit Price</th><th className="px-3 py-2 text-right">Discount</th><th className="px-3 py-2 text-right">Amount</th></tr></thead><tbody>{lines.map((line, index) => <tr className="border-b border-slate-200" key={line.id}><td className="px-3 py-3">{index + 1}</td><td className="px-3 py-3"><strong className="block">{line.productName}</strong><span className="text-slate-500">{line.productCode}</span></td>{showBatch ? <td className="px-3 py-3">{line.batchNumber}</td> : null}<td className="px-3 py-3 text-right">{formatNumber(line.quantity)}</td><td className="px-3 py-3 text-right">{formatCurrency(line.unitPrice)}</td><td className="px-3 py-3 text-right">{formatCurrency(line.discount)}</td><td className="px-3 py-3 text-right font-bold">{formatCurrency(line.lineTotal)}</td></tr>)}</tbody></table></TableFrame></div></>;
+type PrintableLine = { id: string; productCode: string; productName: string; quantity: string; unitPrice: string; discount: string; lineTotal: string; batchNumber?: string };
+
+function LinesTable({ lines, showBatch = false, simple = false }: { lines: PrintableLine[]; showBatch?: boolean; simple?: boolean }) {
+  return <table className="w-full table-fixed border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="w-7 border border-blue-950 px-2 py-2 text-left">#</th><th className="border border-blue-950 px-2 py-2 text-left">Particulars</th>{showBatch ? <th className="w-24 border border-blue-950 px-2 py-2 text-left">Batch</th> : null}<th className="w-20 border border-blue-950 px-2 py-2 text-right">Qty in Pcs</th><th className="w-24 border border-blue-950 px-2 py-2 text-right">Unit Price</th>{!simple ? <th className="w-20 border border-blue-950 px-2 py-2 text-right">Discount</th> : null}<th className="w-24 border border-blue-950 px-2 py-2 text-right">Total Value</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.id}-${line.batchNumber ?? "line"}`}><td className="border border-slate-400 px-2 py-2">{index + 1}</td><td className="border border-slate-400 px-2 py-2"><strong>{line.productName}</strong><span className="ml-2 text-slate-500">{line.productCode}</span></td>{showBatch ? <td className="border border-slate-400 px-2 py-2">{line.batchNumber}</td> : null}<td className="border border-slate-400 px-2 py-2 text-right">{formatNumber(line.quantity)}</td><td className="border border-slate-400 px-2 py-2 text-right">{formatCurrency(line.unitPrice)}</td>{!simple ? <td className="border border-slate-400 px-2 py-2 text-right">{formatCurrency(line.discount)}</td> : null}<td className="border border-slate-400 px-2 py-2 text-right font-bold">{formatCurrency(line.lineTotal)}</td></tr>)}</tbody></table>;
 }
 
 function Totals({ subtotal, discount, total }: { subtotal: string; discount: string; total: string }) {
-  return <dl className="ml-auto mt-5 grid w-72 gap-2 text-sm"><div className="flex justify-between"><dt>Subtotal</dt><dd>{formatCurrency(subtotal)}</dd></div><div className="flex justify-between"><dt>Discount</dt><dd>{formatCurrency(discount)}</dd></div><div className="flex justify-between border-t-2 border-slate-900 pt-2 text-base font-bold"><dt>Total</dt><dd>{formatCurrency(total)}</dd></div></dl>;
+  return <dl className="ml-auto mt-3 grid w-64 gap-1 text-[10px]"><div className="flex justify-between"><dt>Subtotal</dt><dd>{formatCurrency(subtotal)}</dd></div><div className="flex justify-between"><dt>Discount</dt><dd>{formatCurrency(discount)}</dd></div><div className="flex justify-between border-t-2 border-blue-950 pt-2 text-xs font-bold"><dt>Total</dt><dd>{formatCurrency(total)}</dd></div></dl>;
 }
 
 function QuotationDocument({ record }: { record: Quotation }) {
-  return <><CustomerBlock name={record.customerName} terms={record.paymentTerms} /><LinesTable lines={record.lines} /><Totals subtotal={record.subtotal} discount={record.discountTotal} total={record.total} /><div className="mt-8 grid gap-2 text-xs text-slate-600"><p><strong>Validity:</strong> {record.validityDays} days from quotation date</p><p><strong>Remarks:</strong> {record.remarks ?? "-"}</p></div></>;
+  return <><CustomerBlock name={record.customerName} address={record.customerAddressSnapshot} phone={record.customerPhoneSnapshot} contact={record.customerContactSnapshot} terms={record.paymentTerms} /><LinesTable lines={record.lines} /><Totals subtotal={record.subtotal} discount={record.discountTotal} total={record.total} /><div className="mt-5 grid gap-1 text-[10px] text-slate-700"><p><strong>Validity:</strong> {record.validityDays} days from quotation date</p><p><strong>Remarks:</strong> {record.remarks ?? "-"}</p></div><SignatureRow labels={["Customer Acceptance", "Head of Sales", "Authorized Signatory"]} /></>;
 }
 
-function OrderDocument({ record }: { record: SalesOrder }) {
+function OrderReceivingSheet({ record, identity }: { record: SalesOrder; identity: PrintIdentity }) {
   const discount = record.lines.reduce((sum, line) => sum + Number(line.discount), 0).toFixed(2);
   const subtotal = record.lines.reduce((sum, line) => sum + Number(line.quantity) * Number(line.unitPrice), 0).toFixed(2);
-  return <><CustomerBlock name={record.customerName} terms={record.paymentConditions} /><LinesTable lines={record.lines} /><Totals subtotal={subtotal} discount={discount} total={record.total} /><p className="mt-8 text-xs text-slate-600"><strong>Delivery instruction:</strong> {record.deliveryInstruction}</p></>;
+  return <div className="text-[10px]"><div className="mb-3 grid grid-cols-2 gap-4"><div><b className="text-blue-950">LED TRACKERS</b><strong className="block text-[12px]">MIPRO Healthcare Corporation</strong></div><div className="text-right"><b>Order No:</b> {record.orderNumber}<br /><b>Date:</b> {record.date}</div></div><LinesTable lines={record.lines} simple /><Totals subtotal={subtotal} discount={discount} total={record.total} /><section className="mt-4 border border-slate-500"><div className="min-h-14 border-b border-slate-400 p-2"><b>Customer&apos;s Address & Phone Number:</b><p className="mt-1">{record.customerName} | {record.customerAddressSnapshot ?? "-"} | {record.customerPhoneSnapshot ?? "-"}</p></div><div className="min-h-20 p-2"><b>Payment Conditions:</b><p className="mt-1 whitespace-pre-wrap">{record.paymentConditions}</p><p className="mt-3">Payment made to: <b>{identity.displayName}</b> | Ref: {record.paymentReference ?? "........................"} | Date: {record.paymentDate ?? "................"}</p></div><div className="grid grid-cols-2 border-t border-slate-400"><div className="p-2"><b>Demand Received by:</b><p>Name: {record.orderReceivedByName ?? ""}</p><p>Designation: {record.orderReceivedByDesignation ?? ""}</p></div><div className="border-l border-slate-400 p-2 text-right"><b>Order Given by: (Seal & Sign)</b><p className="mt-3">{record.orderGivenBy ?? ""}</p></div></div></section><section className="mt-4 border border-slate-500"><div className="bg-slate-800 py-1.5 text-center font-bold text-white">Office Use Only</div><div className="grid min-h-20 grid-cols-2 gap-2 p-2"><div><p>Order No.: {record.orderNumber}</p><p className="mt-2">Payment Confirmation: {record.paymentConfirmation ?? "Pending"}</p><p className="mt-2">Delivery Date: {record.requestedDeliveryDate ?? "Pending"}</p></div><div className="text-right">Date: {record.date}</div></div><div className="grid grid-cols-3 border-t border-slate-400 p-2 text-center"><span>Head of Sales<br />{record.headOfSalesSignoff ?? ""}</span><span>COE<br />{record.coeSignoff ?? ""}</span><span>Managing Director<br />{record.mdSignoff ?? ""}</span></div></section><p className="mt-3 text-[9px] text-slate-600"><b>Delivery instruction:</b> {record.deliveryInstruction}</p></div>;
 }
 
 function ChallanDocument({ record }: { record: Delivery }) {
-  return <><CustomerBlock name={record.customerName} /><LinesTable lines={record.lines} showBatch /><div className="mt-8 grid gap-2 text-xs text-slate-600"><p><strong>Receiver:</strong> {record.receiverName ?? "-"}</p><p><strong>Remarks:</strong> {record.remarks || "-"}</p></div></>;
+  return <><CustomerBlock name={record.customerName} /><LinesTable lines={record.lines} showBatch simple /><div className="mt-5 grid gap-1 text-[10px] text-slate-700"><p><strong>Receiver:</strong> {record.receiverName ?? "-"}</p><p><strong>Remarks:</strong> {record.remarks || "-"}</p></div><SignatureRow labels={["Prepared By", "Receiver Seal & Signature", "Authorized By"]} /></>;
 }
 
 function ReceiptDocument({ record }: { record: Collection }) {
-  return <><CustomerBlock name={record.customerName} /><div className="rounded border-2 border-slate-900 p-8 text-center"><span className="text-xs font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-4xl text-slate-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-sm text-slate-600">via {record.paymentMode}</span></div><dl className="mt-8 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-slate-500">Order Reference</dt><dd className="font-semibold">{record.orderId ?? "Customer ledger"}</dd></div><div><dt className="text-xs text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-xs text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl></>;
+  return <><CustomerBlock name={record.customerName} /><div className="border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-xs text-slate-600">via {record.paymentMode}</span></div><dl className="mt-5 grid gap-3 text-[10px] sm:grid-cols-2"><div><dt className="text-slate-500">Order Reference</dt><dd className="font-semibold">{record.orderId ?? "Customer ledger"}</dd></div><div><dt className="text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl><SignatureRow labels={["Received From", "Accounts", "Authorized Signatory"]} /></>;
 }
 
 function ImportCostDocument({ record }: { record: ImportCase }) {
   const snapshot = record.snapshot;
-  if (!snapshot) return <p className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No finalized landed-cost snapshot is available.</p>;
-  return <><div className="mb-6 grid gap-3 sm:grid-cols-3"><div><span className="text-xs text-slate-500">Supplier</span><strong className="block">{record.supplierName}</strong></div><div><span className="text-xs text-slate-500">PO / PI</span><strong className="block">{record.poNumber} / {record.piNumber}</strong></div><div><span className="text-xs text-slate-500">Snapshot</span><strong className="block">Version {snapshot.version} · Immutable</strong></div></div><TableFrame><table className="min-w-full text-xs"><thead><tr className="bg-slate-900 text-white"><th className="px-3 py-2 text-left">Product</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">FOB / unit</th><th className="px-3 py-2 text-right">Import cost / unit</th><th className="px-3 py-2 text-right">Landed / unit</th><th className="px-3 py-2 text-right">Total</th></tr></thead><tbody>{snapshot.products.map((product) => <tr className="border-b border-slate-200" key={product.importItemId}><td className="px-3 py-3"><strong>{product.productName}</strong><span className="block text-slate-500">{product.productCode}</span></td><td className="px-3 py-3 text-right">{formatNumber(product.quantity)}</td><td className="px-3 py-3 text-right">{formatCurrency(product.fobPerUnitBdt)}</td><td className="px-3 py-3 text-right">{formatCurrency(product.additionalPerUnitBdt)}</td><td className="px-3 py-3 text-right font-bold">{formatCurrency(product.finalPerUnitBdt)}</td><td className="px-3 py-3 text-right font-bold">{formatCurrency(product.finalTotalBdt)}</td></tr>)}</tbody></table></TableFrame><Totals subtotal={snapshot.totalProductValueBdt} discount="0" total={snapshot.totalShipmentCostBdt} /><p className="mt-6 text-xs text-slate-500">Additional allocated import cost: {formatCurrency(snapshot.totalAdditionalCostBdt)}. Customs duty values are final assessed product amounts, not ERP-generated tax formulas.</p></>;
+  if (!snapshot) return <p className="border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">No finalized landed-cost snapshot is available.</p>;
+  return <><div className="mb-4 grid gap-2 text-[10px] sm:grid-cols-3"><div><span className="text-slate-500">Supplier</span><strong className="block">{record.supplierName}</strong></div><div><span className="text-slate-500">PO / PI</span><strong className="block">{record.poNumber} / {record.piNumber ?? "-"}</strong></div><div><span className="text-slate-500">Snapshot</span><strong className="block">Version {snapshot.version} | Immutable</strong></div></div><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="px-2 py-2 text-left">Product</th><th className="px-2 py-2 text-right">Qty</th><th className="px-2 py-2 text-right">FOB / unit</th><th className="px-2 py-2 text-right">Import cost / unit</th><th className="px-2 py-2 text-right">Landed / unit</th><th className="px-2 py-2 text-right">Total</th></tr></thead><tbody>{snapshot.products.map((product) => <tr className="border-b border-slate-300" key={product.importItemId}><td className="px-2 py-2"><strong>{product.productName}</strong><span className="block text-slate-500">{product.productCode}</span></td><td className="px-2 py-2 text-right">{formatNumber(product.quantity)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.fobPerUnitBdt)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.additionalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalTotalBdt)}</td></tr>)}</tbody></table><Totals subtotal={snapshot.totalProductValueBdt} discount="0" total={snapshot.totalShipmentCostBdt} /><p className="mt-4 text-[9px] text-slate-600">Additional allocated import cost: {formatCurrency(snapshot.totalAdditionalCostBdt)}. Customs duty values are final assessed product amounts, not ERP-generated tax formulas.</p><SignatureRow labels={["Prepared By", "Checked By", "Authorized Owner"]} /></>;
+}
+
+function SignatureRow({ labels }: { labels: string[] }) {
+  return <div className="mt-12 grid gap-8 text-[9px] text-slate-600" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}>{labels.map((label) => <div className="border-t border-slate-500 pt-1 text-center" key={label}>{label}</div>)}</div>;
 }

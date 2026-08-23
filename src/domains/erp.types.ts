@@ -1,7 +1,7 @@
 import type { Role } from "../types/index.js";
 
 export type DecimalString = string;
-export type PaymentMode = "LC" | "TT";
+export type PaymentMode = "Pending" | "LC" | "TT";
 export type AllocationMethod = "CBM" | "FOB_VALUE" | "QUANTITY" | "PRODUCT_SPECIFIC" | "MANUAL";
 export type ImportStatus =
   | "Draft"
@@ -65,6 +65,7 @@ export type ImportItem = {
   cbmPerCarton: DecimalString;
   cartonCount: DecimalString;
   totalCbm: DecimalString;
+  cbmMode?: "CALCULATED" | "MANUAL";
   grossWeight?: DecimalString;
   netWeight?: DecimalString;
   hsCode?: string;
@@ -158,17 +159,26 @@ export type ImportCase = {
   supplierName: string;
   poNumber: string;
   poDate: string;
-  piNumber: string;
-  piDate: string;
+  piNumber?: string;
+  piDate?: string;
   paymentMode: PaymentMode;
   lcNumber?: string;
+  lcAmount?: DecimalString;
+  lcOpenDate?: string;
+  lcExpiryDate?: string;
   ttReference?: string;
+  ttAmount?: DecimalString;
+  ttDate?: string;
   bank?: string;
   currency: string;
   exchangeRate: DecimalString;
   rateDate: string;
   rateSource: string;
   expectedShipmentDate?: string;
+  commercialInvoiceNumber?: string;
+  commercialInvoiceDate?: string;
+  productionStatus?: string;
+  productionFollowUpNote?: string;
   blNumber?: string;
   containerNumber?: string;
   containerType?: string;
@@ -231,6 +241,8 @@ export type StockBatch = {
   warehouse: string;
   location?: string;
   landedCostPerUnit: DecimalString;
+  sourceType?: "Import Receipt" | "Opening Stock";
+  expiryStatus?: "Expired" | "1 Month Alert" | "3 Month Alert" | "6 Month Alert" | "Normal";
 };
 
 export type StockMovement = {
@@ -281,6 +293,9 @@ export type Quotation = {
   date: string;
   customerId: string;
   customerName: string;
+  customerAddressSnapshot?: string;
+  customerPhoneSnapshot?: string;
+  customerContactSnapshot?: string;
   ownerId: string;
   validityDays: number;
   paymentTerms: string;
@@ -299,6 +314,9 @@ export type SalesOrder = {
   date: string;
   customerId: string;
   customerName: string;
+  customerAddressSnapshot?: string;
+  customerPhoneSnapshot?: string;
+  customerContactSnapshot?: string;
   ownerId: string;
   paymentConditions: string;
   deliveryInstruction: string;
@@ -307,6 +325,16 @@ export type SalesOrder = {
   status: "Placed" | "Ready" | "Partially Delivered" | "Delivered" | "Cancelled";
   lines: SalesLine[];
   total: DecimalString;
+  paymentConfirmation?: string;
+  paymentReference?: string;
+  paymentDate?: string;
+  requestedDeliveryDate?: string;
+  orderReceivedByName?: string;
+  orderReceivedByDesignation?: string;
+  orderGivenBy?: string;
+  headOfSalesSignoff?: string;
+  coeSignoff?: string;
+  mdSignoff?: string;
 };
 
 export type DeliveryLine = SalesLine & {
@@ -336,7 +364,7 @@ export type Collection = {
   orderId?: string;
   date: string;
   amount: DecimalString;
-  paymentMode: "Cash" | "bKash" | "Bank Transfer" | "Cheque" | "Credit";
+  paymentMode: "Cash" | "bKash" | "Bank Transfer" | "Cheque";
   accountId?: string;
   referenceNumber?: string;
   remarks?: string;
@@ -408,6 +436,96 @@ export type BusinessDecision = {
   currentBehavior: string;
   status: "Pending Client Confirmation" | "Confirmed";
   blocks: string[];
+  resolutionValue?: string;
+  resolutionNotes?: string;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  sourceReference?: string;
+};
+
+export type ProductAlias = {
+  id: string;
+  aliasText: string;
+  productId: string;
+  productName: string;
+  source: string;
+  active: boolean;
+};
+
+export type CustomerLedgerEntry = {
+  id: string;
+  date: string;
+  type: "Opening Due" | "Delivery" | "Collection";
+  reference: string;
+  debit: DecimalString;
+  credit: DecimalString;
+  runningDue: DecimalString;
+  remarks: string;
+};
+
+export type CustomerLedger = {
+  customer: Customer;
+  deliveredSales: DecimalString;
+  collected: DecimalString;
+  currentDue: DecimalString;
+  entries: CustomerLedgerEntry[];
+  deliveries: Delivery[];
+  collections: Collection[];
+};
+
+export type CustomerOpeningBalance = {
+  id: string;
+  customerId: string;
+  customerName: string;
+  date: string;
+  openingDue: DecimalString;
+  historicalSales: DecimalString;
+  historicalCollected: DecimalString;
+  reference: string;
+  remarks: string;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type DispatchAllocation = {
+  batchId: string;
+  batchNumber: string;
+  lotNumber: string;
+  quantity: DecimalString;
+  receivedDate: string;
+  expiryDate: string;
+};
+
+export type DispatchPreview = {
+  productId: string;
+  requestedQuantity: DecimalString;
+  availableQuantity: DecimalString;
+  allocations: DispatchAllocation[];
+  warning?: string;
+  requiresOverride: boolean;
+};
+
+export type ProfitPreviewLine = {
+  productId: string;
+  productCode: string;
+  productName: string;
+  quantity: DecimalString;
+  proposedUnitPrice: DecimalString;
+  effectiveUnitPrice: DecimalString;
+  expectedCostPerUnit: DecimalString;
+  grossProfitPerUnit: DecimalString;
+  grossProfitTotal: DecimalString;
+  marginPercent: DecimalString;
+  stockCoverage: DecimalString;
+  isLoss: boolean;
+};
+
+export type ProfitPreview = {
+  lines: ProfitPreviewLine[];
+  revenue: DecimalString;
+  expectedCogs: DecimalString;
+  grossProfit: DecimalString;
+  marginPercent: DecimalString;
 };
 
 export type WarehouseConfig = {
@@ -429,15 +547,24 @@ export type CostPreset = {
   active: boolean;
 };
 
-export type PrintConfiguration = {
+export type PrintIdentity = {
+  id: "mipro" | "led-trackers";
   companyName: string;
+  displayName: string;
   address: string;
   phone: string;
   email: string;
   website: string;
   logoUrl: string;
+  backgroundImageUrl: string;
   footerText: string;
   authorizedSignatory: string;
+  safeArea: { topMm: number; rightMm: number; bottomMm: number; leftMm: number };
+};
+
+export type PrintConfiguration = {
+  identities: PrintIdentity[];
+  defaultIdentityId: PrintIdentity["id"];
   defaultLetterheadMode: "Digital" | "Preprinted";
 };
 
@@ -452,9 +579,23 @@ export type DashboardData = {
   recentExpenses: Expense[];
 };
 
+export type ReportTable = {
+  id: string;
+  title: string;
+  columns: { key: string; label: string; align?: "left" | "right" }[];
+  rows: Record<string, string>[];
+};
+
 export type ReportData = {
+  period: { from: string; to: string };
   importCosts: { label: string; value: DecimalString }[];
   inventory: { label: string; value: DecimalString }[];
   sales: { label: string; value: DecimalString }[];
   expenses: { label: string; value: DecimalString }[];
+  tables: {
+    imports: ReportTable[];
+    inventory: ReportTable[];
+    sales: ReportTable[];
+    expenses: ReportTable[];
+  };
 };

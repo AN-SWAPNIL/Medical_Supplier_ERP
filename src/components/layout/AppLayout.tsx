@@ -1,12 +1,11 @@
 import clsx from "clsx";
 import {
-  Bell,
+  Building2,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
   Menu,
-  Search,
   ShieldCheck,
   UserRound,
   X
@@ -42,7 +41,7 @@ export default function AppLayout() {
     <aside className={clsx("flex h-full flex-col border-r border-slate-200 bg-white transition-[width]", collapsed ? "w-[72px]" : "w-[248px]")}>
       <div className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-3">
         <button
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-red-700 text-white shadow-sm"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-blue-950 text-white shadow-sm"
           type="button"
           onClick={() => navigate("/app/dashboard")}
           aria-label="Open dashboard"
@@ -75,7 +74,7 @@ export default function AppLayout() {
                 clsx(
                   "flex h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-semibold transition",
                   isActive
-                    ? "border-red-700 bg-red-50 text-red-800"
+                    ? "border-cyan-600 bg-cyan-50 text-blue-950"
                     : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                 )
               }
@@ -96,8 +95,8 @@ export default function AppLayout() {
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded bg-slate-900 text-[10px] font-bold text-white">MH</span>
           {!collapsed ? (
             <div className="min-w-0">
-              <strong className="block truncate text-xs text-slate-800">Mipro HealthCare</strong>
-              <span className="block truncate text-[10px] text-slate-500">Single company · Main warehouse</span>
+              <strong className="block truncate text-xs text-slate-800">MIPRO HealthCare</strong>
+              <span className="block truncate text-[10px] text-slate-500">Single company | Main warehouse</span>
             </div>
           ) : null}
         </div>
@@ -122,22 +121,14 @@ export default function AppLayout() {
       <div className={clsx("min-h-screen transition-[padding]", collapsed ? "lg:pl-[72px]" : "lg:pl-[248px]")}>
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-5">
-            <button className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
+            <button className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" type="button" onClick={() => { setCollapsed(false); setMobileOpen(true); }} aria-label="Open navigation">
               <Menu className="h-5 w-5" />
             </button>
-            <div className="relative hidden min-w-0 flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                className="h-9 w-full max-w-lg rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-red-400 focus:bg-white focus:ring-2 focus:ring-red-100"
-                placeholder="Search LC, product, customer or challan"
-                aria-label="Global search"
-              />
+            <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
+              <span className="grid h-8 w-8 place-items-center rounded bg-cyan-50 text-cyan-700"><Building2 className="h-4 w-4" /></span>
+              <span className="min-w-0 leading-tight"><strong className="block truncate text-xs text-slate-800">MIPRO HealthCare Corporation</strong><small className="block truncate text-[10px] text-slate-500">Operational ERP | Main Warehouse</small></span>
             </div>
             <span className="ml-auto hidden rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700 sm:inline-flex md:ml-0">{role}</span>
-            <button className="relative rounded-md p-2 text-slate-600 hover:bg-slate-100" type="button" aria-label="Notifications" title="Notifications">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-600" />
-            </button>
             <div className="relative">
               <button
                 className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-1.5 pr-2 text-left hover:bg-slate-50"

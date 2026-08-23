@@ -177,7 +177,7 @@ export function calculateLandedCost(importId: string, items: ImportItem[], costs
   };
 }
 
-export function importDisplayReference(record: { draftReference: string; paymentMode: "LC" | "TT"; lcNumber?: string; ttReference?: string }) {
+export function importDisplayReference(record: { draftReference: string; paymentMode: "Pending" | "LC" | "TT"; lcNumber?: string; ttReference?: string }) {
   if (record.paymentMode === "LC" && record.lcNumber?.trim()) return record.lcNumber.trim();
   if (record.paymentMode === "TT" && record.ttReference?.trim()) return record.ttReference.trim();
   return record.draftReference;

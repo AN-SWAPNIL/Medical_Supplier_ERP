@@ -44,7 +44,7 @@ export default function ProfilePage() {
       />
 
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 text-center shadow-sm">
           <Avatar className="mx-auto h-36 w-36 rounded-full border-4 border-white object-cover shadow-lg" src={avatarPreview} name={session.user.name} />
           <h2 className="mt-4 text-xl font-bold text-slate-950">{session.user.name}</h2>
           <p className="text-sm text-slate-500">{session.user.role}</p>
@@ -77,7 +77,7 @@ export default function ProfilePage() {
         </div>
 
         <form
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
           onSubmit={handleSubmit((values) => {
             updateUser({ ...session.user, ...values, avatarUrl: avatarPreview });
             pushToast({ kind: "success", title: "Profile saved" });

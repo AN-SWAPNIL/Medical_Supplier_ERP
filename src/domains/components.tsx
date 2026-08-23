@@ -4,9 +4,9 @@ import type { ComponentType, ReactNode } from "react";
 import Button from "../components/ui/Button";
 
 export const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-500";
+  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100 disabled:text-slate-500";
 export const textareaClass =
-  "min-h-24 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100";
+  "min-h-24 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100";
 export const labelClass = "mb-1 block text-xs font-bold uppercase text-slate-500";
 
 export function Panel({
@@ -137,7 +137,7 @@ export function SectionAccordion({
   return (
     <details className="group overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded bg-red-50 text-red-700"><Icon className="h-4 w-4" /></span>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded bg-cyan-50 text-cyan-700"><Icon className="h-4 w-4" /></span>
         <div className="min-w-[140px] flex-1">
           <h2 className="break-words text-sm font-bold text-slate-950 sm:text-base">{title}</h2>
           {subtitle ? <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p> : null}
@@ -154,7 +154,7 @@ export function SectionAccordion({
 export function LoadingBlock({ label = "Loading data" }: { label?: string }) {
   return (
     <div className="grid min-h-48 place-items-center rounded-md border border-slate-200 bg-white p-8 text-center">
-      <div><LoaderCircle className="mx-auto h-6 w-6 animate-spin text-red-700" /><p className="mt-2 text-sm font-semibold text-slate-600">{label}</p></div>
+      <div><LoaderCircle className="mx-auto h-6 w-6 animate-spin text-cyan-700" /><p className="mt-2 text-sm font-semibold text-slate-600">{label}</p></div>
     </div>
   );
 }
@@ -212,7 +212,7 @@ export function ProductThumb({ src, name, size = "md" }: { src?: string; name: s
 
 export function KeyValue({ label, value, accent }: { label: string; value: ReactNode; accent?: boolean }) {
   return (
-    <div className={clsx("min-w-0 border-l-2 px-3 py-1", accent ? "border-red-600" : "border-slate-200")}>
+    <div className={clsx("min-w-0 border-l-2 px-3 py-1", accent ? "border-cyan-600" : "border-slate-200")}>
       <dt className="text-[10px] font-bold uppercase text-slate-400">{label}</dt>
       <dd className="mt-0.5 break-words text-sm font-semibold text-slate-900">{value || "-"}</dd>
     </div>

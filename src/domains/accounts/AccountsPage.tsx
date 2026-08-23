@@ -9,6 +9,7 @@ import { ErrorBlock, LoadingBlock, Modal, Panel, Segmented, TableFrame, inputCla
 import type { Expense } from "../erp.types";
 import { accountsService, salesService } from "../services";
 import { useEffectiveRole } from "../../lib/auth/session";
+import { businessDate } from "../../lib/date";
 import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency } from "../../utils/format";
 
@@ -142,7 +143,7 @@ export default function AccountsPage() {
 }
 
 function ExpenseForm({ categories, accounts, busy, onSubmit }: { categories: { id: string; name: string; active: boolean }[]; accounts: { id: string; name: string; balance: string }[]; busy: boolean; onSubmit: (payload: Partial<Expense>) => void }) {
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), categoryId: "", subtype: "General" as Expense["subtype"], amount: "", paidFromAccountId: "", employee: "", designation: "", taAmount: "", daAmount: "", remarks: "", attachmentName: "" });
+  const [form, setForm] = useState({ date: businessDate(), categoryId: "", subtype: "General" as Expense["subtype"], amount: "", paidFromAccountId: "", employee: "", designation: "", taAmount: "", daAmount: "", remarks: "", attachmentName: "" });
   const change = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
   const amount = form.subtype === "TA/DA" ? Number(form.taAmount || 0) + Number(form.daAmount || 0) : Number(form.amount || 0);
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit({ ...form, amount: amount.toFixed(2), taAmount: form.subtype === "TA/DA" ? Number(form.taAmount || 0).toFixed(2) : undefined, daAmount: form.subtype === "TA/DA" ? Number(form.daAmount || 0).toFixed(2) : undefined }); };

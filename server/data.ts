@@ -6,6 +6,7 @@ import type {
   Collection,
   CostPreset,
   Customer,
+  CustomerOpeningBalance,
   Delivery,
   Expense,
   ImportCase,
@@ -137,6 +138,12 @@ export const products: Product[] = [
   { id: "prd-cat", code: "CATH-7F13", family: "Catheter", variant: "7Fr-13cm", name: "Central Venous Catheter 7Fr-13cm", unit: "pcs", hsCode: "9018.39", standardSalePrice: "1300.00", active: true, imageUrl: "/medical-products.png#catheter" }
 ];
 
+export const productAliases = [
+  { id: "alias-1", aliasText: "Dialyzer 1.7 High Flux", productId: "prd-d17h", productName: "Dialyzer 1.7H", source: "Sales_Ledger_1.2.1.xlsx", active: true },
+  { id: "alias-2", aliasText: "Bloodline Set", productId: "prd-bts", productName: "Blood Line Sets", source: "Sales_Ledger_1.2.1.xlsx", active: true },
+  { id: "alias-3", aliasText: "A.V. Fistula 16", productId: "prd-av16", productName: "AV Fistula 16G", source: "Sales_Ledger_1.2.1.xlsx", active: true }
+];
+
 export const suppliers: Supplier[] = [
   { id: "sup-renhe", name: "Guangzhou Renhe Medical Technology", country: "China", contactPerson: "Liu Wen", phone: "+86 20 5550 1840", email: "export@renhe-med.cn", paymentTerms: "LC at sight", active: true },
   { id: "sup-aoxin", name: "Shanghai Aoxin Medical Supply", country: "China", contactPerson: "Chen Yu", phone: "+86 21 8810 2260", email: "sales@aoxin-med.cn", paymentTerms: "30% TT / 70% before shipment", active: true },
@@ -181,7 +188,7 @@ export const imports: ImportCase[] = [
 ];
 
 export const stockBatches: StockBatch[] = [
-  { id: "bat-d17-old", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", sourceImportId: "imp-old-1", sourceReference: "LC-77102", lotNumber: "LOT-D17H-2509", batchNumber: "BAT-D17H-2509", manufacturingDate: "2025-09-10", expiryDate: "2028-09-09", receivedDate: "2025-11-18", quantityReceived: "1800", quantityAvailable: "450", warehouse: "MIPRO Main Warehouse", location: "Rack A-01", landedCostPerUnit: "438.25" },
+  { id: "bat-d17-old", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", sourceImportId: "opening-stock", sourceReference: "LEGACY-LC-77102", sourceType: "Opening Stock", lotNumber: "LOT-D17H-2509", batchNumber: "BAT-D17H-2509", manufacturingDate: "2025-09-10", expiryDate: "2028-09-09", receivedDate: "2025-11-18", quantityReceived: "1800", quantityAvailable: "450", warehouse: "MIPRO Main Warehouse", location: "Rack A-01", landedCostPerUnit: "438.25" },
   { id: "bat-d17-new", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", sourceImportId: "imp-old-2", sourceReference: "LC-77508", lotNumber: "LOT-D17H-2603", batchNumber: "BAT-D17H-2603", manufacturingDate: "2026-03-12", expiryDate: "2029-03-11", receivedDate: "2026-05-20", quantityReceived: "2200", quantityAvailable: "1720", warehouse: "MIPRO Main Warehouse", location: "Rack A-02", landedCostPerUnit: "452.80" },
   { id: "bat-bts-old", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", sourceImportId: "imp-old-1", sourceReference: "LC-77102", lotNumber: "LOT-BTS-2510", batchNumber: "BAT-BTS-2510", manufacturingDate: "2025-10-04", expiryDate: "2027-10-03", receivedDate: "2025-11-18", quantityReceived: "6000", quantityAvailable: "1350", warehouse: "MIPRO Main Warehouse", location: "Rack B-01", landedCostPerUnit: "158.40" },
   { id: "bat-bts-new", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", sourceImportId: "imp-old-2", sourceReference: "LC-77508", lotNumber: "LOT-BTS-2604", batchNumber: "BAT-BTS-2604", manufacturingDate: "2026-04-11", expiryDate: "2028-04-10", receivedDate: "2026-05-20", quantityReceived: "7200", quantityAvailable: "6200", warehouse: "MIPRO Main Warehouse", location: "Rack B-02", landedCostPerUnit: "164.15" },
@@ -192,7 +199,9 @@ export const stockBatches: StockBatch[] = [
 export const stockMovements: StockMovement[] = [
   { id: "mov-1", date: "2026-05-20", productId: "prd-d17h", productName: "Dialyzer 1.7H", batchId: "bat-d17-new", batchNumber: "BAT-D17H-2603", type: "Receive", quantity: "2200", reference: "LC-77508", createdBy: "Aminul Islam" },
   { id: "mov-2", date: "2026-07-15", productId: "prd-d17h", productName: "Dialyzer 1.7H", batchId: "bat-d17-old", batchNumber: "BAT-D17H-2509", type: "Dispatch", quantity: "120", reference: "DC-2026-031", createdBy: "Aminul Islam" },
-  { id: "mov-3", date: "2026-07-21", productId: "prd-bts", productName: "Blood Line Sets", batchId: "bat-bts-old", batchNumber: "BAT-BTS-2510", type: "Dispatch", quantity: "90", reference: "DC-2026-034", createdBy: "Aminul Islam" }
+  { id: "mov-3", date: "2026-07-21", productId: "prd-bts", productName: "Blood Line Sets", batchId: "bat-bts-old", batchNumber: "BAT-BTS-2510", type: "Dispatch", quantity: "90", reference: "DC-2026-034", createdBy: "Aminul Islam" },
+  { id: "mov-4", date: "2026-08-09", productId: "prd-d17h", productName: "Dialyzer 1.7H", batchId: "bat-d17-old", batchNumber: "BAT-D17H-2509", type: "Dispatch", quantity: "60", reference: "DC-2026-036", createdBy: "Aminul Islam" },
+  { id: "mov-5", date: "2026-08-09", productId: "prd-bts", productName: "Blood Line Sets", batchId: "bat-bts-old", batchNumber: "BAT-BTS-2510", type: "Dispatch", quantity: "30", reference: "DC-2026-036", createdBy: "Aminul Islam" }
 ];
 
 export const receipts: WarehouseReceipt[] = [];
@@ -206,22 +215,27 @@ export const customers: Customer[] = [
   { id: "cus-insaf", name: "Insaf Barakah Foundation Hospital", type: "Hospital", contactPerson: "Purchase Office", phone: "+880 1718 332214", address: "Moghbazar, Dhaka", territory: "Dhaka Central", assignedSalesUserId: "sales2", paymentTerms: "30 days", creditLimit: "600000.00", currentDue: "69000.00", totalSales: "422000.00", totalCollected: "353000.00", active: true }
 ];
 
+export const customerOpeningBalances: CustomerOpeningBalance[] = [
+  { id: "opening-cus-labaid", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", date: "2026-01-01", historicalSales: "945000.00", historicalCollected: "608500.00", openingDue: "336500.00", reference: "SALES-LEDGER-OPENING-2026", remarks: "Verified opening position before collections entered in the ERP period.", createdBy: "Sadia Karim", createdAt: "2026-08-23T09:00:00.000Z" }
+];
+
 export const quotations: Quotation[] = [
   { id: "quo-1", quotationNumber: "QT-2026-041", date: "2026-08-18", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", ownerId: "sales1", validityDays: 15, paymentTerms: "Cash / 15 days", remarks: "Delivery within three working days.", status: "Sent", lines: [{ id: "ql-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "690.00", discount: "0.00", lineTotal: "41400.00" }, { id: "ql-2", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00" }], subtotal: "48300.00", discountTotal: "0.00", total: "48300.00" },
   { id: "quo-2", quotationNumber: "QT-2026-038", date: "2026-08-14", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", ownerId: "sales2", validityDays: 30, paymentTerms: "45 days", status: "Accepted", lines: [{ id: "ql-3", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "180", unitPrice: "685.00", discount: "1800.00", lineTotal: "121500.00" }], subtotal: "123300.00", discountTotal: "1800.00", total: "121500.00" }
 ];
 
 export const orders: SalesOrder[] = [
-  { id: "so-1", orderNumber: "SO-2026-033", quotationId: "quo-2", date: "2026-08-15", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", ownerId: "sales2", paymentConditions: "45 days", deliveryInstruction: "Deliver to central medical store", amountReceived: "0.00", due: "121500.00", status: "Ready", lines: quotations[1].lines, total: "121500.00" },
-  { id: "so-2", orderNumber: "SO-2026-035", date: "2026-08-20", customerId: "cus-ark", customerName: "ARK Hospital", ownerId: "sales1", paymentConditions: "Cash", deliveryInstruction: "Collect cash on delivery", amountReceived: "0.00", due: "47700.00", status: "Placed", lines: [{ id: "sol-2", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "680.00", discount: "0.00", lineTotal: "40800.00" }, { id: "sol-3", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00" }], total: "47700.00" }
+  { id: "so-1", orderNumber: "SO-2026-033", quotationId: "quo-2", date: "2026-08-15", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", customerAddressSnapshot: "Dhanmondi, Dhaka", customerPhoneSnapshot: "+880 1714 330010", customerContactSnapshot: "Supply Chain", ownerId: "sales2", paymentConditions: "45 days", deliveryInstruction: "Deliver to central medical store", paymentConfirmation: "Credit approved under 45-day terms", requestedDeliveryDate: "2026-08-25", orderReceivedByName: "Farhana Akter", orderReceivedByDesignation: "Sales Manager", orderGivenBy: "Labaid Supply Chain", headOfSalesSignoff: "Pending signature", coeSignoff: "Pending signature", mdSignoff: "Pending signature", amountReceived: "0.00", due: "121500.00", status: "Ready", lines: quotations[1].lines, total: "121500.00" },
+  { id: "so-2", orderNumber: "SO-2026-035", date: "2026-08-08", customerId: "cus-ark", customerName: "ARK Hospital", customerAddressSnapshot: "Dhaka", customerPhoneSnapshot: "+880 1712 410011", customerContactSnapshot: "Purchase Department", ownerId: "sales1", paymentConditions: "Bank transfer on delivery", deliveryInstruction: "Deliver to the hospital receiving counter", requestedDeliveryDate: "2026-08-09", amountReceived: "47700.00", due: "0.00", status: "Delivered", lines: [{ id: "sol-2", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "680.00", discount: "0.00", lineTotal: "40800.00" }, { id: "sol-3", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00" }], total: "47700.00" }
 ];
 
 export const deliveries: Delivery[] = [
-  { id: "del-1", challanNumber: "DC-2026-031", orderId: "so-old-1", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", date: "2026-07-15", remarks: "Delivered to receiving counter", receiverName: "Store Officer", status: "Delivered", lines: [{ id: "dl-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "120", unitPrice: "690.00", discount: "0.00", lineTotal: "82800.00", batchId: "bat-d17-old", batchNumber: "BAT-D17H-2509" }] }
+  { id: "del-1", challanNumber: "DC-2026-031", orderId: "so-old-1", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", date: "2026-07-15", remarks: "Delivered to receiving counter", receiverName: "Store Officer", status: "Delivered", lines: [{ id: "dl-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "120", unitPrice: "690.00", discount: "0.00", lineTotal: "82800.00", batchId: "bat-d17-old", batchNumber: "BAT-D17H-2509" }] },
+  { id: "del-2", challanNumber: "DC-2026-036", orderId: "so-2", customerId: "cus-ark", customerName: "ARK Hospital", date: "2026-08-09", remarks: "Delivered against confirmed hospital order", receiverName: "Medical Store Officer", status: "Delivered", lines: [{ id: "dl-2", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "680.00", discount: "0.00", lineTotal: "40800.00", batchId: "bat-d17-old", batchNumber: "BAT-D17H-2509" }, { id: "dl-3", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00", batchId: "bat-bts-old", batchNumber: "BAT-BTS-2510" }] }
 ];
 
 export const collections: Collection[] = [
-  { id: "col-1", receiptNumber: "MR-2026-051", customerId: "cus-ark", customerName: "ARK Hospital", orderId: "so-old-2", date: "2026-08-10", amount: "47700.00", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "CITY-TRX-88112", remarks: "May order settlement", ownerId: "sales1", status: "Posted" },
+  { id: "col-1", receiptNumber: "MR-2026-051", customerId: "cus-ark", customerName: "ARK Hospital", orderId: "so-2", date: "2026-08-10", amount: "47700.00", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "CITY-TRX-88112", remarks: "Full settlement of SO-2026-035 after delivery", ownerId: "sales1", status: "Posted" },
   { id: "col-2", receiptNumber: "MR-2026-052", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", date: "2026-08-17", amount: "150000.00", paymentMode: "Cheque", accountId: "acc-city", referenceNumber: "CHQ-773310", remarks: "Part collection", ownerId: "sales2", status: "Posted" },
   { id: "col-3", receiptNumber: "MR-2026-053", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", date: "2026-08-20", amount: "28050.00", paymentMode: "bKash", accountId: "acc-bkash", referenceNumber: "BK-8H22P", remarks: "June due received", ownerId: "sales1", status: "Posted" }
 ];
@@ -252,14 +266,15 @@ export const accountTransactions: AccountTransaction[] = [
 ];
 
 export const decisions: BusinessDecision[] = [
-  { id: "dec-cost-default", title: "Common cost allocation default", question: "Should common bank, insurance and C&F charges default to FOB value?", currentBehavior: "Every cost line requires an explicit allocation choice; FOB Value is shown only as a suggestion.", status: "Pending Client Confirmation", blocks: ["Automatic cost presets"] },
-  { id: "dec-transport", title: "Local transport allocation", question: "Should local transport always use CBM?", currentBehavior: "The user must explicitly select an allocation method for each transport line.", status: "Pending Client Confirmation", blocks: ["Automatic transport default"] },
+  { id: "dec-cost-default", title: "Common cost allocation default", question: "Should common bank, insurance and C&F charges default to FOB value?", currentBehavior: "Every common cost line requires an explicit allocation choice; FOB Value is only suggested.", status: "Pending Client Confirmation", blocks: ["Automatic common-cost default"], sourceReference: "Meeting 1 allocation discussion" },
+  { id: "dec-transport", title: "Local transport allocation", question: "Should local covered-van transport default to CBM?", currentBehavior: "Local Transport presets default to CBM; an authorized user may explicitly choose another basis for an exceptional invoice.", status: "Confirmed", blocks: [], resolutionValue: "CBM", resolutionNotes: "Treat local covered-van transport like sea freight by product volume.", confirmedBy: "Client", confirmedAt: "2026-08-23T00:00:00.000Z", sourceReference: "Latest Meeting 1 discussion" },
+  { id: "dec-fifo", title: "FIFO issue sequence", question: "Should dispatch recommend the oldest matching eligible batch?", currentBehavior: "Oldest non-expired matching stock is allocated first; bypass requires capability and reason.", status: "Confirmed", blocks: [], resolutionValue: "FIFO_WITH_EXPIRY_AWARENESS", resolutionNotes: "FIFO is authoritative while expiry remains visible and expired stock is excluded.", confirmedBy: "Client", confirmedAt: "2026-08-23T00:00:00.000Z", sourceReference: "Latest Meeting 1 discussion" },
   { id: "dec-invoice", title: "Invoice requirement", question: "Is an invoice mandatory, optional, or generated from order/challan?", currentBehavior: "Quotation, order, challan and collection operate without a mandatory invoice.", status: "Pending Client Confirmation", blocks: ["Invoice generation"] },
   { id: "dec-accounting", title: "Accounting depth", question: "Should MIPRO ERP replace formal accounting software?", currentBehavior: "Only operational cash, bank, expense, collection and due ledgers are enabled.", status: "Pending Client Confirmation", blocks: ["General Ledger", "Trial Balance", "Balance Sheet"] },
   { id: "dec-warehouse", title: "Additional warehouses", question: "How many active warehouse locations are required?", currentBehavior: "One MIPRO Main Warehouse is active.", status: "Pending Client Confirmation", blocks: ["Multi-warehouse transfers"] },
   { id: "dec-price", title: "Selling-price approval", question: "Which price or discount requires manager approval?", currentBehavior: "Sales can propose a price; no automatic floor is enforced.", status: "Pending Client Confirmation", blocks: ["Automatic special-price approval"] },
   { id: "dec-tax", title: "Sales VAT and tax", question: "What VAT/tax rules apply to sales documents?", currentBehavior: "No sales tax is calculated or printed.", status: "Pending Client Confirmation", blocks: ["Sales tax automation"] },
-  { id: "dec-finalize", title: "Cost finalization authority", question: "Who may finalize or reopen landed cost besides the owner?", currentBehavior: "Only Super Admin can finalize or reopen, and reopening requires a reason.", status: "Pending Client Confirmation", blocks: ["Delegated finalization"] }
+  { id: "dec-finalize", title: "Cost finalization authority", question: "Who may finalize or reopen landed cost besides the owner?", currentBehavior: "Only Super Admin can finalize or reopen before receipt. Reopening after any warehouse receipt is blocked.", status: "Pending Client Confirmation", blocks: ["Delegated finalization", "Post-receipt valuation adjustment"], sourceReference: "Simplified plan and update1 integrity audit" }
 ];
 
 export const warehouseConfig: WarehouseConfig = {
@@ -276,18 +291,15 @@ export const costPresets: CostPreset[] = [
   { id: "preset-freight", name: "Ocean / Air Freight", category: "Freight", suggestedAllocationMethod: "CBM", requiresExplicitChoice: true, active: true },
   { id: "preset-duty", name: "Assessed Customs Duty", category: "Customs Duty", suggestedAllocationMethod: "PRODUCT_SPECIFIC", requiresExplicitChoice: true, active: true },
   { id: "preset-bank", name: "Bank Charge", category: "Bank Charge", suggestedAllocationMethod: "FOB_VALUE", requiresExplicitChoice: true, active: true },
-  { id: "preset-local", name: "Local Transport", category: "Local Transport", requiresExplicitChoice: true, active: true }
+  { id: "preset-local", name: "Local Transport", category: "Local Transport", suggestedAllocationMethod: "CBM", requiresExplicitChoice: false, active: true }
 ];
 
 export const printConfiguration: PrintConfiguration = {
-  companyName: "Mipro HealthCare Corporation",
-  address: "Uttara, Dhaka, Bangladesh",
-  phone: "+880 1711 000000",
-  email: "info@miprohealthcare.com",
-  website: "www.miprohealthcare.com",
-  logoUrl: "/mipro-logo.svg",
-  footerText: "Medical devices and renal-care supplies",
-  authorizedSignatory: "Authorized Signatory",
+  defaultIdentityId: "mipro",
+  identities: [
+    { id: "mipro", displayName: "MIPRO Healthcare", companyName: "MIPRO HEALTHCARE CORPORATION", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.svg", backgroundImageUrl: "/mipro-letterhead.png", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } },
+    { id: "led-trackers", displayName: "LED Trackers", companyName: "LED TRACKERS", address: "Flat-B2, House-26, Road-06, Sector-09, Uttara, Dhaka-1230", phone: "+88 018 05 050780", email: "ledtrackers@gmail.com", website: "www.miprobd.com", logoUrl: "/mipro-logo.svg", backgroundImageUrl: "/led-letterhead.png", footerText: "PRECISION IN HEALTHCARE", authorizedSignatory: "Authorized Signatory", safeArea: { topMm: 39, rightMm: 19, bottomMm: 24, leftMm: 24 } }
+  ],
   defaultLetterheadMode: "Digital"
 };
 

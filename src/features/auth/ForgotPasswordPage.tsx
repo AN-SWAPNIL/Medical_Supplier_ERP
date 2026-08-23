@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthShell title="Forgot password" subtitle="Request password recovery for an assigned ERP account.">
       {sent ? (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 text-blue-800">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-5 text-blue-800">
           <strong>Reset link generated.</strong>
           <p className="mt-2 text-sm">Continue to the reset page to choose a new password for this running demo session.</p>
           <Link className="mt-4 inline-block font-bold underline" to="/reset-password">

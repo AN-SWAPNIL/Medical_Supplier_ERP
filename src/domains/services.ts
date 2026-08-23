@@ -8,6 +8,8 @@ import type {
   Collection,
   CostPreset,
   Customer,
+  CustomerLedger,
+  CustomerOpeningBalance,
   DashboardData,
   Delivery,
   Expense,
@@ -16,6 +18,8 @@ import type {
   ImportDocument,
   ImportItem,
   LandedCostPreview,
+  ProductAlias,
+  ProfitPreview,
   PrintConfiguration,
   Product,
   Quotation,
@@ -35,14 +39,19 @@ import {
   CollectionSchema,
   CostPresetSchema,
   CustomerSchema,
+  CustomerLedgerSchema,
+  CustomerOpeningBalanceSchema,
   DashboardSchema,
   DeliverySchema,
+  DispatchPreviewSchema,
   ExpenseCategorySchema,
   ExpenseSchema,
   ImportCaseSchema,
   ImportDocumentSchema,
   LandedCostPreviewSchema,
   PrintConfigurationSchema,
+  ProductAliasSchema,
+  ProfitPreviewSchema,
   ProductSchema,
   QuotationSchema,
   ReportSchema,
@@ -59,7 +68,6 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const SESSION_KEY = "mipro-erp-session";
 const IdResponseSchema = z.object({ id: z.string() });
-const DispatchPreviewSchema = z.object({ selected: StockBatchSchema, recommended: StockBatchSchema.nullable(), warning: z.string().nullable() });
 
 export type StockSummary = z.infer<typeof StockSummarySchema>;
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
@@ -102,6 +110,7 @@ export const importService = {
   get: (id: string) => get<ImportCase>("/api/imports/" + id, ImportCaseSchema),
   create: (payload: Partial<ImportCase>) => post<ImportCase>("/api/imports", payload, ImportCaseSchema),
   update: (id: string, payload: Partial<ImportCase>) => patch<ImportCase>("/api/imports/" + id, payload, ImportCaseSchema),
+  transition: (id: string, status: string) => post<ImportCase>("/api/imports/" + id + "/transition", { status }, ImportCaseSchema),
   remove: (id: string) => remove("/api/imports/" + id),
   addItem: (id: string, payload: Omit<ImportItem, "id">) => post<ImportCase>("/api/imports/" + id + "/items", payload, ImportCaseSchema),
   updateItem: (id: string, itemId: string, payload: Partial<ImportItem>) => patch<ImportCase>("/api/imports/" + id + "/items/" + itemId, payload, ImportCaseSchema),
@@ -121,11 +130,12 @@ export const inventoryService = {
   stock: () => get<StockSummary[]>("/api/inventory/stock", z.array(StockSummarySchema)),
   batches: () => get<StockBatch[]>("/api/inventory/batches", z.array(StockBatchSchema)),
   movements: () => get<StockMovement[]>("/api/inventory/movements", z.array(StockMovementSchema)),
-  dispatchPreview: (payload: { productId: string; batchId: string; quantity: string }) => post("/api/inventory/dispatch-preview", payload, DispatchPreviewSchema)
+  dispatchPreview: (payload: { productId: string; batchId?: string; quantity: string; date?: string }) => post("/api/inventory/dispatch-preview", payload, DispatchPreviewSchema)
 };
 
 export const salesService = {
   customers: () => get<Customer[]>("/api/customers", z.array(CustomerSchema)),
+  customerLedger: (id: string) => get<CustomerLedger>("/api/customers/" + id + "/ledger", CustomerLedgerSchema),
   createCustomer: (payload: Partial<Customer>) => post<Customer>("/api/customers", payload, CustomerSchema),
   updateCustomer: (id: string, payload: Partial<Customer>) => patch<Customer>("/api/customers/" + id, payload, CustomerSchema),
   removeCustomer: (id: string) => remove("/api/customers/" + id),
@@ -135,10 +145,12 @@ export const salesService = {
   removeQuotation: (id: string) => remove("/api/quotations/" + id),
   convertQuotation: (id: string, deliveryInstruction: string) => post<SalesOrder>("/api/quotations/" + id + "/convert", { deliveryInstruction }, SalesOrderSchema),
   orders: () => get<SalesOrder[]>("/api/orders", z.array(SalesOrderSchema)),
+  updateOrder: (id: string, payload: Partial<SalesOrder>) => patch<SalesOrder>("/api/orders/" + id, payload, SalesOrderSchema),
   deliveries: () => get<Delivery[]>("/api/deliveries", z.array(DeliverySchema)),
   createDelivery: (payload: Partial<Delivery>) => post<Delivery>("/api/deliveries", payload, DeliverySchema),
   collections: () => get<Collection[]>("/api/collections", z.array(CollectionSchema)),
   createCollection: (payload: Partial<Collection>) => post<Collection>("/api/collections", payload, CollectionSchema),
+  profitPreview: (lines: Quotation["lines"]) => post<ProfitPreview>("/api/sales/profit-preview", { lines }, ProfitPreviewSchema),
   paymentAccounts: () => get<CashBankAccount[]>("/api/payment-accounts", z.array(AccountSchema))
 };
 
@@ -153,7 +165,7 @@ export const accountsService = {
 };
 
 export const reportService = {
-  get: () => get<ReportData>("/api/reports", ReportSchema)
+  get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema)
 };
 
 export const printService = {
@@ -181,6 +193,12 @@ export const settingsService = {
   removeAccount: (id: string) => remove("/api/settings/accounts/" + id),
   warehouse: () => get<WarehouseConfig>("/api/settings/warehouse", WarehouseConfigSchema),
   updateWarehouse: (payload: Partial<WarehouseConfig>) => patch<WarehouseConfig>("/api/settings/warehouse", payload, WarehouseConfigSchema),
+  createOpeningStock: (payload: Record<string, unknown>) => post<StockBatch>("/api/settings/opening-stock", payload, StockBatchSchema),
+  customerOpeningBalances: () => get<CustomerOpeningBalance[]>("/api/settings/customer-opening-balances", z.array(CustomerOpeningBalanceSchema)),
+  createCustomerOpeningBalance: (payload: Partial<CustomerOpeningBalance>) => post<CustomerOpeningBalance>("/api/settings/customer-opening-balances", payload, CustomerOpeningBalanceSchema),
+  productAliases: () => get<ProductAlias[]>("/api/settings/product-aliases", z.array(ProductAliasSchema)),
+  createProductAlias: (payload: Partial<ProductAlias>) => post<ProductAlias>("/api/settings/product-aliases", payload, ProductAliasSchema),
+  removeProductAlias: (id: string) => remove("/api/settings/product-aliases/" + id),
   costPresets: () => get<CostPreset[]>("/api/settings/cost-presets", z.array(CostPresetSchema)),
   createCostPreset: (payload: Partial<CostPreset>) => post<CostPreset>("/api/settings/cost-presets", payload, CostPresetSchema),
   updateCostPreset: (id: string, payload: Partial<CostPreset>) => patch<CostPreset>("/api/settings/cost-presets/" + id, payload, CostPresetSchema),

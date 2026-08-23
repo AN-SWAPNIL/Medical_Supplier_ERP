@@ -42,7 +42,7 @@ export default function SignupPage() {
   return (
     <AuthShell title="Request ERP access" subtitle="ERP signup creates an approval request. It does not grant operational access until Super Admin approves and assigns a role.">
       {submitted ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
           <strong>Request submitted.</strong>
           <p className="mt-2 text-sm">A Super Admin will approve the account and assign the final ERP role.</p>
           <Link className="mt-4 inline-block font-bold text-emerald-800 underline" to="/login">

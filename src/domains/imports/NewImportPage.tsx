@@ -1,131 +1,118 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Save } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, PackagePlus, Plus, Save, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
 import { ErrorBlock, LoadingBlock, Panel, ProductThumb, inputClass, labelClass, textareaClass } from "../components";
 import { importService, settingsService } from "../services";
-import type { PaymentMode } from "../erp.types";
 import { useToastStore } from "../../lib/ui/toast";
-import { formatCurrency } from "../../utils/format";
+import { businessDate } from "../../lib/date";
+
+type DraftLine = { id: string; productId: string; quantity: string };
+
+const blankLine = (): DraftLine => ({ id: `draft-line-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, productId: "", quantity: "1" });
 
 export default function NewImportPage() {
   const navigate = useNavigate();
   const pushToast = useToastStore((state) => state.push);
   const suppliersQuery = useQuery({ queryKey: ["suppliers"], queryFn: settingsService.suppliers });
   const productsQuery = useQuery({ queryKey: ["products"], queryFn: settingsService.products });
-  const [form, setForm] = useState({
-    supplierId: "",
-    poNumber: "",
-    poDate: new Date().toISOString().slice(0, 10),
-    piNumber: "",
-    piDate: new Date().toISOString().slice(0, 10),
-    paymentMode: "LC" as PaymentMode,
-    currency: "USD",
-    exchangeRate: "122.50",
-    rateDate: new Date().toISOString().slice(0, 10),
-    rateSource: "Bank quote",
-    expectedShipmentDate: "",
-    productId: "",
-    quantity: "",
-    fobUnitForeign: "",
-    cartonCount: "",
-    cbmPerCarton: "",
-    notes: ""
-  });
+  const [form, setForm] = useState({ supplierId: "", poNumber: "", poDate: businessDate(), expectedShipmentDate: "", notes: "" });
+  const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
 
-  const product = productsQuery.data?.find((entry) => entry.id === form.productId);
-  const supplier = suppliersQuery.data?.find((entry) => entry.id === form.supplierId);
-  const fobTotal = useMemo(() => Number(form.quantity || 0) * Number(form.fobUnitForeign || 0) * Number(form.exchangeRate || 0), [form.quantity, form.fobUnitForeign, form.exchangeRate]);
-  const totalCbm = useMemo(() => Number(form.cartonCount || 0) * Number(form.cbmPerCarton || 0), [form.cartonCount, form.cbmPerCarton]);
   const mutation = useMutation({
     mutationFn: () => {
-      if (!supplier || !product || Number(form.quantity) <= 0 || Number(form.fobUnitForeign) <= 0 || Number(form.exchangeRate) <= 0) {
-        throw new Error("Select a supplier and product, then enter positive quantity, FOB and exchange-rate values.");
+      const supplier = suppliersQuery.data?.find((entry) => entry.id === form.supplierId);
+      if (!supplier || !form.poNumber.trim() || !lines.length || lines.some((line) => !line.productId || Number(line.quantity) <= 0)) {
+        throw new Error("Select a supplier, enter the PO, and add at least one product with a positive expected quantity.");
       }
       return importService.create({
         supplierId: supplier.id,
         supplierName: supplier.name,
-        poNumber: form.poNumber,
+        poNumber: form.poNumber.trim(),
         poDate: form.poDate,
-        piNumber: form.piNumber,
-        piDate: form.piDate,
-        paymentMode: form.paymentMode,
-        currency: form.currency,
-        exchangeRate: form.exchangeRate,
-        rateDate: form.rateDate,
-        rateSource: form.rateSource,
-        expectedShipmentDate: form.expectedShipmentDate,
-        notes: form.notes,
-        items: [{
-          id: "new-item-" + Date.now(),
-          productId: product.id,
-          productCode: product.code,
-          productName: product.name,
-          quantity: form.quantity,
-          unit: product.unit,
-          currency: form.currency,
-          fobUnitForeign: form.fobUnitForeign,
-          exchangeRate: form.exchangeRate,
-          fobTotalBdt: fobTotal.toFixed(2),
-          cbmPerCarton: form.cbmPerCarton || "0",
-          cartonCount: form.cartonCount || "0",
-          totalCbm: totalCbm.toFixed(4),
-          hsCode: product.hsCode
-        }]
+        paymentMode: "Pending",
+        currency: "USD",
+        exchangeRate: "0",
+        rateDate: "",
+        rateSource: "Pending",
+        expectedShipmentDate: form.expectedShipmentDate || undefined,
+        notes: form.notes || undefined,
+        items: lines.map((line) => {
+          const product = productsQuery.data!.find((entry) => entry.id === line.productId)!;
+          return {
+            id: line.id,
+            productId: product.id,
+            productCode: product.code,
+            productName: product.name,
+            quantity: line.quantity,
+            unit: product.unit,
+            currency: "USD",
+            fobUnitForeign: "0",
+            exchangeRate: "0",
+            fobTotalBdt: "0",
+            cbmPerCarton: "0",
+            cartonCount: "0",
+            totalCbm: "0",
+            cbmMode: "CALCULATED" as const,
+            hsCode: product.hsCode
+          };
+        })
       });
     },
     onSuccess: (record) => {
-      pushToast({ kind: "success", title: "Import case created", message: record.draftReference + " is ready for continuation." });
-      navigate("/app/imports/" + record.id);
+      pushToast({ kind: "success", title: "Draft import created", message: `${record.draftReference} is ready for PI and LC/TT continuation.` });
+      navigate(`/app/imports/${record.id}`);
     },
-    onError: (error) => pushToast({ kind: "error", title: "Could not create import", message: error instanceof Error ? error.message : undefined })
+    onError: (error) => pushToast({ kind: "error", title: "Could not create draft import", message: error instanceof Error ? error.message : undefined })
   });
 
   if (suppliersQuery.isLoading || productsQuery.isLoading) return <LoadingBlock label="Loading supplier and product masters" />;
   if (suppliersQuery.isError || productsQuery.isError) return <ErrorBlock error={suppliersQuery.error ?? productsQuery.error} />;
+  const products = productsQuery.data ?? [];
   const change = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const updateLine = (id: string, key: "productId" | "quantity", value: string) => setLines((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
 
   return (
     <>
       <PageHeader
-        eyebrow="New import case"
-        title="Start with PI and commercial data"
-        subtitle="A draft IMP reference is generated now. The LC number will automatically become the primary visible reference after LC opening."
-        actions={<Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Back</Button>}
+        eyebrow="PO → Supplier → PI → LC / TT"
+        title="Create draft import"
+        subtitle="Start with the purchase commitment. PI, payment mode, bank reference, shipment details and costing are added progressively to this same record."
+        actions={<Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Back to Register</Button>}
       />
-      <Panel title="Commercial header" subtitle="The record remains one consignment through every later stage.">
-        <form className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
-          <label className="xl:col-span-2"><span className={labelClass}>Supplier</span><select className={inputClass} required value={form.supplierId} onChange={(event) => change("supplierId", event.target.value)}><option value="">Select supplier</option>{suppliersQuery.data?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.country}</option>)}</select></label>
-          <label><span className={labelClass}>PO Number</span><input className={inputClass} required value={form.poNumber} onChange={(event) => change("poNumber", event.target.value)} placeholder="PO-2026-..." /></label>
-          <label><span className={labelClass}>PO Date</span><input className={inputClass} type="date" required value={form.poDate} onChange={(event) => change("poDate", event.target.value)} /></label>
-          <label><span className={labelClass}>PI Number</span><input className={inputClass} required value={form.piNumber} onChange={(event) => change("piNumber", event.target.value)} placeholder="Supplier PI reference" /></label>
-          <label><span className={labelClass}>PI Date</span><input className={inputClass} type="date" required value={form.piDate} onChange={(event) => change("piDate", event.target.value)} /></label>
-          <label><span className={labelClass}>Payment Mode</span><select className={inputClass} value={form.paymentMode} onChange={(event) => change("paymentMode", event.target.value)}><option value="LC">Letter of Credit (LC)</option><option value="TT">Telegraphic Transfer (TT)</option></select></label>
-          <label><span className={labelClass}>Expected Shipment</span><input className={inputClass} type="date" value={form.expectedShipmentDate} onChange={(event) => change("expectedShipmentDate", event.target.value)} /></label>
-          <label><span className={labelClass}>Currency</span><select className={inputClass} value={form.currency} onChange={(event) => change("currency", event.target.value)}><option>USD</option><option>CNY</option><option>EUR</option></select></label>
-          <label><span className={labelClass}>Exchange Rate to BDT</span><input className={inputClass} type="number" min="0.0001" step="0.0001" required value={form.exchangeRate} onChange={(event) => change("exchangeRate", event.target.value)} /></label>
-          <label><span className={labelClass}>Rate Date</span><input className={inputClass} type="date" required value={form.rateDate} onChange={(event) => change("rateDate", event.target.value)} /></label>
-          <label><span className={labelClass}>Rate Source</span><input className={inputClass} required value={form.rateSource} onChange={(event) => change("rateSource", event.target.value)} /></label>
+      <Panel title="Purchase order header" subtitle="The system generates an IMP reference immediately; no PI or LC decision is required yet.">
+        <form className="grid gap-5 p-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="xl:col-span-2"><span className={labelClass}>Supplier</span><select className={inputClass} required value={form.supplierId} onChange={(event) => change("supplierId", event.target.value)}><option value="">Select supplier</option>{suppliersQuery.data?.filter((entry) => entry.active).map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.country}</option>)}</select></label>
+            <label><span className={labelClass}>PO Number</span><input className={inputClass} required value={form.poNumber} onChange={(event) => change("poNumber", event.target.value)} placeholder="PO-2026-..." /></label>
+            <label><span className={labelClass}>PO Date</span><input className={inputClass} type="date" required value={form.poDate} onChange={(event) => change("poDate", event.target.value)} /></label>
+            <label><span className={labelClass}>Target Shipment <small className="font-normal normal-case">(optional)</small></span><input className={inputClass} type="date" value={form.expectedShipmentDate} onChange={(event) => change("expectedShipmentDate", event.target.value)} /></label>
+            <label className="md:col-span-2 xl:col-span-3"><span className={labelClass}>Purchase / Production Notes <small className="font-normal normal-case">(optional)</small></span><textarea className={textareaClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} placeholder="Initial specifications, supplier instruction or target timing" /></label>
+          </div>
 
-          <div className="border-t border-slate-200 pt-4 md:col-span-2 xl:col-span-4">
-            <h3 className="text-sm font-bold text-slate-950">First product line</h3>
-            <p className="mt-1 text-xs text-slate-500">Additional products can be added inside the case workspace.</p>
-          </div>
-          <label className="md:col-span-2"><span className={labelClass}>Canonical Product Variant</span><select className={inputClass} required value={form.productId} onChange={(event) => change("productId", event.target.value)}><option value="">Select product</option>{productsQuery.data?.map((entry) => <option key={entry.id} value={entry.id}>{entry.code} · {entry.name}</option>)}</select></label>
-          <label><span className={labelClass}>Quantity</span><input className={inputClass} type="number" min="1" step="1" required value={form.quantity} onChange={(event) => change("quantity", event.target.value)} /></label>
-          <label><span className={labelClass}>FOB per unit ({form.currency})</span><input className={inputClass} type="number" min="0.0001" step="0.0001" required value={form.fobUnitForeign} onChange={(event) => change("fobUnitForeign", event.target.value)} /></label>
-          <label><span className={labelClass}>Cartons</span><input className={inputClass} type="number" min="0" step="1" value={form.cartonCount} onChange={(event) => change("cartonCount", event.target.value)} /></label>
-          <label><span className={labelClass}>CBM per carton</span><input className={inputClass} type="number" min="0" step="0.0001" value={form.cbmPerCarton} onChange={(event) => change("cbmPerCarton", event.target.value)} /></label>
-          <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:col-span-2">
-            <ProductThumb src={product?.imageUrl} name={product?.name ?? "Product"} size="lg" />
-            <div><span className="block text-xs text-slate-500">Calculated product value</span><strong className="text-lg text-slate-950">{formatCurrency(fobTotal)}</strong><small className="block text-slate-500">{totalCbm.toFixed(4)} total CBM</small></div>
-          </div>
-          <label className="md:col-span-2 xl:col-span-4"><span className={labelClass}>Notes</span><textarea className={textareaClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} placeholder="Commercial notes, production instruction or follow-up" /></label>
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 md:col-span-2 xl:col-span-4">
+          <section className="rounded-md border border-slate-200">
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div><h2 className="flex items-center gap-2 text-sm font-bold text-slate-950"><PackagePlus className="h-4 w-4 text-cyan-700" /> Expected Products</h2><p className="mt-1 text-xs text-slate-500">FOB, exchange rate, cartons and CBM are intentionally completed after the PI arrives.</p></div>
+              <Button type="button" icon={<Plus className="h-4 w-4" />} onClick={() => setLines((current) => [...current, blankLine()])}>Add Product</Button>
+            </div>
+            <div className="grid gap-3 p-3">
+              {lines.map((line, index) => {
+                const product = products.find((entry) => entry.id === line.productId);
+                return <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[56px_minmax(0,1fr)_150px_40px] sm:items-end" key={line.id}>
+                  <ProductThumb src={product?.imageUrl} name={product?.name ?? `Product ${index + 1}`} size="lg" />
+                  <label><span className={labelClass}>Canonical Product Variant</span><select className={inputClass} required value={line.productId} onChange={(event) => updateLine(line.id, "productId", event.target.value)}><option value="">Select product</option>{products.filter((entry) => entry.active).map((entry) => <option key={entry.id} value={entry.id}>{entry.code} · {entry.name}</option>)}</select></label>
+                  <label><span className={labelClass}>Expected Quantity</span><input className={inputClass} type="number" min="1" step="1" required value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} /></label>
+                  <Button type="button" variant="ghost" icon={<Trash2 className="h-4 w-4 text-rose-600" />} disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((entry) => entry.id !== line.id))} aria-label="Remove product" title="Remove product" />
+                </div>;
+              })}
+            </div>
+          </section>
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
             <Button type="button" onClick={() => navigate("/app/imports")}>Cancel</Button>
-            <Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={mutation.isPending}>{mutation.isPending ? "Creating..." : "Create Import Case"}</Button>
+            <Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={mutation.isPending}>{mutation.isPending ? "Creating..." : "Create Draft Import"}</Button>
           </div>
         </form>
       </Panel>
