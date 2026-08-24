@@ -57,8 +57,8 @@ export default function AppLayout() {
         </button>
         {!collapsed ? (
           <div className="min-w-0 leading-tight">
-            <strong className="block truncate text-[15px] text-slate-950">Mipro ERP</strong>
-            <span className="block truncate text-[11px] text-slate-500">Medical supply operations</span>
+            <strong className="block truncate text-[15px] text-slate-950">MIPRO ERP</strong>
+            <span className="block truncate text-[11px] text-slate-500">Import & distribution</span>
           </div>
         ) : null}
         <button

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import MiproLogo from "../../components/branding/MiproLogo";
 
 type AuthShellProps = {
   title: string;
@@ -18,14 +19,8 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
           />
           <div className="absolute inset-0 bg-blue-950/88" />
           <div className="relative">
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-40 items-center rounded-md bg-white px-2"><img className="h-auto w-full" src="/mipro-logo.png" alt="MIPRO Precision in Healthcare" /></span>
-              <div>
-                <strong className="block text-xl">MIPRO ERP</strong>
-                <span className="text-sm text-slate-300">Medical Import & Distribution</span>
-              </div>
-            </div>
-            <h1 className="mt-20 max-w-3xl text-5xl font-bold leading-tight">
+            <MiproLogo className="h-[74px] w-[292px] rounded-md shadow-sm" priority />
+            <h1 className="mt-16 max-w-3xl text-5xl font-bold leading-tight">
               Connected import cases, FIFO inventory, sales, collections and operational accounts.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
@@ -48,6 +43,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
         </section>
         <main className="flex items-center justify-center p-4 sm:p-8">
           <div className="w-full max-w-xl rounded-md border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
+            <MiproLogo className="mb-7 h-[58px] w-[228px] lg:hidden" priority />
             <div className="mb-6">
               <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">Secure ERP Access</p>
               <h2 className="mt-2 text-3xl font-bold text-slate-950">{title}</h2>

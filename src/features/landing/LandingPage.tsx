@@ -1,5 +1,6 @@
 import { ArrowRight, Boxes, Calculator, FileText, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
+import MiproLogo from "../../components/branding/MiproLogo";
 import Button from "../../components/ui/Button";
 
 const modules = [
@@ -13,14 +14,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <img className="h-9 w-24 object-contain object-left sm:w-32" src="/mipro-logo.png" alt="MIPRO Precision in Healthcare" />
-            <div className="hidden md:block">
-              <strong className="block text-slate-950">MIPRO ERP</strong>
-              <span className="text-xs text-slate-500">Medical Import & Distribution</span>
-            </div>
-          </div>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5">
+          <MiproLogo className="h-[49px] w-[190px] sm:h-[58px] sm:w-[228px]" priority />
           <div className="flex gap-2">
             <Link className="hidden sm:block" to="/signup">
               <Button>Request Access</Button>
