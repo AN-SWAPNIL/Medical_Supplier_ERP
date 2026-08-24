@@ -22,7 +22,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
           <div className="absolute inset-0 bg-blue-950/88" />
           <div className="relative">
             <Link className="inline-block rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-blue-950" to="/" aria-label="Go to MIPRO ERP home">
-              <MiproLogo className="h-[74px] w-[292px] rounded-md shadow-sm" priority />
+              <MiproLogo className="w-[292px] rounded-md shadow-sm" priority />
             </Link>
             <h1 className="mt-16 max-w-3xl text-5xl font-bold leading-tight">
               Connected import cases, FIFO inventory, sales, collections and operational accounts.
@@ -49,7 +49,7 @@ export default function AuthShell({ title, subtitle, children }: AuthShellProps)
           <div className="w-full max-w-xl rounded-md border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
             <div className="mb-7 lg:flex lg:justify-end">
               <Link className="inline-block rounded focus:outline-none focus:ring-2 focus:ring-cyan-200 lg:hidden" to="/" aria-label="Go to MIPRO ERP home">
-                <MiproLogo className="h-[58px] w-[228px]" priority />
+                <MiproLogo className="w-[228px]" priority />
               </Link>
               <Link className="mt-3 flex w-fit items-center gap-1.5 text-sm font-semibold text-cyan-700 hover:text-cyan-900 lg:mt-0" to="/">
                 <ArrowLeft className="h-4 w-4" />
