@@ -2,7 +2,7 @@
 
 ## Goal
 
-Record a confident 19-20 minute client walkthrough that proves this is one connected operating flow, not a collection of static pages. Follow one story from import evidence and costing to stock, sale, collection, expense, employee reporting, contextual assistance, and permission control.
+Record a confident 22-23 minute client walkthrough that proves this is one connected operating flow, not a collection of static pages. Follow one story from import evidence and costing to stock, sale, collection, expense, employee reporting, field activity, contextual assistance, and permission control.
 
 Use clear business language. Mention the API only to explain that actions are connected and backend-ready.
 
@@ -36,10 +36,12 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 | 10:35-13:40 | Sales | Customer -> quote -> order -> delivery -> collection |
 | 13:40-14:50 | Expenses & Accounts | Operating money without full GL |
 | 14:50-16:20 | Reports/print | Employee/date reporting from owned transactions |
-| 16:20-17:20 | Contextual AI | Page context, sources and workflow-safe answers |
-| 17:20-18:20 | Settings | Capabilities, access summary and confirmation queue |
-| 18:20-19:40 | Second role | Own report, direct denial and AI redaction |
-| 19:40-20:00 | Close | Frontend complete, backend-ready, honest scope |
+| 16:20-18:20 | Field Team | Role-scoped map, timestamps, visits and stored-coordinate history |
+| 18:20-19:15 | Smart Insights | Cross-workflow review queue without another sidebar module |
+| 19:15-20:15 | Contextual AI | Page/employee context, sources and workflow-safe answers |
+| 20:15-21:15 | Settings | Capabilities, access summary and confirmation queue |
+| 21:15-22:35 | Second role | Own activity/report, direct denial and AI redaction |
+| 22:35-23:00 | Close | Frontend complete, backend-ready, honest scope |
 
 ---
 
@@ -364,7 +366,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 3. Open **Sales & Collection**, then **Salesperson Performance**.
 4. Keep **All Sales Employees** selected and show the comparison chart/table.
 5. Select **Rafiq Ahmed**, show summary cards and the quotation/order/delivery/collection/customer/product detail tabs.
-6. Click **Print Employee Report**, then return to Reports.
+6. Click **Print Report**, then return to Reports.
 7. Briefly move across Import & Cost, Inventory and Expense & Cash-Bank; show TA/DA employee filtering and Audit.
 
 ### Say
@@ -377,7 +379,42 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 16:20-17:20 - Contextual MIPRO AI
+## 16:20-18:20 - Field Team Map And History
+
+### Show
+
+1. In **Sales**, open **Field Team**. Point out that it is an internal Sales view, not an eighth sidebar item.
+2. Pause on the **Demo location feed** warning.
+3. Show Active, Recent/Stale, Offline, Not Tracking and Visits Today counts.
+4. Filter by territory and LIVE status, then select Rafiq from the employee list or map marker.
+5. Point to employee ID, territory, last-updated timestamp, GPS accuracy, current customer and check-in time.
+6. Switch to **Route / Visit History**. Select employee/date and show the coordinate polyline and visit timeline.
+7. Click **Open Employee Report**, then use **View Field Activity** to return.
+
+### Say
+
+> This is the complete management side for future field sales. The current feed is explicitly demo data, but every marker uses real latitude and longitude through a typed API. Status is derived from timestamp and tracking-session state, so old coordinates are never called live. Route history connects stored points only; it does not invent distance from stops.
+
+> Location is sensitive. Management sees the permitted team, a Sales Executive sees only self, and Accounts, Import and Warehouse receive an API denial. Customer visit verification is stored separately from periodic work tracking. The future mobile app will write to these same start, location, stop, check-in and check-out contracts.
+
+---
+
+## 18:20-19:15 - Smart Insights
+
+### Show
+
+1. Return to Dashboard and click **View All Insights**.
+2. Filter **Inventory**, then **Field Team**.
+3. Open one source record.
+4. Dismiss one card and explain that no transaction changed.
+
+### Say
+
+> Smart Insights is a passive review queue for rule-backed exceptions. It reuses the same role-safe recommendation API as the floating assistant, but it does not recreate the old AI Command Center. A dismissal only clears the card in this frontend session; approval, posting and correction still happen in the source workflow.
+
+---
+
+## 19:15-20:15 - Contextual MIPRO AI
 
 ### Show
 
@@ -398,7 +435,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 17:20-18:20 - Settings And Open Decisions
+## 20:15-21:15 - Settings And Open Decisions
 
 ### Show
 
@@ -417,7 +454,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 18:20-19:40 - Prove Role Access
+## 21:15-22:35 - Prove Role Access
 
 ### Show
 
@@ -425,8 +462,9 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 2. Sign in as `sales1@mipro.local` with `password123`.
 3. Show the smaller navigation: Dashboard, Sales and Reports.
 4. Open Sales and point to **My Customers** and **My Quotes & Orders**.
-5. Open Reports and show that only this executive's Salesperson Performance is available.
-6. Open MIPRO AI and ask `What is the landed cost and profit margin?`; pause on the permission-safe refusal.
+5. Open My Activity and show that no other employee is returned, then open Reports and show only this executive's performance.
+6. Ask Field Team AI about another salesperson and show the refusal.
+7. Open MIPRO AI and ask `What is the landed cost and profit margin?`; pause on the permission-safe refusal.
 7. Type `/app/accounts` in the address bar and show **Access denied**.
 
 ### Say
@@ -437,7 +475,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 19:40-20:00 - Closing
+## 22:35-23:00 - Closing
 
 ### Say
 
@@ -471,7 +509,7 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 - Do not say uploaded files are permanently stored.
 - Do not say the prototype is a production database.
 - Present AI as a deterministic, role-safe prototype boundary, not as a production model or autonomous decision-maker.
-- Do not claim GPS, HR, payroll, fleet, invoice, full accounting or automatic customs calculation.
+- Do not call the demo feed production GPS or promise browser tracking after closure. Native mobile/Supabase tracking, HR, payroll, fleet, invoice, full accounting and automatic customs calculation remain later work.
 - If a table is wide on mobile, demonstrate its intentional horizontal scroll area.
 - If product images do not appear, verify the individual files under `/public/products/` are deployed.
 - If an API request fails locally, confirm both ports are running and `/api/health` succeeds.

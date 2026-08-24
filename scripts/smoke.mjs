@@ -73,10 +73,14 @@ const routes = [
   ["inventory-mobile", "/app/inventory", 390, 1100, people.super],
   ["sales-desktop", "/app/sales", 1440, 1000, people.super],
   ["sales-mobile", "/app/sales", 390, 1100, people.super],
+  ["field-team-desktop", "/app/sales?view=field-team", 1440, 1100, people.salesManager],
+  ["field-team-mobile", "/app/sales?view=field-team", 390, 1100, people.sales],
   ["accounts-desktop", "/app/accounts", 1440, 1000, people.super],
   ["accounts-mobile", "/app/accounts", 390, 1100, people.super],
   ["reports-desktop", "/app/reports", 1440, 1000, people.super],
   ["reports-mobile", "/app/reports", 390, 1100, people.super],
+  ["smart-insights-desktop", "/app/insights", 1440, 1000, people.salesManager],
+  ["smart-insights-mobile", "/app/insights", 390, 1000, people.sales],
   ["settings-desktop", "/app/settings", 1440, 1100, people.super],
   ["settings-mobile", "/app/settings", 390, 1100, people.super],
   ["settings-migration-desktop", "/app/settings?view=migration", 1440, 1100, people.super]
@@ -150,23 +154,52 @@ await customerLedger.screenshot({ path: "artifacts/customer-ledger-desktop.png",
 await customerLedger.close();
 
 const employeeReport = await preparePage({ name: "employee-performance-desktop", width: 1440, height: 1100, user: people.salesManager });
-await employeeReport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
+await employeeReport.goto(baseUrl + "/app/reports?view=sales&table=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
 await employeeReport.getByLabel("From Date").fill("2026-08-01");
 await employeeReport.getByLabel("To Date").fill("2026-08-31");
-await employeeReport.getByRole("tab", { name: "Sales & Collection" }).click();
-await employeeReport.getByRole("tab", { name: /Salesperson Performance/ }).click();
 await employeeReport.getByRole("heading", { name: "Salesperson Performance" }).waitFor({ timeout: 30000 });
-const employeeSelect = employeeReport.getByRole("combobox", { name: "Employee" });
-await employeeSelect.selectOption("sales1");
+await employeeReport.getByTestId("employee-picker").locator("button").first().click();
+await employeeReport.getByPlaceholder("Search name / ID / territory").fill("SE-001");
+await employeeReport.getByRole("option", { name: /Rafiq Ahmed/ }).click();
 await employeeReport.getByText(/Rafiq Ahmed \| Activity details/).waitFor({ timeout: 30000 });
-await employeeReport.getByRole("button", { name: "Print Employee Report" }).waitFor();
+await employeeReport.getByRole("button", { name: "Print Report" }).waitFor();
+await employeeReport.getByRole("button", { name: "View Field Activity" }).waitFor();
 const performanceText = await employeeReport.locator("body").textContent();
 if (!performanceText?.includes("Delivered Sales") || !performanceText.includes("Collections")) issues.push("Employee report summary is incomplete.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
-await employeeReport.getByRole("button", { name: "Print Employee Report" }).click();
+await employeeReport.getByRole("button", { name: "Print Report" }).click();
 await employeeReport.getByText("SALES EMPLOYEE PERFORMANCE REPORT", { exact: true }).waitFor({ timeout: 30000 });
 await employeeReport.screenshot({ path: "artifacts/print-employee-performance.png", fullPage: true });
 await employeeReport.close();
+
+const fieldTeam = await preparePage({ name: "field-team-interactions", width: 1440, height: 1050, user: people.salesManager });
+await fieldTeam.goto(baseUrl + "/app/sales?view=field-team", { waitUntil: "domcontentloaded", timeout: 60000 });
+await fieldTeam.getByTestId("field-team-workspace").waitFor({ timeout: 30000 });
+await fieldTeam.locator(".leaflet-container").waitFor({ timeout: 30000 });
+await fieldTeam.waitForTimeout(1000);
+if ((await fieldTeam.locator(".field-map-marker").count()) < 1) issues.push("Field Team map rendered without coordinate markers.");
+await fieldTeam.getByLabel("Territory").selectOption("Dhaka North");
+await fieldTeam.getByLabel("Tracking Status").selectOption("LIVE");
+await fieldTeam.getByText("Rafiq Ahmed", { exact: true }).first().click();
+await fieldTeam.getByText(/GPS accuracy/).waitFor({ timeout: 30000 });
+await fieldTeam.screenshot({ path: "artifacts/field-team-filtered-desktop.png", fullPage: true });
+await fieldTeam.getByRole("tab", { name: "Route / Visit History" }).click();
+await fieldTeam.getByText("Visit timeline", { exact: true }).waitFor({ timeout: 30000 });
+await fieldTeam.locator(".leaflet-container").waitFor();
+if ((await fieldTeam.getByText(/No synthetic distance is calculated/).count()) === 0) issues.push("Route history does not explain its coordinate-only path.");
+await fieldTeam.screenshot({ path: "artifacts/field-team-history-desktop.png", fullPage: true });
+await fieldTeam.close();
+
+const insightsPage = await preparePage({ name: "smart-insights-interactions", width: 1280, height: 900, user: people.salesManager });
+await insightsPage.goto(baseUrl + "/app/insights", { waitUntil: "networkidle", timeout: 60000 });
+await insightsPage.getByTestId("smart-insights-page").waitFor();
+await insightsPage.getByRole("tab", { name: /Field Team/ }).click();
+await insightsPage.getByText(/field update|field team feed/i).waitFor();
+const cardsBeforeDismiss = await insightsPage.getByTestId("ai-recommendation").count();
+await insightsPage.getByRole("button", { name: "Dismiss recommendation" }).first().click();
+if ((await insightsPage.getByTestId("ai-recommendation").count()) !== cardsBeforeDismiss - 1) issues.push("Smart Insight dismissal did not remove only the selected alert.");
+await insightsPage.screenshot({ path: "artifacts/smart-insights-filtered.png", fullPage: true });
+await insightsPage.close();
 
 const documentPage = await preparePage({ name: "document-viewer-pdf", width: 1440, height: 1000, user: people.super });
 await documentPage.goto(baseUrl + "/app/imports/imp-77612", { waitUntil: "networkidle", timeout: 60000 });
@@ -256,7 +289,7 @@ if ((await salesPage.getByText("My Customers").count()) === 0) issues.push("Sale
 await salesPage.close();
 
 const headers = { "x-user-id": people.super.id, "x-role": people.super.role, "Content-Type": "application/json" };
-for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/settings/decisions"]) {
+for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
   const response = await fetch(baseUrl + path, { headers });
   console.log("api " + path + ": " + response.status);
   if (!response.ok) issues.push(path + " returned " + response.status);

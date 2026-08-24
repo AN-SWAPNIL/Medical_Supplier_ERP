@@ -20,6 +20,7 @@ const SalesPage = lazy(() => import("./domains/sales/SalesPage"));
 const SettingsPage = lazy(() => import("./domains/settings/SettingsPage"));
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage"));
 const ProfilePage = lazy(() => import("./features/users/ProfilePage"));
+const SmartInsightsPage = lazy(() => import("./components/ai/SmartInsightsPage"));
 
 const deferred = (element: ReactNode) => (
   <Suspense fallback={<div className="grid min-h-64 place-items-center rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-500">Loading workspace...</div>}>
@@ -52,6 +53,7 @@ function App() {
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />
           <Route path="settings" element={guarded("settings", <SettingsPage />)} />
+          <Route path="insights" element={guarded("dashboard", <SmartInsightsPage />)} />
           <Route path="profile" element={deferred(<ProfilePage />)} />
           <Route path="print/:documentType/:id" element={guarded("print", <PrintPage />)} />
 

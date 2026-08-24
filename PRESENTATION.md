@@ -2,9 +2,9 @@
 
 ## Client Presentation Guide
 
-**Build:** Simplified workflow-driven frontend, updated through the 24 August 2026 update2 audit
+**Build:** Simplified workflow-driven frontend, updated through the 24 August 2026 update3 field-sales audit
 
-**Primary requirements:** `files/Medical_Supplier_ERP_Simplified_Plan_update2.md` and `files/MIPRO_ERP_PreSimplification_Analysis.md`
+**Primary requirements:** `files/Medical_Supplier_ERP_Simplified_Plan_update3.md` and `files/MIPRO_ERP_Improvement_Analysis.md`, with update2 retained as the validated transaction-flow foundation
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -50,17 +50,20 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Employee/date-filtered salesperson performance with all-person comparison and individual print.
 - Protected PDF/image viewing for import, cost, and expense evidence.
 - Floating contextual MIPRO AI, reviewed document extraction, and smart operational recommendations.
+- A real coordinate-based Field Team map inside Sales with clustering, timestamps, status rules, customer visits, and route history.
+- Searchable EmployeePicker, territory filtering, sortable/paginated team performance, and report-to-field-activity links.
+- A role-safe Smart Insights review queue linked from Dashboard, without adding an eighth main destination.
 
 ### Intentionally deferred
 
-- GPS and field-sales map
-- Native mobile application
+- Native mobile application and reliable background tracking after browser closure
+- Production Supabase realtime location feed and durable location history
 - HR and payroll
 - Fleet management
 - Full general ledger, trial balance, and balance sheet
 - Automatic customs, VAT, AIT, or HS-code duty formulas
 
-There is no separate AI Command Center: AI appears only as a floating assistant and contextual actions. The remaining items are excluded by the latest simplified scope so the prototype follows the client's real workflow.
+There is no GPS sidebar module or AI Command Center. Field Team stays inside Sales, Smart Insights is a secondary Dashboard route, and the floating assistant remains contextual. The web currently consumes a clearly labelled demo location feed through the same typed contracts intended for the future mobile client.
 
 ---
 
@@ -71,7 +74,7 @@ There is no separate AI Command Center: AI appears only as a floating assistant 
 | Dashboard | Role-safe KPIs and items requiring action |
 | Imports | One case from commercial setup through cost and receiving |
 | Inventory | Stock, batches, expiry awareness, and movement history |
-| Sales | Customers, quotations/orders, deliveries, and collections |
+| Sales | Customers, quotations/orders, deliveries, collections, and role-scoped Field Team |
 | Expenses & Accounts | Operating expenses, cash/bank, dues, and transaction ledger |
 | Reports | Grouped operational reports and narrow audit history |
 | Settings | Users, capabilities, master data, setup, print identity, and open client decisions |
@@ -159,6 +162,9 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | User/capabilities | Super Admin | Super Admin | Deactivate rather than erase history | Super Admin | Route, action, and sensitive-field access |
 | AI extraction | Import user requests it | User selects fields to apply through normal forms | Extraction itself changes nothing | Human review is mandatory | Suggested values pass through existing validation and audit |
 | AI recommendation/chat | System reads role-scoped records | User may dismiss locally or open its source | No operational record is deleted | AI cannot approve/post/finalize | Explanation and next-step guidance only |
+| Current field location | Future salesperson web/mobile client | The same salesperson supplies newer points | Coordinates stay as history; no ordinary delete | Tracking session and API scope validate the write | Role-scoped live/last marker with timestamp and accuracy |
+| Customer visit verification | Assigned Sales Executive | Check-out adds outcome | Historical visit event remains | Assigned employee checks in/out | Separate visit evidence linked to customer and route |
+| Smart Insight | Rule-backed API creates it | User can filter or dismiss locally | Dismissal posts no transaction | Normal source workflow remains authoritative | One role-safe review queue across permitted areas |
 | Client decision | Super Admin records confirmation | Super Admin | Audit-worthy status change | Client confirms externally | Prevents assumptions being hard-coded |
 
 ---
@@ -457,15 +463,33 @@ Import documents, freight/cost evidence, and expense receipts use this flow. Sen
 
 ### Contextual MIPRO AI
 
-The assistant is fixed at the bottom-right on desktop and becomes a near-full-screen panel on mobile. It receives only `route`, `entityType`, `entityId`, and the selected report period, then the API builds an answer from records already permitted for the signed-in role.
+The assistant is fixed at the bottom-right on desktop and becomes a near-full-screen panel on mobile. It receives only route/entity context, optional selected employee, and the selected report period, then the API builds an answer from records already permitted for the signed-in role.
 
 - Imports: stage, missing documents, and authorized allocation explanation.
 - Inventory: FIFO lot and expiry attention matching the deterministic engine.
 - Sales: own/team-visible dues, open quotations, and follow-up suggestions.
 - Reports: current-period sales/collection and employee summaries.
 - Dashboard: role-safe management priorities.
+- Field Team: current/last status, visit context, stale feeds, and own/team scope.
+- Smart Insights: explanation and source navigation for the current review queue.
 
 The assistant cannot call finalization, dispatch, collection, or update endpoints. Document extraction returns proposed fields with confidence and warnings; all checkboxes begin unselected, and the user explicitly applies verified fields through the same validation used by manual editing. In this release answers are deterministic mock intelligence behind replaceable typed endpoints, not a production model claim.
+
+### Field Team management flow
+
+```text
+Future Web/Mobile Sales Client
+  -> start tracking session
+  -> submit timestamped coordinate + accuracy + source
+  -> optional customer visit check-in/check-out
+  -> shared field-team API
+  -> current-location feed + historical points + visits
+  -> Sales > Field Team map and employee performance report
+```
+
+The current release supplies realistic mock records through that boundary and labels them **Demo location feed**. Leaflet renders actual latitude/longitude markers, clustering, pan/zoom, customer points and stored-coordinate route polylines. It never calls an old coordinate “live” and never estimates distance from the number of stops.
+
+Access is enforced by the API: Super Admin and Managing Director see the full operational feed, Sales Manager sees the sales team, Sales Executive sees only their own activity, and Accounts/Import/Warehouse receive `403`. Visit verification and periodic tracking are distinct records, so customer check-in evidence is not confused with work-session movement.
 
 ---
 
@@ -590,6 +614,20 @@ You are not showing code for its own sake. You are proving:
 | `GET/POST /api/deliveries` | Post actual batch delivery and stock-out |
 | `GET/POST /api/collections` | Validate real payment account, post receipt, and reduce due |
 
+### Field Team
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/field-team/current` | Return role-scoped current/last locations, derived statuses, visits, and feed summary |
+| `GET /api/field-team/employees?search=&territory=&status=` | Search the permitted field team without one huge native selector |
+| `GET /api/field-team/:userId/history?date=` | Return stored coordinate sequence, session, and visit timeline with own/team enforcement |
+| `GET /api/field-team/:userId/visits?from=&to=` | Return authorized customer visit records |
+| `POST /api/field-team/tracking/start` | Start the signed-in salesperson's foreground tracking session |
+| `POST /api/field-team/tracking/location` | Accept validated coordinate, accuracy, timestamp, and web/mobile source |
+| `POST /api/field-team/tracking/stop` | End the signed-in salesperson's session |
+| `POST /api/field-team/visits/:id/check-in` | Verify the assigned salesperson's visit location |
+| `POST /api/field-team/visits/:id/check-out` | Complete the assigned visit with outcome |
+
 ### Accounts, reports, and settings
 
 | Method and path | Purpose |
@@ -602,7 +640,7 @@ You are not showing code for its own sake. You are proving:
 | `GET /api/reports/salespeople?from=...&to=...&employeeId=...` | All-person comparison or one authorized employee report |
 | `POST /api/ai/chat` | Return a current-context, role-safe answer and source links |
 | `GET /api/ai/insights` | Return compact page/report summaries |
-| `GET /api/ai/recommendations` | Return FIFO, expiry, due, quote, document, or management actions |
+| `GET /api/ai/recommendations` | Return role-safe import, inventory, sales, collection, finance, or field-team actions; powers Smart Insights |
 | `POST /api/ai/document-extract` | Propose import fields for explicit human review |
 | `GET/POST/PATCH/DELETE /api/products/*` | Product master |
 | `GET/POST/PATCH/DELETE /api/suppliers/*` | Supplier master |
@@ -689,6 +727,22 @@ This is correct for frontend workflow approval. Production requires persistent a
 - Sales follow-up is scoped to the signed-in role.
 - Sales Executive landed-cost/profit question returns a restriction without a secret value.
 
+### H. Field Team and scalable employee reporting
+
+- Sales Manager sees the permitted team on real latitude/longitude markers and can filter by employee, territory, and derived status.
+- Marker detail always shows last-updated time and GPS accuracy; stale data is never labelled live.
+- Route History draws the stored coordinate sequence and lists visit check-in/out events without inventing route distance.
+- Sales Executive current/history endpoints contain only self; Accounts/Import/Warehouse receive `403`.
+- EmployeePicker searches name, employee ID, and territory; team comparison supports territory, search, sorting, and pagination.
+- Employee performance links to Field Activity and the field card links back to the same employee report.
+
+### I. Smart Insights
+
+- Dashboard links to the secondary `/app/insights` review queue without changing the seven-item sidebar.
+- Category/severity filters use the same role-safe recommendation API as the floating assistant.
+- Dismiss removes only the local alert card and never posts or mutates an operational transaction.
+- Field Team AI cannot reveal another salesperson to a Sales Executive.
+
 These scenarios are covered by automated unit, API-flow, role, and browser smoke tests.
 
 ---
@@ -703,13 +757,15 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 6. Cost preview: open the freight evidence, expand an allocation explanation, and explain exact reconciliation.
 7. Inventory: show product images, smart FIFO/expiry alert, opening/import batches, and multi-batch FIFO.
 8. Sales: show customer running ledger, follow-up recommendations, owner profit preview, and quotation-to-order connection.
-9. Deliveries: explain the automatic batch split and stock-out.
-10. Collections: explain due and account update.
-11. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
-12. Reports: set From/To, compare salespeople, select/print one employee, then show TA/DA and audit.
-13. MIPRO AI: ask about the current import and show its source link.
-14. Settings: show users/capabilities, Role Access Summary, aliases, opening data, print identities, and decisions.
-15. Sign in as Sales Executive: prove own Sales/Reports, direct-URL denial, and AI cost refusal.
+9. Field Team: show the demo-feed label, clustered coordinate map, status/territory filters, marker detail, and Route History.
+10. Reports: search `SE-001`, filter territory, sort the team, open Rafiq, and move between performance and field activity.
+11. Smart Insights: open from Dashboard, filter Inventory/Field Team, open a source, and dismiss one card.
+12. Deliveries: explain the automatic batch split and stock-out.
+13. Collections: explain due and account update.
+14. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
+15. MIPRO AI: ask about the current import and Field Team, then show role-safe source links.
+16. Settings: show users/capabilities, Role Access Summary, aliases, opening data, print identities, and decisions.
+17. Sign in as Sales Executive: prove own Sales/Reports/My Activity, direct employee denial, and AI cost/location refusal.
 
 ---
 
@@ -730,6 +786,9 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 - Protected PDF/image viewer, temporary upload content, and seeded document evidence
 - Salesperson comparison/detail/print with owner-correct attribution
 - Contextual role-safe MIPRO AI, smart alerts, source links, and reviewed extraction
+- Leaflet/OSM field-team map with marker clustering, derived status, role-scoped history, visits, and typed future write contracts
+- Searchable EmployeePicker, territory/search/sort/pagination, and performance-to-field navigation
+- Dashboard-linked Smart Insights review queue with category/severity filters and non-transactional dismissal
 - Vercel-compatible same-origin mock API
 - Automated acceptance coverage
 
@@ -800,7 +859,7 @@ The latest client flow is quotation -> order -> challan -> collection. Invoice i
 
 **Where are AI, GPS, HR, and fleet?**
 
-Contextual MIPRO AI is active in this prototype as a role-safe, rule-backed assistant with source links and reviewed document extraction. GPS/mobile visits, HR/payroll, and fleet remain deferred; a production AI model and persistent document intelligence belong to the backend phase.
+Contextual MIPRO AI and the web management side of field tracking are active. Sales > Field Team displays a clearly labelled demo location feed with real coordinates, clustering, current/stale/offline rules, visit history, and strict own/team access. The future native mobile app, reliable tracking after browser closure, Supabase realtime persistence, HR/payroll, and fleet remain later phases. A production AI model and persistent document intelligence also belong to the backend phase.
 
 **Will demo changes remain forever?**
 

@@ -541,7 +541,50 @@ async function run() {
   assert.equal(reportAi.restricted, false);
   assert.doesNotMatch(JSON.stringify(reportAi), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
 
-  console.log("All update2 simplified ERP scenarios passed.");
+  console.log("9. Field Team privacy, scalable selection and Smart Insights");
+  const managerField = await api("/api/field-team/current", { as: identities.salesManager });
+  assert.equal(managerField.feedLabel, "Demo location feed");
+  assert.ok(managerField.employees.length >= 5);
+  assert.ok(managerField.locations.some((entry) => entry.status === "LIVE"));
+  assert.ok(managerField.locations.some((entry) => entry.status === "STALE"));
+  assert.ok(managerField.locations.every((entry) => !Object.hasOwn(entry, "currentDue") && !Object.hasOwn(entry, "landedCost")));
+  const firstLive = managerField.locations.find((entry) => entry.userId === identities.sales1.id);
+  const nextField = await api("/api/field-team/current", { as: identities.salesManager });
+  const movedLive = nextField.locations.find((entry) => entry.userId === identities.sales1.id);
+  assert.notDeepEqual([movedLive.latitude, movedLive.longitude], [firstLive.latitude, firstLive.longitude]);
+  assert.equal(movedLive.status, "LIVE");
+  const ownField = await api("/api/field-team/current", { as: identities.sales1 });
+  assert.deepEqual(ownField.employees.map((employee) => employee.id), [identities.sales1.id]);
+  assert.deepEqual(ownField.locations.map((entry) => entry.userId), [identities.sales1.id]);
+  await api("/api/field-team/current", { as: identities.accounts, expected: 403 });
+  await api("/api/field-team/current", { as: identities.import, expected: 403 });
+  const employeeSearch = await api("/api/field-team/employees?search=SE-021", { as: identities.salesManager });
+  assert.deepEqual(employeeSearch.map((employee) => employee.id), ["sales3"]);
+  const territorySearch = await api("/api/field-team/employees?territory=Dhaka%20North", { as: identities.salesManager });
+  assert.ok(territorySearch.every((employee) => employee.territory === "Dhaka North"));
+  const liveSearch = await api("/api/field-team/employees?status=LIVE", { as: identities.salesManager });
+  assert.ok(liveSearch.some((employee) => employee.id === identities.sales1.id));
+  const ownHistory = await api("/api/field-team/" + identities.sales1.id + "/history?date=" + today, { as: identities.sales1 });
+  assert.equal(ownHistory.employee.id, identities.sales1.id);
+  assert.ok(ownHistory.points.length >= 2);
+  assert.ok(ownHistory.visits.length >= 1);
+  assert.ok(!Object.hasOwn(ownHistory, "distance"));
+  await api("/api/field-team/" + identities.sales2.id + "/history?date=" + today, { as: identities.sales1, expected: 403 });
+  await api("/api/field-team/tracking/location", { method: "POST", as: identities.sales1, expected: 422, body: { latitude: 200, longitude: 90, accuracyMeters: 10, recordedAt: new Date().toISOString(), source: "WEB_FOREGROUND" } });
+  await api("/api/field-team/visits/visit-rafiq-popular/check-in", { method: "POST", as: identities.sales1, expected: 422, body: { latitude: 200, longitude: 90, accuracyMeters: -1 } });
+  await api("/api/field-team/visits/visit-shamima-labaid/check-out", { method: "POST", as: identities.sales1, expected: 403, body: { outcome: "Must not post" } });
+  const fieldAiRestricted = await api("/api/ai/chat", { method: "POST", as: identities.sales1, body: { message: "Where is Shamima?", context: { route: "/app/sales?view=field-team", entityType: "field-team", employeeId: identities.sales2.id } } });
+  assert.equal(fieldAiRestricted.restricted, true);
+  const fieldAiManager = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who is active in the field?", context: { route: "/app/sales?view=field-team", entityType: "field-team" } } });
+  assert.equal(fieldAiManager.restricted, false);
+  assert.ok(fieldAiManager.sources.some((source) => source.path.includes("view=field-team")));
+  const managerInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.salesManager });
+  assert.ok(managerInsights.some((entry) => entry.category === "Field Team"));
+  assert.ok(managerInsights.every((entry) => entry.sourcePath && entry.recommendedAction));
+  const accountsInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.accounts });
+  assert.ok(accountsInsights.every((entry) => entry.category !== "Field Team"));
+
+  console.log("All update3 simplified ERP scenarios passed.");
 }
 
 try {

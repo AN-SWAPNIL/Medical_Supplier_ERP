@@ -16,6 +16,10 @@ import type {
   DocumentRecord,
   DocumentUpload,
   Expense,
+  CurrentEmployeeLocation,
+  FieldEmployee,
+  FieldTeamHistoryData,
+  FieldVisit,
   ImportCase,
   ImportCostLine,
   ImportDocument,
@@ -29,6 +33,9 @@ import type {
   SalespersonPerformanceDetail,
   SalespersonPerformanceSummary,
   StockBatch,
+  LocationHistoryPoint,
+  LocationUpdateInput,
+  TrackingSession,
   WarehouseReceipt
 } from "../src/domains/erp.types.js";
 import type { ApiResponse, Role, Session, User } from "../src/types/index.js";
@@ -44,7 +51,10 @@ import {
   demoUsers,
   expenseCategories as seedExpenseCategories,
   expenses as seedExpenses,
+  currentEmployeeLocations as seedCurrentEmployeeLocations,
+  fieldVisits as seedFieldVisits,
   imports as seedImports,
+  locationHistory as seedLocationHistory,
   orders as seedOrders,
   passwordByEmail,
   printConfiguration as seedPrintConfiguration,
@@ -56,6 +66,7 @@ import {
   stockBatches as seedStockBatches,
   stockMovements as seedStockMovements,
   suppliers as seedSuppliers,
+  trackingSessions as seedTrackingSessions,
   warehouseConfig as seedWarehouseConfig
 } from "./data.js";
 
@@ -78,6 +89,10 @@ const expenses = structuredClone(seedExpenses);
 const accounts = structuredClone(seedAccounts);
 const accountTransactions = structuredClone(seedAccountTransactions);
 const expenseCategories = structuredClone(seedExpenseCategories);
+const currentEmployeeLocations: CurrentEmployeeLocation[] = structuredClone(seedCurrentEmployeeLocations);
+const fieldVisits: FieldVisit[] = structuredClone(seedFieldVisits);
+const locationHistory: LocationHistoryPoint[] = structuredClone(seedLocationHistory);
+const trackingSessions: TrackingSession[] = structuredClone(seedTrackingSessions);
 const auditEvents = structuredClone(seedAuditEvents);
 const costPresets = structuredClone(seedCostPresets);
 const warehouseConfig = structuredClone(seedWarehouseConfig);
@@ -448,7 +463,75 @@ function salesEmployeesFor(req: Request): SalespersonEmployee[] {
   const user = userFor(req)!;
   return demoUsers
     .filter((entry) => entry.role === "Sales Executive" && entry.status === "Active" && (user.role !== "Sales Executive" || entry.id === user.id))
-    .map((entry) => ({ id: entry.id, name: entry.name, title: entry.title, territory: entry.territory }));
+    .map((entry) => ({ id: entry.id, name: entry.name, title: entry.title, territory: entry.territory, employeeCode: entry.employeeCode }));
+}
+
+const fieldManagementRoles: Role[] = ["Super Admin", "Managing Director", "Sales Manager"];
+
+function requireFieldTeam(req: Request, res: Response) {
+  const user = requireUser(req, res);
+  if (!user) return null;
+  if (!fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive") {
+    fail(res, 403, `${user.role} cannot access field-team location data.`);
+    return null;
+  }
+  return user;
+}
+
+function fieldEmployee(user: User): FieldEmployee {
+  return {
+    id: user.id,
+    name: user.name,
+    title: user.title,
+    territory: user.territory,
+    employeeCode: user.employeeCode ?? user.id.toUpperCase(),
+    phone: user.phone,
+    avatarUrl: user.avatarUrl
+  };
+}
+
+function visibleFieldEmployees(user: User) {
+  return demoUsers
+    .filter((entry) => entry.role === "Sales Executive" && entry.status === "Active" && (user.role !== "Sales Executive" || entry.id === user.id))
+    .map(fieldEmployee);
+}
+
+function canAccessFieldEmployee(user: User, userId: string) {
+  return fieldManagementRoles.includes(user.role) || (user.role === "Sales Executive" && user.id === userId);
+}
+
+function derivedTrackingStatus(location: CurrentEmployeeLocation, now = Date.now()): CurrentEmployeeLocation["status"] {
+  const ageMinutes = Math.max(0, (now - new Date(location.recordedAt).getTime()) / 60_000);
+  const activeSession = Boolean(location.sessionId && trackingSessions.some((session) => session.id === location.sessionId && session.status === "Active"));
+  if (activeSession && ageMinutes <= 1) return "LIVE";
+  if (activeSession && ageMinutes <= 10) return "RECENT";
+  if (activeSession) return "STALE";
+  if (ageMinutes <= 180) return "OFFLINE";
+  return "NOT_TRACKING";
+}
+
+let demoLocationPoll = 0;
+function currentFieldLocations(user: User) {
+  const allowed = new Set(visibleFieldEmployees(user).map((employee) => employee.id));
+  const demoPath = [[23.87575, 90.37938], [23.87582, 90.37945], [23.8759, 90.37952], [23.87584, 90.37943]];
+  demoLocationPoll += 1;
+  return currentEmployeeLocations
+    .filter((location) => allowed.has(location.userId))
+    .map((location) => {
+      const next = structuredClone(location);
+      if (next.userId === "sales1") {
+        const coordinate = demoPath[demoLocationPoll % demoPath.length];
+        next.latitude = coordinate[0];
+        next.longitude = coordinate[1];
+        next.recordedAt = new Date().toISOString();
+      }
+      next.status = derivedTrackingStatus(next);
+      return next;
+    });
+}
+
+function withRequestedDate(timestamp: string, date: string) {
+  return `${date}T${timestamp.slice(11)}`;
 }
 
 function salespersonPerformance(employee: SalespersonEmployee, from: string, to: string): SalespersonPerformanceDetail {
@@ -532,6 +615,7 @@ function aiContextFromRequest(req: Request): AIContext {
     route: String(source.route ?? "/app/dashboard"),
     entityType: source.entityType ? String(source.entityType) as AIContext["entityType"] : undefined,
     entityId: source.entityId ? String(source.entityId) : undefined,
+    employeeId: source.employeeId ? String(source.employeeId) : undefined,
     reportFrom: source.reportFrom ? String(source.reportFrom) : undefined,
     reportTo: source.reportTo ? String(source.reportTo) : undefined
   };
@@ -541,6 +625,8 @@ function aiSuggestionsFor(user: User, context: AIContext) {
   if (context.entityType === "import" && areaRoles.imports.includes(user.role)) return ["Explain the current shipment stage", "Which documents are missing?", "What needs attention next?"];
   if (context.entityType === "inventory" && areaRoles.inventory.includes(user.role)) return ["Which batches need attention?", "Which lot should be issued first?", "Explain the FIFO rule"];
   if (context.entityType === "sales" && areaRoles.sales.includes(user.role)) return ["Which customers need follow-up?", "Which quotations are still pending?", "Summarize collections and dues"];
+  if (context.entityType === "field-team" && (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive")) return ["Who is active in the field?", "Summarize today's visits", "Which location updates are stale?"];
+  if (context.entityType === "insights") return ["What needs attention first?", "Summarize my operational alerts", "Open the highest priority source"];
   if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) return ["Summarize this report period", "Compare salesperson performance", "Which customer owes the most?"];
   return ["What needs attention today?", "Summarize my current workspace", "Which action should I review next?"];
 }
@@ -551,7 +637,7 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
   const canSeeImports = areaRoles.imports.includes(user.role);
   const canSeeInventory = areaRoles.inventory.includes(user.role) || user.role === "Warehouse Manager";
   const canSeeSales = areaRoles.sales.includes(user.role) && user.role !== "Warehouse Manager";
-  const include = (entities: AIContext["entityType"][]) => !context.entityType || context.entityType === "dashboard" || entities.includes(context.entityType);
+  const include = (entities: AIContext["entityType"][]) => !context.entityType || context.entityType === "dashboard" || context.entityType === "insights" || entities.includes(context.entityType);
 
   if (canSeeImports && include(["import"])) {
     const record = imports.find((entry) => entry.id === context.entityId) ?? imports.find((entry) => !["Closed", "Cancelled", "Received"].includes(entry.status));
@@ -578,7 +664,12 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
 
   if (canSeeSales && include(["sales", "reports"])) {
     const scopedCustomers = customerScoped(req).filter((customer) => decimal(customer.currentDue).gt(0)).sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue));
-    if (scopedCustomers[0]) result.push({ id: `due-${scopedCustomers[0].id}`, title: "Collection follow-up suggested", summary: `${scopedCustomers[0].name} has an outstanding due of Tk ${money(scopedCustomers[0].currentDue)}.`, severity: "Attention", sourceLabel: scopedCustomers[0].name, sourcePath: "/app/sales?view=collections", reason: "This is the largest receivable currently visible to your role.", recommendedAction: "Review the customer ledger and record the next verified collection action." });
+    if (scopedCustomers[0]) {
+      const customer = scopedCustomers[0];
+      const lastCollection = collections.filter((entry) => entry.customerId === customer.id && entry.status === "Posted").sort((a, b) => b.date.localeCompare(a.date))[0];
+      const lastDelivery = deliveries.filter((entry) => entry.customerId === customer.id).sort((a, b) => b.date.localeCompare(a.date))[0];
+      result.push({ id: `due-${customer.id}`, title: decimal(customer.currentDue).gt(decimal(customer.creditLimit).mul(0.25)) ? "High follow-up priority" : "Collection follow-up suggested", summary: `${customer.name} has an outstanding due of Tk ${money(customer.currentDue)}.${lastCollection ? ` Last collection: ${lastCollection.date}.` : " No posted collection is recorded."}`, severity: decimal(customer.currentDue).gt(decimal(customer.creditLimit).mul(0.5)) ? "Critical" : "Attention", sourceLabel: customer.name, sourcePath: "/app/sales?view=collections", reason: `${lastDelivery ? `Last delivery was ${lastDelivery.date}. ` : ""}The due uses ${money(decimal(customer.currentDue).div(customer.creditLimit || 1).mul(100))}% of the current credit limit.`, recommendedAction: "Review the customer ledger, payment terms and last verified collection before the next delivery." });
+    }
     const scopedQuotes = salesScoped(quotations, req);
     const pendingQuote = scopedQuotes.find((quote) => ["Sent", "Accepted"].includes(quote.status) && !orders.some((order) => order.quotationId === quote.id));
     if (pendingQuote) result.push({ id: `quote-${pendingQuote.id}`, title: "Quotation needs conversion follow-up", summary: `${pendingQuote.quotationNumber} for ${pendingQuote.customerName} is ${pendingQuote.status.toLowerCase()} and has no linked order.`, severity: "Info", sourceLabel: pendingQuote.quotationNumber, sourcePath: "/app/sales?view=orders", reason: "The commercial flow has not yet moved to an order.", recommendedAction: "Confirm the customer decision, then use the existing conversion action when approved." });
@@ -590,7 +681,15 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
     const collected = collections.filter((collection) => collection.status === "Posted" && collection.date.startsWith(month)).reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
     result.unshift({ id: "management-cash-gap", title: collected.lt(sales) ? "Collections trail delivered sales" : "Collections cover delivered sales", summary: `This month: delivered sales Tk ${money(sales)}; collections Tk ${money(collected)}.`, severity: collected.lt(sales) ? "Attention" : "Info", sourceLabel: "Management reports", sourcePath: "/app/reports", reason: "This compares posted delivery value with posted collections without inventing profit or accounting entries.", recommendedAction: collected.lt(sales) ? "Review customer dues and salesperson follow-up priorities." : "Continue monitoring receivables and upcoming deliveries." });
   }
-  return result.slice(0, 5);
+
+  if ((fieldManagementRoles.includes(user.role) || user.role === "Sales Executive") && include(["field-team", "sales"])) {
+    const locations = currentFieldLocations(user);
+    const stale = locations.filter((location) => ["STALE", "OFFLINE", "NOT_TRACKING"].includes(location.status));
+    const activeVisits = locations.filter((location) => location.currentVisit?.status === "Checked In");
+    result.push({ id: "field-team-status", title: stale.length ? `${stale.length} field update${stale.length === 1 ? " needs" : "s need"} attention` : "Field team feed is current", summary: `${locations.filter((location) => location.status === "LIVE").length} live, ${locations.filter((location) => location.status === "RECENT").length} recent and ${activeVisits.length} currently checked in.`, severity: stale.some((location) => location.status === "STALE") ? "Attention" : "Info", sourceLabel: user.role === "Sales Executive" ? "My field activity" : "Field Team", sourcePath: "/app/sales?view=field-team", reason: stale.length ? `Latest affected employee: ${stale[0].employee.name} (${stale[0].status.toLowerCase()}); last update ${stale[0].recordedAt}.` : "Every visible active session has a recent coordinate.", recommendedAction: stale.length ? "Open the map and verify the timestamp before contacting the employee; old coordinates are never labelled live." : "Continue monitoring visits and planned follow-ups." });
+  }
+  const categoryFor = (recommendation: AIRecommendation): NonNullable<AIRecommendation["category"]> => recommendation.id.startsWith("import-") ? "Imports" : recommendation.id.startsWith("expiry-") || recommendation.id.startsWith("fifo-") ? "Inventory" : recommendation.id.startsWith("due-") ? "Collections" : recommendation.id.startsWith("field-") ? "Field Team" : recommendation.id.startsWith("management-") ? "Finance" : "Sales";
+  return result.slice(0, context.entityType === "insights" ? 20 : 6).map((recommendation) => ({ ...recommendation, category: categoryFor(recommendation), detectedAt: new Date().toISOString() }));
 }
 
 app.get("/api/health", (_req, res) => res.json(ok({ service: "mipro-simplified-erp-api", ok: true })));
@@ -625,6 +724,151 @@ app.post("/api/auth/reset-password", (req, res) => {
 app.get("/api/me", (req, res) => {
   const user = requireUser(req, res);
   if (user) res.json(ok({ token: `mock-token-${user.id}`, user }, "Current session"));
+});
+
+app.get("/api/field-team/current", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  const employees = visibleFieldEmployees(user);
+  const locations = currentFieldLocations(user);
+  const statusCount = (status: CurrentEmployeeLocation["status"]) => locations.filter((location) => location.status === status).length;
+  const visibleIds = new Set(employees.map((employee) => employee.id));
+  const today = businessDate();
+  res.json(ok({
+    feedLabel: "Demo location feed" as const,
+    generatedAt: new Date().toISOString(),
+    employees,
+    locations,
+    summary: {
+      activeNow: statusCount("LIVE"),
+      recent: statusCount("RECENT") + statusCount("STALE"),
+      offline: statusCount("OFFLINE"),
+      notTracking: statusCount("NOT_TRACKING"),
+      visitsToday: fieldVisits.filter((visit) => visibleIds.has(visit.userId) && businessDate(new Date(visit.plannedAt)) === today).length
+    }
+  }, "Role-scoped demo field-team feed loaded", { role: user.role, scoped: user.role === "Sales Executive" }));
+});
+
+app.get("/api/field-team/employees", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  const term = String(req.query.search ?? "").trim().toLowerCase();
+  const territory = String(req.query.territory ?? "").trim();
+  const status = String(req.query.status ?? "").trim();
+  const locationByUser = new Map(currentFieldLocations(user).map((location) => [location.userId, location]));
+  const employees = visibleFieldEmployees(user).filter((employee) => {
+    const matchesSearch = !term || [employee.name, employee.employeeCode, employee.territory ?? ""].some((value) => value.toLowerCase().includes(term));
+    const matchesTerritory = !territory || employee.territory === territory;
+    const matchesStatus = !status || locationByUser.get(employee.id)?.status === status;
+    return matchesSearch && matchesTerritory && matchesStatus;
+  });
+  res.json(ok(employees, "Field employees loaded", { total: employees.length, role: user.role, scoped: user.role === "Sales Executive" }));
+});
+
+app.get("/api/field-team/:userId/history", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  if (!canAccessFieldEmployee(user, req.params.userId)) return fail(res, 403, "You cannot view another employee's route history.");
+  const employeeUser = demoUsers.find((entry) => entry.id === req.params.userId && entry.role === "Sales Executive");
+  if (!employeeUser) return fail(res, 404, "Field employee not found.");
+  const date = String(req.query.date ?? businessDate());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(res, 422, "Enter a valid history date.");
+  const current = currentEmployeeLocations.find((location) => location.userId === employeeUser.id);
+  let points = locationHistory.filter((point) => point.userId === employeeUser.id).map((point) => ({ ...point, recordedAt: withRequestedDate(point.recordedAt, date) }));
+  if (!points.length && current) {
+    points = [
+      { id: `fallback-start-${employeeUser.id}`, userId: employeeUser.id, latitude: current.latitude - 0.006, longitude: current.longitude - 0.004, accuracyMeters: current.accuracyMeters, recordedAt: `${date}T09:10:00.000Z`, source: "DEMO", event: "TRACKING_STARTED" },
+      { id: `fallback-last-${employeeUser.id}`, userId: employeeUser.id, latitude: current.latitude, longitude: current.longitude, accuracyMeters: current.accuracyMeters, recordedAt: `${date}T11:35:00.000Z`, source: "DEMO", event: "LOCATION" }
+    ];
+  }
+  const session = trackingSessions.find((entry) => entry.userId === employeeUser.id);
+  const history: FieldTeamHistoryData = {
+    feedLabel: "Demo location feed",
+    employee: fieldEmployee(employeeUser),
+    date,
+    session: session ? { ...session, startedAt: withRequestedDate(session.startedAt, date), endedAt: session.endedAt ? withRequestedDate(session.endedAt, date) : undefined } : undefined,
+    points,
+    visits: fieldVisits.filter((visit) => visit.userId === employeeUser.id).map((visit) => ({ ...visit, plannedAt: withRequestedDate(visit.plannedAt, date), checkInAt: visit.checkInAt ? withRequestedDate(visit.checkInAt, date) : undefined, checkOutAt: visit.checkOutAt ? withRequestedDate(visit.checkOutAt, date) : undefined }))
+  };
+  res.json(ok(history, "Role-scoped route and visit history loaded", { role: user.role, scoped: user.role === "Sales Executive" }));
+});
+
+app.get("/api/field-team/:userId/visits", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  if (!canAccessFieldEmployee(user, req.params.userId)) return fail(res, 403, "You cannot view another employee's visits.");
+  const from = String(req.query.from ?? businessDate());
+  const to = String(req.query.to ?? from);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return fail(res, 422, "Enter a valid visit date range.");
+  res.json(ok(fieldVisits.filter((visit) => { const date = businessDate(new Date(visit.plannedAt)); return visit.userId === req.params.userId && date >= from && date <= to; }), "Field visits loaded"));
+});
+
+app.post("/api/field-team/tracking/start", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  if (user.role !== "Sales Executive") return fail(res, 403, "Only a salesperson can start their own tracking session.");
+  const existing = trackingSessions.find((session) => session.userId === user.id && session.status === "Active");
+  if (existing) return res.json(ok(existing, "Tracking session is already active"));
+  const session: TrackingSession = { id: id("track"), userId: user.id, startedAt: new Date().toISOString(), source: "WEB_FOREGROUND", status: "Active" };
+  trackingSessions.unshift(session);
+  audit(req, "Tracking Started", "TrackingSession", session.id, `${user.name} started foreground web tracking.`);
+  res.status(201).json(ok(session, "Foreground tracking started"));
+});
+
+app.post("/api/field-team/tracking/location", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  if (user.role !== "Sales Executive") return fail(res, 403, "Only a salesperson can submit their own location.");
+  const input = req.body as LocationUpdateInput;
+  if (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90 || !Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180 || !Number.isFinite(input.accuracyMeters) || input.accuracyMeters < 0 || !input.recordedAt || !["MOBILE_APP", "WEB_FOREGROUND", "MANUAL"].includes(input.source)) return fail(res, 422, "Location coordinates, accuracy, timestamp and source are required.");
+  const session = trackingSessions.find((entry) => entry.userId === user.id && entry.status === "Active");
+  if (!session) return fail(res, 409, "Start a tracking session before sending location.");
+  const point: LocationHistoryPoint = { id: id("loc"), userId: user.id, latitude: input.latitude, longitude: input.longitude, accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt, source: input.source, event: "LOCATION" };
+  locationHistory.push(point);
+  const existing = currentEmployeeLocations.find((location) => location.userId === user.id);
+  const next: CurrentEmployeeLocation = { userId: user.id, employee: fieldEmployee(user), latitude: input.latitude, longitude: input.longitude, accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt, status: "LIVE", source: input.source, sessionId: session.id, sessionStartedAt: session.startedAt };
+  if (existing) Object.assign(existing, next); else currentEmployeeLocations.push(next);
+  res.status(201).json(ok(next, "Current location updated"));
+});
+
+app.post("/api/field-team/tracking/stop", (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  if (user.role !== "Sales Executive") return fail(res, 403, "Only a salesperson can stop their own tracking session.");
+  const session = trackingSessions.find((entry) => entry.userId === user.id && entry.status === "Active");
+  if (!session) return fail(res, 409, "No active tracking session exists.");
+  session.status = "Completed";
+  session.endedAt = new Date().toISOString();
+  audit(req, "Tracking Ended", "TrackingSession", session.id, `${user.name} ended foreground web tracking.`);
+  res.json(ok(session, "Tracking stopped"));
+});
+
+for (const action of ["check-in", "check-out"] as const) app.post(`/api/field-team/visits/:visitId/${action}`, (req, res) => {
+  const user = requireFieldTeam(req, res);
+  if (!user) return;
+  const visit = fieldVisits.find((entry) => entry.id === req.params.visitId);
+  if (!visit) return fail(res, 404, "Field visit not found.");
+  if (user.role !== "Sales Executive" || visit.userId !== user.id) return fail(res, 403, "Only the assigned salesperson can verify this visit.");
+  const now = new Date().toISOString();
+  if (action === "check-in") {
+    const latitude = Number(req.body?.latitude);
+    const longitude = Number(req.body?.longitude);
+    const accuracyMeters = Number(req.body?.accuracyMeters);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isFinite(accuracyMeters) || accuracyMeters < 0) return fail(res, 422, "Visit check-in requires valid coordinates and GPS accuracy.");
+    visit.status = "Checked In";
+    visit.checkInAt = now;
+    visit.checkInLatitude = latitude;
+    visit.checkInLongitude = longitude;
+    visit.checkInAccuracyMeters = accuracyMeters;
+    audit(req, "Visit Check-In", "FieldVisit", visit.id, `${user.name} checked in at ${visit.customerName}.`);
+  } else {
+    if (!visit.checkInAt) return fail(res, 409, "Check in before completing the visit.");
+    visit.status = "Completed";
+    visit.checkOutAt = now;
+    visit.outcome = String(req.body?.outcome ?? "Visit completed");
+    audit(req, "Visit Check-Out", "FieldVisit", visit.id, `${user.name} completed the visit at ${visit.customerName}.`);
+  }
+  res.json(ok(visit, action === "check-in" ? "Visit check-in recorded" : "Visit check-out recorded"));
 });
 
 app.get("/api/documents/:documentId/content", (req, res) => {
@@ -682,7 +926,7 @@ app.post("/api/ai/chat", (req, res) => {
   if ((asksForCost && !hasCapability(req, "view_sensitive_cost")) || (asksForProfit && !hasCapability(req, "view_profit"))) {
     return res.json(ok({ answer: `I cannot provide supplier pricing, landed cost or profit to the ${user.role} role. I can still help with allowed status, stock, customer, due and workflow information.`, contextLabel: `${user.role} · permission-safe response`, suggestions, sources: [], restricted: true }, "Sensitive request safely restricted"));
   }
-  if ((context.entityType === "import" && !areaRoles.imports.includes(user.role)) || (context.entityType === "inventory" && !areaRoles.inventory.includes(user.role)) || (context.entityType === "reports" && !areaRoles.reports.includes(user.role))) {
+  if ((context.entityType === "import" && !areaRoles.imports.includes(user.role)) || (context.entityType === "inventory" && !areaRoles.inventory.includes(user.role)) || (context.entityType === "reports" && !areaRoles.reports.includes(user.role)) || (context.entityType === "field-team" && !fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive")) {
     return res.json(ok({ answer: `The ${context.entityType} workspace is outside the ${user.role} role, so I cannot read or summarize its records.`, contextLabel: `${user.role} · access restricted`, suggestions: aiSuggestionsFor(user, { route: "/app/dashboard", entityType: "dashboard" }), sources: [], restricted: true }, "Context safely restricted"));
   }
 
@@ -711,6 +955,18 @@ app.post("/api/ai/chat", (req, res) => {
     const openQuotes = salesScoped(quotations, req).filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status));
     answer = topDue ? `${topDue.name} has the largest visible due at Tk ${money(topDue.currentDue)}. ${openQuotes.length} quotation${openQuotes.length === 1 ? " is" : "s are"} still open in your permitted sales scope.` : "There are no visible customer dues in your current sales scope.";
     sources = [{ label: "Sales workspace", path: "/app/sales" }];
+  } else if (context.entityType === "field-team" && (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive")) {
+    const locations = currentFieldLocations(user);
+    const selected = context.employeeId ? locations.find((location) => location.userId === context.employeeId) : undefined;
+    if (context.employeeId && !selected) {
+      answer = "That employee is outside your permitted field-team scope, so I cannot expose their location or activity.";
+      return res.json(ok({ answer, contextLabel: `${user.role} · field-team access restricted`, suggestions, sources: [], restricted: true }, "Field-team scope safely restricted"));
+    }
+    const live = locations.filter((location) => location.status === "LIVE").length;
+    const stale = locations.filter((location) => ["STALE", "OFFLINE", "NOT_TRACKING"].includes(location.status));
+    answer = selected ? `${selected.employee.name} is ${selected.status.toLowerCase().replace("_", " ")}. The last coordinate was recorded at ${selected.recordedAt} with ${selected.accuracyMeters} m accuracy.${selected.currentVisit ? ` Current visit: ${selected.currentVisit.customerName}, checked in at ${selected.currentVisit.checkInAt}.` : " No active customer check-in is attached."}` : `${live} visible employee${live === 1 ? " is" : "s are"} live. ${stale.length} location feed${stale.length === 1 ? " needs" : "s need"} timestamp attention. This is a labelled demo feed, not production tracking.`;
+    contextLabel = selected ? `${selected.employee.employeeCode} · ${selected.status}` : `${user.role} · Field Team`;
+    sources = [{ label: selected ? `${selected.employee.name} field activity` : "Field Team", path: `/app/sales?view=field-team${selected ? `&employee=${selected.userId}` : ""}` }];
   } else if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) {
     const from = context.reportFrom && /^\d{4}-\d{2}-\d{2}$/.test(context.reportFrom) ? context.reportFrom : `${businessDate().slice(0, 7)}-01`;
     const to = context.reportTo && /^\d{4}-\d{2}-\d{2}$/.test(context.reportTo) ? context.reportTo : businessDate();

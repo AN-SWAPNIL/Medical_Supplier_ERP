@@ -15,7 +15,7 @@ import {
   Trash2,
   Truck
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
@@ -41,7 +41,9 @@ import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency, formatNumber } from "../../utils/format";
 import { CollectionForm, CustomerForm, DeliveryForm, QuotationForm } from "./SalesForms";
 
-type View = "customers" | "orders" | "deliveries" | "collections";
+const FieldTeamPage = lazy(() => import("../../components/field-team/FieldTeamPage"));
+
+type View = "customers" | "orders" | "deliveries" | "collections" | "field-team";
 type ModalType = "customer" | "quotation" | "convert" | "delivery" | "collection" | "order-details" | null;
 type Task = { run: () => Promise<unknown>; success: string };
 
@@ -52,7 +54,8 @@ export default function SalesPage() {
   const [params, setParams] = useSearchParams();
   const defaultView: View = role === "Accounts" ? "collections" : role === "Warehouse Manager" ? "deliveries" : "customers";
   const requested = params.get("view") as View | null;
-  const [view, setViewState] = useState<View>(requested ?? defaultView);
+  const requestedAllowed = requested !== "field-team" || ["Super Admin", "Managing Director", "Sales Manager", "Sales Executive"].includes(role);
+  const [view, setViewState] = useState<View>(requestedAllowed ? requested ?? defaultView : defaultView);
   const [modal, setModal] = useState<ModalType>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | undefined>();
   const [editingQuotation, setEditingQuotation] = useState<Quotation | undefined>();
@@ -69,6 +72,7 @@ export default function SalesPage() {
   const canDispatch = ["Super Admin", "Warehouse Manager", "Sales Manager"].includes(role);
   const canCollect = ["Super Admin", "Accounts", "Sales Manager", "Sales Executive"].includes(role);
   const canEditCustomer = ["Super Admin", "Sales Manager", "Sales Executive"].includes(role);
+  const canViewFieldTeam = ["Super Admin", "Managing Director", "Sales Manager", "Sales Executive"].includes(role);
 
   const customersQuery = useQuery({ queryKey: ["sales", "customers", session?.user.id], queryFn: salesService.customers });
   const quotationsQuery = useQuery({ queryKey: ["sales", "quotations", session?.user.id], queryFn: salesService.quotations });
@@ -112,9 +116,10 @@ export default function SalesPage() {
   const visibleOptions = useMemo(() => {
     if (role === "Accounts") return [{ value: "customers" as const, label: "Customer Dues", count: customersQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
     if (role === "Warehouse Manager") return [{ value: "deliveries" as const, label: "Deliveries", count: deliveriesQuery.data?.length }];
-    if (role === "Sales Executive") return [{ value: "customers" as const, label: "My Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "My Quotes & Orders", count: quotationsQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
-    return [{ value: "customers" as const, label: "Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "Quotations & Orders", count: quotationsQuery.data?.length }, { value: "deliveries" as const, label: "Deliveries", count: deliveriesQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
-  }, [role, customersQuery.data, collectionsQuery.data, deliveriesQuery.data, quotationsQuery.data]);
+    if (role === "Sales Executive") return [{ value: "customers" as const, label: "My Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "My Quotes & Orders", count: quotationsQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }, { value: "field-team" as const, label: "My Activity" }];
+    const core = [{ value: "customers" as const, label: "Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "Quotations & Orders", count: quotationsQuery.data?.length }, { value: "deliveries" as const, label: "Deliveries", count: deliveriesQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
+    return canViewFieldTeam ? [...core, { value: "field-team" as const, label: "Field Team" }] : core;
+  }, [role, canViewFieldTeam, customersQuery.data, collectionsQuery.data, deliveriesQuery.data, quotationsQuery.data]);
 
   if (loading) return <LoadingBlock label="Loading connected sales workspace" />;
   if (error) return <ErrorBlock error={error} onRetry={() => queries.forEach((query) => void query.refetch())} />;
@@ -135,7 +140,7 @@ export default function SalesPage() {
       <PageHeader
         eyebrow={role === "Sales Executive" ? "Own-record sales workspace" : "Commercial operations"}
         title="Sales"
-        subtitle="Customer ledger, quotation, order, actual batch delivery and collection remain connected without re-entering line items."
+        subtitle={view === "field-team" ? "Live and historical field activity connects salesperson location, customer visits and performance without creating another main module." : "Customer ledger, quotation, order, actual batch delivery and collection remain connected without re-entering line items."}
         actions={
           <>
             {view === "customers" && canEditCustomer ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingCustomer(undefined); setModal("customer"); }}>New Customer</Button> : null}
@@ -146,20 +151,22 @@ export default function SalesPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {view !== "field-team" ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Visible customers</span><strong className="mt-1 block text-2xl">{formatNumber(customers.length)}</strong><small className="text-slate-400">{role === "Sales Executive" ? "assigned to you" : "normalized ledger"}</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Outstanding due</span><strong className="mt-1 block text-2xl text-red-700">{formatCurrency(totalDue, true)}</strong><small className="text-slate-400">current visible balance</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Open orders</span><strong className="mt-1 block text-2xl">{formatNumber(orders.filter((order) => !["Delivered", "Cancelled"].includes(order.status)).length)}</strong><small className="text-slate-400">awaiting or in delivery</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Collections shown</span><strong className="mt-1 block text-2xl text-emerald-700">{formatCurrency(totalCollections, true)}</strong><small className="text-slate-400">cash and banking channels</small></div>
-      </div>
+      </div> : null}
 
-      {recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Sales follow-up suggestions">{recommendationsQuery.data.filter((item) => item.id.startsWith("due-") || item.id.startsWith("quote-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
+      {view !== "field-team" && recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Sales follow-up suggestions">{recommendationsQuery.data.filter((item) => item.id.startsWith("due-") || item.id.startsWith("quote-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <Segmented value={visibleOptions.some((option) => option.value === view) ? view : visibleOptions[0].value} onChange={setView} ariaLabel="Sales views" options={visibleOptions} />
         {view === "customers" ? <div className="relative w-full xl:w-80"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={inputClass + " pl-9"} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer ledger" /></div> : null}
         {view === "orders" && orders.length ? <label className="w-full xl:w-80"><span className="sr-only">Edit order receiving details</span><select className={inputClass} value="" onChange={(event) => { const selected = orders.find((order) => order.id === event.target.value); if (selected) { setOrderDetails(selected); setModal("order-details"); } }}><option value="">Order receiving / office details...</option>{orders.map((order) => <option value={order.id} key={order.id}>{order.orderNumber} · {order.customerName}</option>)}</select></label> : null}
       </div>
+
+      {view === "field-team" && canViewFieldTeam ? <Suspense fallback={<LoadingBlock label="Loading field-team map" />}><FieldTeamPage /></Suspense> : null}
 
       {view === "customers" ? (
         <Panel title="Customer ledger" subtitle="Spreadsheet customer tabs are normalized into one searchable customer and running transaction ledger." actions={<label><span className="sr-only">Open customer ledger</span><select className={inputClass + " min-w-56"} value="" onChange={(event) => setLedgerCustomer(customers.find((customer) => customer.id === event.target.value))}><option value="">Open detailed ledger...</option>{filteredCustomers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}</select></label>}>

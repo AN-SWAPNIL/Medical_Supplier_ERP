@@ -51,6 +51,7 @@ export type User = {
   avatarUrl: string;
   status: "Active" | "Pending" | "Inactive";
   territory?: string;
+  employeeCode?: string;
   capabilities?: import("../domains/erp.types.js").Capability[];
 };
 

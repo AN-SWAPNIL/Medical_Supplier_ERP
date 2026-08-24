@@ -638,6 +638,7 @@ export type SalespersonEmployee = {
   name: string;
   title: string;
   territory?: string;
+  employeeCode?: string;
 };
 
 export type SalespersonPerformanceSummary = {
@@ -684,10 +685,97 @@ export type SalespersonPerformanceData = {
   selected?: SalespersonPerformanceDetail;
 };
 
+export type TrackingStatus = "LIVE" | "RECENT" | "STALE" | "OFFLINE" | "NOT_TRACKING";
+export type LocationSource = "MOBILE_APP" | "WEB_FOREGROUND" | "MANUAL" | "DEMO";
+
+export type FieldEmployee = SalespersonEmployee & {
+  employeeCode: string;
+  phone: string;
+  avatarUrl: string;
+};
+
+export type FieldVisit = {
+  id: string;
+  userId: string;
+  customerId: string;
+  customerName: string;
+  purpose: string;
+  outcome?: string;
+  status: "Planned" | "Checked In" | "Completed" | "Missed";
+  plannedAt: string;
+  checkInAt?: string;
+  checkOutAt?: string;
+  customerLatitude: number;
+  customerLongitude: number;
+  checkInLatitude?: number;
+  checkInLongitude?: number;
+  checkInAccuracyMeters?: number;
+};
+
+export type CurrentEmployeeLocation = {
+  userId: string;
+  employee: FieldEmployee;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  recordedAt: string;
+  status: TrackingStatus;
+  source: LocationSource;
+  sessionId?: string;
+  sessionStartedAt?: string;
+  currentVisit?: FieldVisit;
+};
+
+export type LocationHistoryPoint = {
+  id: string;
+  userId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  recordedAt: string;
+  source: LocationSource;
+  event?: "TRACKING_STARTED" | "LOCATION" | "VISIT_CHECK_IN" | "VISIT_CHECK_OUT" | "TRACKING_ENDED";
+};
+
+export type TrackingSession = {
+  id: string;
+  userId: string;
+  startedAt: string;
+  endedAt?: string;
+  source: LocationSource;
+  status: "Active" | "Completed";
+};
+
+export type FieldTeamCurrentData = {
+  feedLabel: "Demo location feed";
+  generatedAt: string;
+  employees: FieldEmployee[];
+  locations: CurrentEmployeeLocation[];
+  summary: { activeNow: number; recent: number; offline: number; notTracking: number; visitsToday: number };
+};
+
+export type FieldTeamHistoryData = {
+  feedLabel: "Demo location feed";
+  employee: FieldEmployee;
+  date: string;
+  session?: TrackingSession;
+  points: LocationHistoryPoint[];
+  visits: FieldVisit[];
+};
+
+export type LocationUpdateInput = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  recordedAt: string;
+  source: Exclude<LocationSource, "DEMO">;
+};
+
 export type AIContext = {
   route: string;
-  entityType?: "import" | "inventory" | "sales" | "reports" | "dashboard" | "accounts" | "settings";
+  entityType?: "import" | "inventory" | "sales" | "reports" | "dashboard" | "accounts" | "settings" | "field-team" | "insights";
   entityId?: string;
+  employeeId?: string;
   reportFrom?: string;
   reportTo?: string;
 };
@@ -717,6 +805,8 @@ export type AIInsight = {
 export type AIRecommendation = AIInsight & {
   reason: string;
   recommendedAction: string;
+  category?: "Imports" | "Inventory" | "Sales" | "Collections" | "Finance" | "Field Team";
+  detectedAt?: string;
 };
 
 export type AIDocumentExtractionField = {

@@ -14,7 +14,7 @@ superadmin@mipro.local
 password123
 ```
 
-## Recommended 15-Minute Demo
+## Recommended 18-Minute Demo
 
 1. **Landing:** explain import -> stock -> sale.
 2. **Dashboard:** show six KPIs and actionable lists.
@@ -27,13 +27,31 @@ password123
 9. **Inventory:** show product images, Opening/Import batches, smart FIFO/expiry alert, Movements and split FIFO.
 10. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
 11. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
-12. **Reports:** set From/To, open Salesperson Performance, compare all employees, select one employee, print, then show TA/DA/audit.
-13. **MIPRO AI:** ask about the open import, then show a Sales Executive receiving a permission-safe cost refusal.
-14. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
+12. **Field Team:** inside Sales, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
+13. **Reports:** set From/To, search employee ID, filter territory, sort/paginate the team, select one employee, move to Field Activity, and print.
+14. **Smart Insights:** open View All Insights from Dashboard, filter Field Team/Inventory, open a source and dismiss one alert.
+15. **MIPRO AI:** ask about the open import and Field Team, then show a Sales Executive receiving permission-safe cost and other-employee refusals.
+16. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
 
 End as Sales Executive to show own-record Sales and Reports, direct-URL denial, and no cost/profit leakage.
 
 ## Acceptance Checklist
+
+### Field Team, scalable reports and Smart Insights
+
+- [ ] Field Team remains inside Sales; the main sidebar still has at most seven destinations.
+- [ ] Demo location feed is clearly labelled and never presented as production tracking.
+- [ ] Leaflet map renders real coordinate markers, clustering support, pan/zoom, customer points and route polyline.
+- [ ] Every marker/detail shows employee ID, territory, status, last update and accuracy.
+- [ ] LIVE/RECENT/STALE/OFFLINE/NOT TRACKING are derived from timestamp and session state.
+- [ ] Territory, status and employee search filters work.
+- [ ] Route history uses stored coordinate points and does not invent distance.
+- [ ] Sales Executive sees only self; Accounts/Import/Warehouse receive API denial.
+- [ ] EmployeePicker searches name, employee ID and territory with keyboard selection.
+- [ ] All Employees supports territory, search, sort and pagination.
+- [ ] Performance and Field Activity link to each other.
+- [ ] Smart Insights is linked from Dashboard, not the main sidebar.
+- [ ] Insight filters and source links respect role scope; dismissal posts no transaction.
 
 ### Import
 
@@ -155,4 +173,4 @@ Also say:
 
 The floating AI and extraction are active **rule-backed mock capabilities** behind typed endpoints. Do not present them as a production language model, autonomous approver, or durable document-intelligence service.
 
-Do not claim that GPS, mobile visits, HR/payroll, fleet, invoice, full accounting, automatic customs calculation or persistent storage are active features.
+Do not claim that the demo feed is production GPS, that browser tracking continues after closure, or that Supabase/mobile persistence exists. Native mobile tracking, HR/payroll, fleet, invoice, full accounting, automatic customs calculation and persistent storage remain later work.

@@ -1,6 +1,6 @@
 # MIPRO Medical Supplier ERP
 
-A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. `files/Medical_Supplier_ERP_Simplified_Plan_update2.md` and `files/MIPRO_ERP_PreSimplification_Analysis.md` are the current source of truth.
+A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. `files/Medical_Supplier_ERP_Simplified_Plan_update3.md` and `files/MIPRO_ERP_Improvement_Analysis.md` are the current source of truth, building on the validated update2 workflow.
 
 ## Current Scope
 
@@ -17,7 +17,7 @@ Operating expenses and cash/bank transactions are tracked separately. The active
 
 `Dashboard`, `Imports`, `Inventory`, `Sales`, `Expenses & Accounts`, `Reports`, `Settings`.
 
-Contextual features stay inside those areas: protected PDF/image viewing, salesperson performance reports, smart recommendation cards, reviewed import-document extraction, and a floating role-safe MIPRO AI assistant. GPS/mobile field sales, HR/payroll, fleet and full accounting remain deferred.
+Contextual features stay inside those areas: protected PDF/image viewing, scalable salesperson reports, a role-scoped Field Team map inside Sales, Smart Insights, reviewed import-document extraction, and a floating role-safe MIPRO AI assistant. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
 
 ## Stack
 

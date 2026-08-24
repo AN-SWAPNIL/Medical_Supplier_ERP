@@ -20,6 +20,10 @@ import type {
   DocumentRecord,
   DocumentUpload,
   Expense,
+  FieldEmployee,
+  FieldTeamCurrentData,
+  FieldTeamHistoryData,
+  FieldVisit,
   ImportCase,
   ImportCostLine,
   ImportDocument,
@@ -58,6 +62,10 @@ import {
   DispatchPreviewSchema,
   ExpenseCategorySchema,
   ExpenseSchema,
+  FieldEmployeeSchema,
+  FieldTeamCurrentSchema,
+  FieldTeamHistorySchema,
+  FieldVisitSchema,
   ImportCaseSchema,
   ImportDocumentSchema,
   LandedCostPreviewSchema,
@@ -180,6 +188,16 @@ export const accountsService = {
 export const reportService = {
   get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema),
   salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema)
+};
+
+export const fieldTeamService = {
+  current: () => get<FieldTeamCurrentData>("/api/field-team/current", FieldTeamCurrentSchema),
+  employees: (search = "", territory = "", status = "") => {
+    const params = new URLSearchParams({ search, territory, status });
+    return get<FieldEmployee[]>(`/api/field-team/employees?${params}`, z.array(FieldEmployeeSchema));
+  },
+  history: (userId: string, date: string) => get<FieldTeamHistoryData>(`/api/field-team/${encodeURIComponent(userId)}/history?date=${encodeURIComponent(date)}`, FieldTeamHistorySchema),
+  visits: (userId: string, from: string, to: string) => get<FieldVisit[]>(`/api/field-team/${encodeURIComponent(userId)}/visits?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, z.array(FieldVisitSchema))
 };
 
 export const printService = {

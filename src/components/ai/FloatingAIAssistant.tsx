@@ -43,9 +43,13 @@ export default function FloatingAIAssistant() {
       ? ["Which lot should be issued first?", "Which batches need attention?"]
       : context.entityType === "sales"
         ? ["Which customers need follow-up?", "Which quotations are still pending?"]
-        : context.entityType === "reports"
-          ? ["Summarize this report period", "Compare salesperson performance"]
-          : ["What needs attention today?", "Summarize my current workspace"];
+        : context.entityType === "field-team"
+          ? ["Who is active in the field?", "Summarize today's visits", "Which location updates are stale?"]
+          : context.entityType === "insights"
+            ? ["What needs attention first?", "Summarize my operational alerts"]
+            : context.entityType === "reports"
+              ? ["Summarize this report period", "Compare salesperson performance"]
+              : ["What needs attention today?", "Summarize my current workspace"];
 
   const ask = (value: string) => {
     const question = value.trim();

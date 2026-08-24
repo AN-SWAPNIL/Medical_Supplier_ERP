@@ -10,6 +10,8 @@ import type {
   Delivery,
   DocumentRecord,
   Expense,
+  CurrentEmployeeLocation,
+  FieldVisit,
   ImportCase,
   ImportDocument,
   Product,
@@ -20,6 +22,8 @@ import type {
   Supplier,
   WarehouseConfig,
   WarehouseReceipt,
+  LocationHistoryPoint,
+  TrackingSession,
   PrintConfiguration
 } from "../src/domains/erp.types.js";
 import type { User } from "../src/types/index.js";
@@ -108,6 +112,7 @@ export const demoUsers: User[] = [
     avatarUrl: "",
     status: "Active",
     territory: "Dhaka North",
+    employeeCode: "SE-001",
     capabilities: []
   },
   {
@@ -121,11 +126,59 @@ export const demoUsers: User[] = [
     avatarUrl: "",
     status: "Active",
     territory: "Dhaka Central",
+    employeeCode: "SE-014",
     capabilities: []
+  },
+  {
+    id: "sales3", name: "Sabbir Hossain", email: "sales3@mipro.local", role: "Sales Executive", title: "Sales Executive", department: "Sales", phone: "+880 1711 000009", avatarUrl: "", status: "Active", territory: "Mirpur", employeeCode: "SE-021", capabilities: []
+  },
+  {
+    id: "sales4", name: "Nabila Chowdhury", email: "sales4@mipro.local", role: "Sales Executive", title: "Senior Sales Executive", department: "Sales", phone: "+880 1711 000010", avatarUrl: "", status: "Active", territory: "Dhaka South", employeeCode: "SE-027", capabilities: []
+  },
+  {
+    id: "sales5", name: "Imran Kabir", email: "sales5@mipro.local", role: "Sales Executive", title: "Sales Executive", department: "Sales", phone: "+880 1711 000011", avatarUrl: "", status: "Active", territory: "Narayanganj", employeeCode: "SE-032", capabilities: []
   }
 ];
 
 export const passwordByEmail = new Map(demoUsers.map((user) => [user.email, "password123"]));
+
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+export const fieldVisits: FieldVisit[] = [
+  { id: "visit-rafiq-popular", userId: "sales1", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", purpose: "Stock and collection follow-up", status: "Checked In", plannedAt: minutesAgo(70), checkInAt: minutesAgo(28), customerLatitude: 23.8759, customerLongitude: 90.3795, checkInLatitude: 23.8758, checkInLongitude: 90.3794, checkInAccuracyMeters: 18 },
+  { id: "visit-rafiq-kuwait", userId: "sales1", customerId: "cus-kuwait", customerName: "Kuwait Moitri Hospital", purpose: "Dialyzer demand review", outcome: "Next quotation requested", status: "Completed", plannedAt: minutesAgo(190), checkInAt: minutesAgo(175), checkOutAt: minutesAgo(130), customerLatitude: 23.8702, customerLongitude: 90.4031, checkInLatitude: 23.8701, checkInLongitude: 90.4030, checkInAccuracyMeters: 14 },
+  { id: "visit-shamima-labaid", userId: "sales2", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", purpose: "Outstanding payment follow-up", outcome: "Accounts review scheduled", status: "Completed", plannedAt: minutesAgo(155), checkInAt: minutesAgo(142), checkOutAt: minutesAgo(96), customerLatitude: 23.7392, customerLongitude: 90.3830, checkInLatitude: 23.7391, checkInLongitude: 90.3831, checkInAccuracyMeters: 22 },
+  { id: "visit-sabbir-ark", userId: "sales3", customerId: "cus-ark", customerName: "ARK Hospital", purpose: "Product presentation", status: "Planned", plannedAt: new Date(Date.now() + 45 * 60_000).toISOString(), customerLatitude: 23.8223, customerLongitude: 90.3654 },
+  { id: "visit-nabila-bismillah", userId: "sales4", customerId: "cus-bismillah", customerName: "Bismillah Surgical", purpose: "Dealer stock review", status: "Missed", plannedAt: minutesAgo(210), customerLatitude: 23.7114, customerLongitude: 90.4067 }
+];
+
+export const trackingSessions: TrackingSession[] = [
+  { id: "track-sales1", userId: "sales1", startedAt: minutesAgo(235), source: "DEMO", status: "Active" },
+  { id: "track-sales2", userId: "sales2", startedAt: minutesAgo(205), source: "DEMO", status: "Active" },
+  { id: "track-sales3", userId: "sales3", startedAt: minutesAgo(175), source: "DEMO", status: "Active" },
+  { id: "track-sales4", userId: "sales4", startedAt: minutesAgo(280), endedAt: minutesAgo(118), source: "DEMO", status: "Completed" }
+];
+
+export const currentEmployeeLocations: CurrentEmployeeLocation[] = [
+  { userId: "sales1", employee: { id: "sales1", name: "Rafiq Ahmed", title: "Sales Executive", territory: "Dhaka North", employeeCode: "SE-001", phone: "+880 1711 000007", avatarUrl: "" }, latitude: 23.8758, longitude: 90.3794, accuracyMeters: 18, recordedAt: minutesAgo(0.4), status: "LIVE", source: "DEMO", sessionId: "track-sales1", sessionStartedAt: minutesAgo(235), currentVisit: fieldVisits[0] },
+  { userId: "sales2", employee: { id: "sales2", name: "Shamima Sultana", title: "Sales Executive", territory: "Dhaka Central", employeeCode: "SE-014", phone: "+880 1711 000008", avatarUrl: "" }, latitude: 23.7515, longitude: 90.3898, accuracyMeters: 26, recordedAt: minutesAgo(4), status: "RECENT", source: "DEMO", sessionId: "track-sales2", sessionStartedAt: minutesAgo(205) },
+  { userId: "sales3", employee: { id: "sales3", name: "Sabbir Hossain", title: "Sales Executive", territory: "Mirpur", employeeCode: "SE-021", phone: "+880 1711 000009", avatarUrl: "" }, latitude: 23.8069, longitude: 90.3687, accuracyMeters: 41, recordedAt: minutesAgo(26), status: "STALE", source: "DEMO", sessionId: "track-sales3", sessionStartedAt: minutesAgo(175) },
+  { userId: "sales4", employee: { id: "sales4", name: "Nabila Chowdhury", title: "Senior Sales Executive", territory: "Dhaka South", employeeCode: "SE-027", phone: "+880 1711 000010", avatarUrl: "" }, latitude: 23.7114, longitude: 90.4067, accuracyMeters: 65, recordedAt: minutesAgo(118), status: "OFFLINE", source: "DEMO" },
+  { userId: "sales5", employee: { id: "sales5", name: "Imran Kabir", title: "Sales Executive", territory: "Narayanganj", employeeCode: "SE-032", phone: "+880 1711 000011", avatarUrl: "" }, latitude: 23.6238, longitude: 90.5000, accuracyMeters: 80, recordedAt: minutesAgo(1440), status: "NOT_TRACKING", source: "DEMO" }
+];
+
+export const locationHistory: LocationHistoryPoint[] = [
+  { id: "loc-r1", userId: "sales1", latitude: 23.8103, longitude: 90.4125, accuracyMeters: 22, recordedAt: minutesAgo(235), source: "DEMO", event: "TRACKING_STARTED" },
+  { id: "loc-r2", userId: "sales1", latitude: 23.8262, longitude: 90.3991, accuracyMeters: 19, recordedAt: minutesAgo(205), source: "DEMO", event: "LOCATION" },
+  { id: "loc-r3", userId: "sales1", latitude: 23.8701, longitude: 90.4030, accuracyMeters: 14, recordedAt: minutesAgo(175), source: "DEMO", event: "VISIT_CHECK_IN" },
+  { id: "loc-r4", userId: "sales1", latitude: 23.8704, longitude: 90.4027, accuracyMeters: 17, recordedAt: minutesAgo(130), source: "DEMO", event: "VISIT_CHECK_OUT" },
+  { id: "loc-r5", userId: "sales1", latitude: 23.8689, longitude: 90.3901, accuracyMeters: 21, recordedAt: minutesAgo(75), source: "DEMO", event: "LOCATION" },
+  { id: "loc-r6", userId: "sales1", latitude: 23.8758, longitude: 90.3794, accuracyMeters: 18, recordedAt: minutesAgo(28), source: "DEMO", event: "VISIT_CHECK_IN" },
+  { id: "loc-s1", userId: "sales2", latitude: 23.7637, longitude: 90.3894, accuracyMeters: 28, recordedAt: minutesAgo(205), source: "DEMO", event: "TRACKING_STARTED" },
+  { id: "loc-s2", userId: "sales2", latitude: 23.7391, longitude: 90.3831, accuracyMeters: 22, recordedAt: minutesAgo(142), source: "DEMO", event: "VISIT_CHECK_IN" },
+  { id: "loc-s3", userId: "sales2", latitude: 23.7428, longitude: 90.3859, accuracyMeters: 24, recordedAt: minutesAgo(96), source: "DEMO", event: "VISIT_CHECK_OUT" },
+  { id: "loc-s4", userId: "sales2", latitude: 23.7515, longitude: 90.3898, accuracyMeters: 26, recordedAt: minutesAgo(4), source: "DEMO", event: "LOCATION" }
+];
 
 export const products: Product[] = [
   { id: "prd-d17h", code: "DIAL-17H", family: "Dialyzer", variant: "1.7H", name: "Dialyzer 1.7H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
