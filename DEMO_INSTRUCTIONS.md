@@ -4,6 +4,7 @@
 
 ```powershell
 npm install
+$env:VITE_DEMO_MODE="true"
 npm run dev
 ```
 
@@ -14,28 +15,44 @@ superadmin@mipro.local
 password123
 ```
 
-## Recommended 18-Minute Demo
+## Recommended 20-Minute Demo
 
-1. **Landing:** explain import -> stock -> sale.
-2. **Dashboard:** show six KPIs and actionable lists.
-3. **Imports:** open New Import to show PO-first draft requirements, then open `LC-77612`.
-4. **Commercial & Products:** show one LC with three variants.
-5. **Documents:** open the PI PDF, show the protected viewer, then open Extract Fields and emphasize review before apply.
-6. **Costs & Allocation:** show different rules, Add Cost, and the protected freight attachment.
-7. **Landed-Cost Result:** click Preview and expand an explanation.
-8. **Warehouse Receipt:** explain finalization lock and inherited cost.
-9. **Inventory:** show product images, Opening/Import batches, smart FIFO/expiry alert, Movements and split FIFO.
-10. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
-11. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
-12. **Field Team:** inside Sales, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
-13. **Reports:** set From/To, search employee ID, filter territory, sort/paginate the team, select one employee, move to Field Activity, and print.
-14. **Smart Insights:** open View All Insights from Dashboard, filter Field Team/Inventory, open a source and dismiss one alert.
-15. **MIPRO AI:** ask about the open import and Field Team, then show a Sales Executive receiving permission-safe cost and other-employee refusals.
-16. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
+1. **Corporate Home:** introduce MIPRO Healthcare Corporation, product categories, featured products, documentation discipline and the Employee Portal boundary.
+2. **Products:** search/filter the B2B catalogue, open a product, and show that public records contain no price, stock, landed cost or supplier terms.
+3. **Certificates & Contact:** preview/download the migrated manufacturer scans, explain current versus historical status, show the free map, and submit a business inquiry.
+4. **Employee Portal:** explain production-safe login and choose a demo role only because `VITE_DEMO_MODE=true`.
+5. **Dashboard:** show six KPIs and actionable lists.
+6. **Imports:** open New Import to show PO-first draft requirements, then open `LC-77612`.
+7. **Commercial & Products:** show one LC with three variants.
+8. **Documents:** open the PI PDF, show the protected viewer, then open Extract Fields and emphasize review before apply.
+9. **Costs & Allocation:** show different rules, Add Cost, and the protected freight attachment.
+10. **Landed-Cost Result:** click Preview and expand an explanation.
+11. **Warehouse Receipt:** explain finalization lock and inherited cost.
+12. **Inventory:** show product images, Opening/Import batches, smart FIFO/expiry alert, Movements and split FIFO.
+13. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
+14. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
+15. **Field Team:** inside Sales, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
+16. **Reports:** set From/To, search employee ID, filter territory, sort/paginate the team, select one employee, move to Field Activity, and print.
+17. **Smart Insights:** open View All Insights from Dashboard, filter Field Team/Inventory, open a source and dismiss one alert.
+18. **MIPRO AI:** ask about the open import and Field Team, then show a Sales Executive receiving permission-safe cost and other-employee refusals.
+19. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
 
 End as Sales Executive to show own-record Sales and Reports, direct-URL denial, and no cost/profit leakage.
 
 ## Acceptance Checklist
+
+### Public website and employee boundary
+
+- [ ] Public navigation contains Home, About, Products, Certificates, News & Resources, Contact and Employee Portal.
+- [ ] Homepage contains no ERP mock sales, stock valuation or role statistics.
+- [ ] Product catalogue uses a separate public type and exposes no protected ERP fields.
+- [ ] Product search, category filter, detail and Contact Sales links work.
+- [ ] Certificates identify manufacturer versus MIPRO ownership, show visible validity dates, and provide working preview/download actions for the authorized scans.
+- [ ] Contact map renders and the business inquiry returns an `INQ-*` reference.
+- [ ] `/signup` redirects to `/login`; there is no public Request Access workflow.
+- [ ] Production login is blank and hides demo users unless `VITE_DEMO_MODE=true`.
+- [ ] Sitemap excludes `/login` and `/app/*`; robots disallows protected/auth routes.
+- [ ] Legacy `/product/*` URLs redirect to matching `/products/*` routes.
 
 ### Field Team, scalable reports and Smart Insights
 

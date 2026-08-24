@@ -1,11 +1,10 @@
 import { create } from "zustand";
 import { SESSION_KEY, apiClient } from "../api/client";
-import type { Role, Session, User } from "../../types";
+import type { Session, User } from "../../types";
 
 type AuthState = {
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
-  signupRequest: (payload: { id: string; name: string; email: string; requestedRole: Role; phone: string; company: string }) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -40,9 +39,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const response = await apiClient.login(email, password);
     persistSession(response.data);
     set({ session: response.data });
-  },
-  async signupRequest(payload) {
-    await apiClient.signupRequest({ ...payload, status: "Pending" });
   },
   async forgotPassword(email) {
     await apiClient.forgotPassword(email);

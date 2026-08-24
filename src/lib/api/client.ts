@@ -1,17 +1,7 @@
-import type { ApiResponse, Role, Session } from "../../types";
+import type { ApiResponse, Session } from "../../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const SESSION_KEY = "mipro-erp-session";
-
-type SignupRequest = {
-  id: string;
-  name: string;
-  email: string;
-  requestedRole: Role;
-  phone: string;
-  company: string;
-  status: "Pending";
-};
 
 function sessionHeaders(): Record<string, string> {
   const raw = window.localStorage.getItem(SESSION_KEY);
@@ -63,12 +53,6 @@ export const apiClient = {
   },
   async demoUsers() {
     return request<Pick<Session["user"], "email" | "name" | "role" | "title">[]>("/api/auth/demo-users");
-  },
-  async signupRequest(payload: SignupRequest) {
-    return request<SignupRequest>("/api/auth/signup-request", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
   },
   async forgotPassword(email: string) {
     return request<{ email: string }>("/api/auth/forgot-password", {

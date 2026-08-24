@@ -34,6 +34,17 @@ export default function AppLayout() {
     setAIRoute(location.pathname + location.search);
   }, [location.pathname, location.search, setAIRoute]);
 
+  useEffect(() => {
+    document.title = "MIPRO ERP | Employee Operations";
+    let robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!robots) {
+      robots = document.createElement("meta");
+      robots.name = "robots";
+      document.head.appendChild(robots);
+    }
+    robots.content = "noindex,nofollow";
+  }, []);
+
   const visibleItems = useMemo(
     () => navSections.flatMap((section) => section.items).filter((item) => item.roles.includes(role) && hasPermission(role, item.permission)),
     [role]

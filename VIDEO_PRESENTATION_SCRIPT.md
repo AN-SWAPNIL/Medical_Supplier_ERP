@@ -1,8 +1,8 @@
-# MIPRO ERP Frontend Video Script
+# MIPRO Digital Platform Video Script
 
 ## Goal
 
-Record a confident 22-23 minute client walkthrough that proves this is one connected operating flow, not a collection of static pages. Follow one story from import evidence and costing to stock, sale, collection, expense, employee reporting, field activity, contextual assistance, and permission control.
+Record a confident 24-25 minute client walkthrough. First establish MIPRO's professional public website, then cross the Employee Portal boundary and prove that the internal ERP is one connected operating flow rather than a collection of static pages.
 
 Use clear business language. Mention the API only to explain that actions are connected and backend-ready.
 
@@ -13,11 +13,12 @@ Use clear business language. Mention the API only to explain that actions are co
 1. Open the deployed site in a clean browser window at 1440 x 900 or larger.
 2. Confirm `/api/health` returns a successful response.
 3. Use Chrome or Edge at 100% zoom.
-4. Start on the public landing page.
-5. Keep `superadmin@mipro.local` and `password123` ready.
-6. Do not pre-finalize LC-77612 if you intend to demonstrate finalization and receiving.
-7. Close personal bookmarks, notifications, and unrelated browser tabs.
-8. Record at 1080p when possible.
+4. Start on the MIPRO corporate homepage.
+5. Confirm the presentation deployment has `VITE_DEMO_MODE=true`; production should leave it unset.
+6. Keep `superadmin@mipro.local` and `password123` ready.
+7. Do not pre-finalize LC-77612 if you intend to demonstrate finalization and receiving.
+8. Close personal bookmarks, notifications, and unrelated browser tabs.
+9. Record at 1080p when possible.
 
 Move the pointer slowly, pause after every click, and keep the current heading visible while speaking.
 
@@ -27,48 +28,69 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 | Time | Screen | Main message |
 |---|---|---|
-| 00:00-01:10 | Landing | Two connected business flows, seven areas |
-| 01:10-02:10 | Login | Fixed role identity and capability control |
-| 02:10-03:25 | Dashboard | Six role-safe KPIs, action lists and smart alerts |
-| 03:25-07:45 | Import workspace | One LC, many products, protected documents, dynamic costs |
-| 07:45-09:10 | Cost result/finalization | Exact, explainable, immutable costing |
-| 09:10-10:35 | Warehouse/inventory | Receiving, batches, FIFO, expiry |
-| 10:35-13:40 | Sales | Customer -> quote -> order -> delivery -> collection |
-| 13:40-14:50 | Expenses & Accounts | Operating money without full GL |
-| 14:50-16:20 | Reports/print | Employee/date reporting from owned transactions |
-| 16:20-18:20 | Field Team | Role-scoped map, timestamps, visits and stored-coordinate history |
-| 18:20-19:15 | Smart Insights | Cross-workflow review queue without another sidebar module |
-| 19:15-20:15 | Contextual AI | Page/employee context, sources and workflow-safe answers |
-| 20:15-21:15 | Settings | Capabilities, access summary and confirmation queue |
-| 21:15-22:35 | Second role | Own activity/report, direct denial and AI redaction |
-| 22:35-23:00 | Close | Frontend complete, backend-ready, honest scope |
+| 00:00-01:30 | Corporate Home | MIPRO identity, products and public/private boundary |
+| 01:30-02:30 | Products / Contact | B2B catalogue, documentation, map and inquiry |
+| 02:30-03:20 | Employee Portal | Production-safe login and fixed role identity |
+| 03:20-04:35 | Dashboard | Six role-safe KPIs, action lists and smart alerts |
+| 04:35-08:55 | Import workspace | One LC, many products, protected documents, dynamic costs |
+| 08:55-10:20 | Cost result/finalization | Exact, explainable, immutable costing |
+| 10:20-11:45 | Warehouse/inventory | Receiving, batches, FIFO, expiry |
+| 11:45-14:50 | Sales | Customer -> quote -> order -> delivery -> collection |
+| 14:50-16:00 | Expenses & Accounts | Operating money without full GL |
+| 16:00-17:30 | Reports/print | Employee/date reporting from owned transactions |
+| 17:30-19:30 | Field Team | Role-scoped map, timestamps, visits and stored-coordinate history |
+| 19:30-20:25 | Smart Insights | Cross-workflow review queue without another sidebar module |
+| 20:25-21:25 | Contextual AI | Page/employee context, sources and workflow-safe answers |
+| 21:25-22:25 | Settings | Capabilities, access summary and confirmation queue |
+| 22:25-23:45 | Second role | Own activity/report, direct denial and AI redaction |
+| 23:45-24:15 | Close | Frontend complete, backend-ready, honest scope |
 
 ---
 
-## 00:00-01:10 - Landing Page
+## 00:00-01:30 - Corporate Homepage
 
 ### Show
 
 1. Start at `/`.
-2. Keep the product name and main headline in view.
-3. Scroll slowly through import, inventory, sales, and trust/metric sections.
-4. Point to the button that opens the ERP.
+2. Keep the registered logo, corporate navigation and `Precision in Healthcare` hero in view.
+3. Scroll through product categories, featured products, About MIPRO, supply capability, documentation and resources.
+4. Point to the visually separate Employee Portal button.
 
 ### Say
 
-> This is the simplified MIPRO Medical Supplier ERP frontend. The latest client discussion showed that the business has two main flows. The first brings a shipment from supplier and LC or TT through landed cost into stock. The second moves that stock through quotation, order, delivery and collection.
+> This is the MIPRO digital platform. The public side presents MIPRO Healthcare Corporation, its medical product catalogue, documentation approach and business contact. It does not advertise ERP software or publish internal sales, stock, cost or role figures.
 
-> Warehouse inventory connects those two flows. Instead of more than forty separate destinations, the application now has a maximum of seven business areas. Detailed stages remain inside the workflow where the user expects them.
+> Public products are deliberately separated from ERP product records. Visitors can review a product and contact sales, but cannot see landed cost, supplier price, stock valuation or internal aliases.
 
-> The public design keeps the industrial Chinese enterprise direction, while the operational application is compact and practical for repeated daily work.
+> The Employee Portal is the boundary into the internal application. Employee accounts are provisioned by Super Admin, not requested by strangers on the public website.
 
 ---
 
-## 01:10-02:10 - Login And Fixed Role
+## 01:30-02:30 - Products, Certificates And Contact
 
 ### Show
 
-1. Click **Open ERP** or **Sign in**.
+1. Open **Products**, search for `dialyzer`, and open the Hollow Fiber Hemodialyzer.
+2. Point out that catalogue content contains no price, stock, supplier terms or landed cost.
+3. Open **Certificates**, preview the UKCA scan, then close the viewer and point to Download.
+4. Contrast its visible current date with the clearly marked expired EC and WHO/PQS records.
+5. Open **Contact**, show the office-area map, choose a product, and submit an inquiry.
+
+### Say
+
+> The product catalogue supports institutional review rather than public checkout. A buyer selects the product family, then MIPRO confirms the exact model, documentation and commercial terms through quotation.
+
+> These scans were migrated from MIPRO's previous public certificate page with company authorization. Each file names Jiangxi Hongda as the document holder, so the system never presents it as a MIPRO corporate certificate. It also distinguishes a currently dated record from expired or historical evidence and asks the buyer to verify the complete controlled set before relying on it.
+
+> Preview and download are real browser actions. The contact form is also functional: it sends a validated API request and returns an inquiry reference. In non-technical language, that API call means the page passes the same structured inquiry to the server that a future database or sales workflow will receive; the screen will not need to be rebuilt when persistent storage is connected.
+
+---
+
+## 02:30-03:20 - Login And Fixed Role
+
+### Show
+
+1. Click **Employee Portal**.
 2. Point to the available role identities.
 3. Choose Super Admin.
 4. Enter `password123`.
@@ -76,13 +98,13 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ### Say
 
-> Every employee signs in under a real assigned role. This selector exists only to make prototype demonstrations quick. Once signed in, the role cannot be changed from the main page.
+> Every employee signs in under a real assigned role. The production login is blank and contains no public account list. This selector appears only because this presentation deployment explicitly enables demo mode. Once signed in, the role cannot be changed from the main page.
 
 > In production the owner creates the user and assigns a role and any special capabilities in Settings. The application checks both page access and sensitive actions.
 
 ---
 
-## 02:10-03:25 - Dashboard
+## 03:20-04:35 - Dashboard
 
 ### Show
 
@@ -102,7 +124,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 03:25-04:10 - Imports List
+## 04:35-05:20 - Imports List
 
 ### Show
 
@@ -122,7 +144,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 04:10-05:15 - Commercial And Shipment Sections
+## 05:20-06:25 - Commercial And Shipment Sections
 
 ### Show
 
@@ -148,7 +170,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 05:15-05:50 - Documents
+## 06:25-07:00 - Documents
 
 ### Show
 
@@ -167,7 +189,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 05:50-07:45 - Dynamic Cost Allocation
+## 07:00-08:55 - Dynamic Cost Allocation
 
 ### Show
 
@@ -191,7 +213,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 07:45-09:10 - Cost Preview And Finalization
+## 08:55-10:20 - Cost Preview And Finalization
 
 ### Show
 
@@ -215,7 +237,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 09:10-09:50 - Warehouse Receipt
+## 10:20-11:00 - Warehouse Receipt
 
 ### Show
 
@@ -234,7 +256,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 09:50-10:35 - Inventory And FIFO
+## 11:00-11:45 - Inventory And FIFO
 
 ### Show
 
@@ -254,7 +276,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 10:35-11:30 - Customer Ledger
+## 11:45-12:40 - Customer Ledger
 
 ### Show
 
@@ -273,7 +295,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 11:30-12:25 - Quotation And Order
+## 12:40-13:35 - Quotation And Order
 
 ### Show
 
@@ -296,7 +318,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 12:25-13:05 - Delivery
+## 13:35-14:15 - Delivery
 
 ### Show
 
@@ -316,7 +338,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 13:05-13:40 - Collection
+## 14:15-14:50 - Collection
 
 ### Show
 
@@ -334,7 +356,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 13:40-14:50 - Expenses And Accounts
+## 14:50-16:00 - Expenses And Accounts
 
 ### Show
 
@@ -357,7 +379,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 14:50-16:20 - Reports And Employee Print
+## 16:00-17:30 - Reports And Employee Print
 
 ### Show
 
@@ -379,7 +401,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 16:20-18:20 - Field Team Map And History
+## 17:30-19:30 - Field Team Map And History
 
 ### Show
 
@@ -399,7 +421,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 18:20-19:15 - Smart Insights
+## 19:30-20:25 - Smart Insights
 
 ### Show
 
@@ -414,7 +436,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 19:15-20:15 - Contextual MIPRO AI
+## 20:25-21:25 - Contextual MIPRO AI
 
 ### Show
 
@@ -435,7 +457,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 20:15-21:15 - Settings And Open Decisions
+## 21:25-22:25 - Settings And Open Decisions
 
 ### Show
 
@@ -454,7 +476,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 21:15-22:35 - Prove Role Access
+## 22:25-23:45 - Prove Role Access
 
 ### Show
 
@@ -475,7 +497,7 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 22:35-23:00 - Closing
+## 23:45-24:15 - Closing
 
 ### Say
 

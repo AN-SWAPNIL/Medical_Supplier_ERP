@@ -584,7 +584,29 @@ async function run() {
   const accountsInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.accounts });
   assert.ok(accountsInsights.every((entry) => entry.category !== "Field Team"));
 
-  console.log("All update3 simplified ERP scenarios passed.");
+  console.log("10. Public business inquiry boundary");
+  const inquiry = await api("/api/public/contact", {
+    method: "POST",
+    expected: 201,
+    body: {
+      name: "Procurement Officer",
+      organization: "Dhaka Care Hospital",
+      phone: "+8801700000000",
+      email: "procurement@example.org",
+      subject: "Dialyzer product information",
+      productInterest: "Hollow Fiber Hemodialyzer",
+      message: "Please share the available model and documentation options."
+    }
+  });
+  assert.match(inquiry.inquiryId, /^INQ-/);
+  assert.equal(inquiry.status, "Received");
+  await api("/api/public/contact", {
+    method: "POST",
+    expected: 400,
+    body: { name: "<b>Bad</b>", phone: "123", message: "<script>alert(1)</script>" }
+  });
+
+  console.log("All update4 digital-platform scenarios passed.");
 }
 
 try {

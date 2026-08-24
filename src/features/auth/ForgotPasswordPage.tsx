@@ -4,21 +4,22 @@ import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import { useAuthStore } from "../../lib/auth/session";
+import { demoMode } from "../../lib/runtime";
 import AuthShell from "./AuthShell";
 
 export default function ForgotPasswordPage() {
   const forgotPassword = useAuthStore((store) => store.forgotPassword);
   const [sent, setSent] = useState(false);
-  const { register, handleSubmit } = useForm<{ email: string }>({ defaultValues: { email: "accounts@mipro.local" } });
+  const { register, handleSubmit } = useForm<{ email: string }>({ defaultValues: { email: demoMode ? "accounts@mipro.local" : "" } });
 
   return (
     <AuthShell title="Forgot password" subtitle="Request password recovery for an assigned ERP account.">
       {sent ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-5 text-blue-800">
           <strong>Reset link generated.</strong>
-          <p className="mt-2 text-sm">Continue to the reset page to choose a new password for this running demo session.</p>
+          <p className="mt-2 text-sm">If the address belongs to an assigned account, continue with the recovery instructions.</p>
           <Link className="mt-4 inline-block font-bold underline" to="/reset-password">
-            Open reset password
+            Continue to reset password
           </Link>
         </div>
       ) : (

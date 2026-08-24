@@ -16,6 +16,7 @@
     "test:allocation": "tsx --test src/domains/imports/costing.test.ts",
     "test:flows": "node scripts/api-flow.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:public": "node scripts/public-smoke.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

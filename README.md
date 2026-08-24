@@ -1,10 +1,18 @@
-# MIPRO Medical Supplier ERP
+# MIPRO Digital Platform
 
-A workflow-driven React frontend for a medical importer/distributor, backed by a temporary Express mock API. `files/Medical_Supplier_ERP_Simplified_Plan_update3.md` and `files/MIPRO_ERP_Improvement_Analysis.md` are the current source of truth, building on the validated update2 workflow.
+A corporate MiproBD website and protected workflow-driven ERP, backed by a temporary Express mock API. `files/MIPRO_ERP_Simplified_Plan_update4.md` and `files/MIPRO_ERP_Landingpage_Analysis.md` are the latest source of truth. Update3 remains the validated ERP workflow foundation.
 
 ## Current Scope
 
-The application connects:
+The platform separates two surfaces:
+
+```text
+Public MIPRO website -> Employee Portal -> Protected MIPRO ERP
+```
+
+The public website provides Home, About, Products, Product Detail, Certificates, News & Resources, Contact, an OpenStreetMap office view, and a validated business inquiry. Authorized manufacturer-document scans are stored locally under `public/certificates`, with visible validity context and preview/download actions. They are not described as MIPRO corporate certificates. The public website never reads protected inventory, cost, supplier, stock or sales data.
+
+The internal application connects:
 
 ```text
 Import case -> landed-cost snapshot -> warehouse batch stock
@@ -39,6 +47,13 @@ npm install
 npm run dev
 ```
 
+Production-safe login is the default. To show prototype role accounts locally, explicitly enable demo mode before starting both processes:
+
+```powershell
+$env:VITE_DEMO_MODE="true"
+npm run dev
+```
+
 The normal local URLs are:
 
 - Frontend: `http://localhost:5173`
@@ -49,7 +64,7 @@ Vite may choose the next frontend port when 5173 is occupied; use the URL printe
 
 ## Demo Login
 
-All active users use `password123`.
+Demo accounts are displayed only when `VITE_DEMO_MODE=true`. All active demo users use `password123`.
 
 | Role | Email |
 |---|---|
@@ -67,6 +82,12 @@ Roles are selected only at login for demonstration. There is no role switch insi
 
 ```text
 /
+/about
+/products
+/products/:slug
+/certificates
+/news
+/contact
 /login
 /app/dashboard
 /app/imports
@@ -97,6 +118,12 @@ src/domains/
   erp.types.ts   shared DTO contracts
   schemas.ts     Zod API response schemas
   services.ts    typed domain service boundary
+
+src/features/public/
+  PublicLayout   corporate header/footer boundary
+  public.types   published website-only contracts
+  publicSiteService  replaceable public content/inquiry boundary
+  Home/About/Products/Certificates/News/Contact pages
 
 server/
   index.ts       explicit Express domain endpoints and rules
@@ -185,6 +212,8 @@ Node.js: current supported LTS
 ```
 
 For this same-project deployment, do **not** set `VITE_API_BASE_URL`. The browser should call relative `/api/*` paths on the deployed domain. Only set that variable when the backend is deployed on a separate origin.
+
+Leave the demo flags unset for a production-style employee login. On a controlled Vercel prototype that should display the seven role examples, set both `VITE_DEMO_MODE=true` and `DEMO_MODE=true`, then redeploy because the `VITE_*` value is embedded during the frontend build.
 
 After pushing to the connected GitHub branch, Vercel deploys automatically. Verify:
 

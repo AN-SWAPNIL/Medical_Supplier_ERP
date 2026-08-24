@@ -1,36 +1,30 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.ts": {
       "includeFiles": "server/assets/**"
     }
   },
+  "redirects": [
+    { "source": "/signup", "destination": "/login", "permanent": false },
+    { "source": "/blog", "destination": "/news", "statusCode": 301 },
+    { "source": "/blog/:path*", "destination": "/news", "statusCode": 301 },
+    { "source": "/product/blood-tubing-set-for-hemodialysis", "destination": "/products/blood-tubing-set-for-hemodialysis", "statusCode": 301 },
+    { "source": "/product/disposable-a-v-fistula-needle", "destination": "/products/disposable-a-v-fistula-needle", "statusCode": 301 },
+    { "source": "/product/disposable-medical-protective-clothing", "destination": "/products/disposable-medical-protective-clothing", "statusCode": 301 },
+    { "source": "/product/disposable-medical-protective-mask-n95", "destination": "/products/disposable-medical-protective-mask-n95", "statusCode": 301 },
+    { "source": "/product/flash-back-needle", "destination": "/products/flashback-needle", "statusCode": 301 },
+    { "source": "/product/hollow-fiber-hemodialyzerhigh-flux", "destination": "/products/hollow-fiber-hemodialyzer-high-low-flux", "statusCode": 301 },
+    { "source": "/product/iv-catheter-pen-type", "destination": "/products/iv-catheter-pen-type", "statusCode": 301 },
+    { "source": "/product/single-use-tracheostomy-intubation", "destination": "/products/single-use-tracheostomy-intubation", "statusCode": 301 }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "/api?path=:path*"
     },
     {
-      "source": "/app/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/login",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/signin",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/signup",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/forgot-password",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/reset-password",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

@@ -1,8 +1,11 @@
 import cors from "cors";
 import { Decimal } from "decimal.js";
 import express, { type Request, type Response } from "express";
+import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { calculateLandedCost, importDisplayReference } from "../src/domains/imports/costing.js";
+import type { PublicInquiryInput, PublicInquiryReceipt } from "../src/features/public/public.types.js";
 import type {
   AIContext,
   AIInsight,
@@ -70,8 +73,15 @@ import {
   warehouseConfig as seedWarehouseConfig
 } from "./data.js";
 
+try {
+  loadEnvFile();
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
+
 const app = express();
 const port = Number(process.env.API_PORT ?? 4174);
+const serverDemoMode = process.env.VITE_DEMO_MODE === "true" || process.env.DEMO_MODE === "true";
 
 // The frontend approval build intentionally keeps transactional state in process memory.
 const products = structuredClone(seedProducts);
@@ -99,7 +109,8 @@ const warehouseConfig = structuredClone(seedWarehouseConfig);
 const printConfiguration = structuredClone(seedPrintConfiguration);
 const productAliases: ProductAlias[] = structuredClone(seedProductAliases);
 const customerOpeningBalances: CustomerOpeningBalance[] = structuredClone(seedCustomerOpeningBalances);
-const pendingSignupRequests: Record<string, unknown>[] = [];
+const publicInquiries: Array<PublicInquiryInput & PublicInquiryReceipt> = [];
+const publicInquiryRate = new Map<string, { count: number; expiresAt: number }>();
 const documentContents = new Map<string, string>();
 const seededPdfPath = fileURLToPath(new URL("./assets/mipro-source-document.pdf", import.meta.url));
 const seededExpenseImagePath = fileURLToPath(new URL("./assets/office-utility-receipt.png", import.meta.url));
@@ -694,7 +705,36 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
 
 app.get("/api/health", (_req, res) => res.json(ok({ service: "mipro-simplified-erp-api", ok: true })));
 
+const safePublicText = (minimum: number, maximum: number) =>
+  z.string().trim().min(minimum).max(maximum).refine((value) => !/[<>]/.test(value), "HTML is not accepted.");
+
+const publicInquirySchema = z.object({
+  name: safePublicText(2, 100),
+  organization: safePublicText(2, 140).optional().or(z.literal("")),
+  phone: safePublicText(7, 30),
+  email: z.string().trim().email().max(160).optional().or(z.literal("")),
+  subject: safePublicText(2, 140).optional().or(z.literal("")),
+  productInterest: safePublicText(2, 140).optional().or(z.literal("")),
+  message: safePublicText(10, 2000)
+});
+
+app.post("/api/public/contact", (req, res) => {
+  const forwarded = String(req.headers["x-forwarded-for"] ?? req.ip ?? "unknown").split(",")[0].trim();
+  const now = Date.now();
+  const rate = publicInquiryRate.get(forwarded);
+  if (rate && rate.expiresAt > now && rate.count >= 5) return fail(res, 429, "Too many inquiries. Please try again later.");
+  publicInquiryRate.set(forwarded, rate && rate.expiresAt > now ? { ...rate, count: rate.count + 1 } : { count: 1, expiresAt: now + 10 * 60 * 1000 });
+
+  const parsed = publicInquirySchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid inquiry details.");
+
+  const receipt: PublicInquiryReceipt = { inquiryId: id("INQ"), receivedAt: new Date().toISOString(), status: "Received" };
+  publicInquiries.unshift({ ...parsed.data, ...receipt });
+  res.status(201).json(ok(receipt, "Business inquiry received"));
+});
+
 app.get("/api/auth/demo-users", (_req, res) => {
+  if (!serverDemoMode) return fail(res, 404, "Demo accounts are not enabled.");
   res.json(ok(demoUsers.map(({ email, name, role, title }) => ({ email, name, role, title })), "Demo users loaded"));
 });
 
@@ -704,12 +744,6 @@ app.post("/api/auth/login", (req, res) => {
   if (!user || user.status !== "Active" || passwordByEmail.get(email) !== req.body?.password) return fail(res, 401, "Invalid email, password or inactive account");
   const session: Session = { token: `mock-token-${user.id}`, user };
   res.json(ok(session, "Login successful"));
-});
-
-app.post("/api/auth/signup-request", (req, res) => {
-  const request = { ...req.body, id: id("access"), status: "Pending", createdAt: new Date().toISOString() };
-  pendingSignupRequests.unshift(request);
-  res.status(201).json(ok(request, "Access request submitted"));
 });
 
 app.post("/api/auth/forgot-password", (req, res) => res.json(ok({ email: req.body?.email ?? "" }, "Reset request accepted")));

@@ -4,20 +4,21 @@ import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import { useAuthStore } from "../../lib/auth/session";
+import { demoMode } from "../../lib/runtime";
 import AuthShell from "./AuthShell";
 
 export default function ResetPasswordPage() {
   const resetPassword = useAuthStore((store) => store.resetPassword);
   const [done, setDone] = useState(false);
   const { register, handleSubmit } = useForm<{ email: string; password: string }>({
-    defaultValues: { email: "accounts@mipro.local", password: "password123" }
+    defaultValues: { email: demoMode ? "accounts@mipro.local" : "", password: "" }
   });
 
   return (
     <AuthShell title="Reset password" subtitle="Choose a new password for an assigned ERP account.">
       {done ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
-          <strong>Password updated for this running demo session.</strong>
+          <strong>Password updated.</strong>
           <Link className="mt-4 block font-bold underline" to="/login">
             Return to login
           </Link>

@@ -5,10 +5,17 @@ import { ProtectedRoute, RequirePermission } from "./components/layout/RouteGuar
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import LoginPage from "./features/auth/LoginPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
-import SignupPage from "./features/auth/SignupPage";
-import LandingPage from "./features/landing/LandingPage";
+import PublicLayout from "./features/public/PublicLayout";
 import type { PermissionKey } from "./types";
 
+const HomePage = lazy(() => import("./features/public/HomePage"));
+const AboutPage = lazy(() => import("./features/public/AboutPage"));
+const ProductsPage = lazy(() => import("./features/public/ProductsPage"));
+const ProductDetailPage = lazy(() => import("./features/public/ProductDetailPage"));
+const CertificatesPage = lazy(() => import("./features/public/CertificatesPage"));
+const NewsPage = lazy(() => import("./features/public/NewsPage"));
+const ContactPage = lazy(() => import("./features/public/ContactPage"));
+const LegacyProductRedirect = lazy(() => import("./features/public/LegacyProductRedirect"));
 const AccountsPage = lazy(() => import("./domains/accounts/AccountsPage"));
 const ImportWorkspacePage = lazy(() => import("./domains/imports/ImportWorkspacePage"));
 const ImportsPage = lazy(() => import("./domains/imports/ImportsPage"));
@@ -35,10 +42,19 @@ const guarded = (permission: PermissionKey, element: ReactNode) => (
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={deferred(<HomePage />)} />
+        <Route path="/about" element={deferred(<AboutPage />)} />
+        <Route path="/products" element={deferred(<ProductsPage />)} />
+        <Route path="/products/:slug" element={deferred(<ProductDetailPage />)} />
+        <Route path="/certificates" element={deferred(<CertificatesPage />)} />
+        <Route path="/news" element={deferred(<NewsPage />)} />
+        <Route path="/contact" element={deferred(<ContactPage />)} />
+      </Route>
+      <Route path="/product/:legacySlug" element={deferred(<LegacyProductRedirect />)} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signin" element={<Navigate to="/login" replace />} />
-      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/signup" element={<Navigate to="/login" replace />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>

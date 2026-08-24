@@ -1,17 +1,35 @@
-# MIPRO Medical Supplier ERP
+# MIPRO Digital Platform
 
 ## Client Presentation Guide
 
-**Build:** Simplified workflow-driven frontend, updated through the 24 August 2026 update3 field-sales audit
+**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 25 August 2026 update4 platform separation
 
-**Primary requirements:** `files/Medical_Supplier_ERP_Simplified_Plan_update3.md` and `files/MIPRO_ERP_Improvement_Analysis.md`, with update2 retained as the validated transaction-flow foundation
+**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update4.md` and `files/MIPRO_ERP_Landingpage_Analysis.md`, with update3 retained as the validated internal ERP foundation
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
 
 ## 1. The One-Minute Explanation
 
-MIPRO ERP connects two real business flows through warehouse stock:
+The product is now one digital platform with a deliberate public/private boundary:
+
+```text
+PUBLIC WEBSITE
+MIPRO Healthcare Corporation / MiproBD
+Home -> About -> Products -> Certificates -> News -> Contact
+                              |
+                              v
+                       Employee Portal
+                              |
+                              v
+PROTECTED MIPRO ERP
+Imports -> Inventory -> Sales -> Collections -> Accounts -> Reports
+```
+
+The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures. Employee accounts are created internally by Super Admin; the public Request Access flow has been removed.
+
+Inside the protected boundary, MIPRO ERP connects two real business flows through warehouse stock:
+
 
 ```text
 IMPORT AND LANDED COST
@@ -37,6 +55,12 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 
 ### Current application
 
+- Corporate public website with separate typed product projections and no e-commerce cart.
+- Registered MIPRO identity, product imagery, corporate About, curated resources, contact map and inquiry flow.
+- Authorized manufacturer certificate scans migrated from the previous MiproBD site, with holder, product scope, visible dates, current/historical status, preview and download; none are presented as MIPRO corporate certificates.
+- Employee Portal login that is production-safe by default; demo users require `VITE_DEMO_MODE=true`.
+- Public signup removed; employee provisioning remains in Settings -> Users & Capabilities.
+- SEO metadata, sitemap, robots rules and old MiproBD product redirects.
 - Exactly seven possible main destinations.
 - Draft imports begin with supplier, PO and product lines; PI and LC/TT are added later to the same case.
 - One import workspace instead of separate PI, PO, LC, shipment, customs, costing, and GRN pages.
@@ -115,7 +139,7 @@ The Super Admin is the temporary sole landed-cost finalizer/reopener until the c
 
 ## 5. Demo Login
 
-All active demo users use:
+Demo identities are intentionally hidden in production mode. For the presentation deployment, set `VITE_DEMO_MODE=true`. All active demo users then use:
 
 ```text
 Password: password123
