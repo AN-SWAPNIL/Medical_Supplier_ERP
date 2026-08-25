@@ -39,7 +39,7 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000001",
     avatarUrl: "/mipro-owner.png",
     status: "Active",
-    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price"]
+    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price", "manage_users", "manage_user_access"]
   },
   {
     id: "u-md",
@@ -75,6 +75,10 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000004",
     avatarUrl: "",
     status: "Active",
+    permissionOverrides: [
+      { permission: "reports", action: "view", effect: "ALLOW" },
+      { permission: "reports", action: "export", effect: "ALLOW" }
+    ],
     capabilities: []
   },
   {
@@ -99,7 +103,13 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000006",
     avatarUrl: "",
     status: "Active",
-    capabilities: ["approve_special_price"]
+    permissionOverrides: [
+      { permission: "users", action: "view", effect: "ALLOW" },
+      { permission: "users", action: "create", effect: "ALLOW" },
+      { permission: "users", action: "edit", effect: "ALLOW" },
+      { permission: "reports", action: "export", effect: "DENY" }
+    ],
+    capabilities: ["approve_special_price", "manage_users"]
   },
   {
     id: "sales1",

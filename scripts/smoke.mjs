@@ -8,12 +8,12 @@ const sessionKey = "mipro-erp-session";
 await mkdir("artifacts", { recursive: true });
 
 const people = {
-  super: { id: "u-super", name: "Sadia Karim", email: "superadmin@mipro.local", role: "Super Admin", title: "Owner & System Administrator", department: "Management", phone: "+880 1711 000001", avatarUrl: "/mipro-owner.png", status: "Active", capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price"] },
+  super: { id: "u-super", name: "Sadia Karim", email: "superadmin@mipro.local", role: "Super Admin", title: "Owner & System Administrator", department: "Management", phone: "+880 1711 000001", avatarUrl: "/mipro-owner.png", status: "Active", capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price", "manage_users", "manage_user_access"] },
   md: { id: "u-md", name: "Mahmud Rahman", email: "md@mipro.local", role: "Managing Director", title: "Managing Director", department: "Management", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
   accounts: { id: "u-accounts", name: "Nusrat Jahan", email: "accounts@mipro.local", role: "Accounts", title: "Accounts Officer", department: "Accounts", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
-  import: { id: "u-import", name: "Tanvir Hasan", email: "import@mipro.local", role: "Import Officer", title: "Import Officer", department: "Import", phone: "", avatarUrl: "", status: "Active", capabilities: [] },
+  import: { id: "u-import", name: "Tanvir Hasan", email: "import@mipro.local", role: "Import Officer", title: "Import Officer", department: "Import", phone: "", avatarUrl: "", status: "Active", permissionOverrides: [{ permission: "reports", action: "view", effect: "ALLOW" }, { permission: "reports", action: "export", effect: "ALLOW" }], capabilities: [] },
   warehouse: { id: "u-warehouse", name: "Aminul Islam", email: "warehouse@mipro.local", role: "Warehouse Manager", title: "Warehouse Manager", department: "Warehouse", phone: "", avatarUrl: "", status: "Active", capabilities: ["approve_stock_override"] },
-  salesManager: { id: "u-sales-manager", name: "Farhana Akter", email: "salesmanager@mipro.local", role: "Sales Manager", title: "Sales Manager", department: "Sales", phone: "", avatarUrl: "", status: "Active", capabilities: ["approve_special_price"] },
+  salesManager: { id: "u-sales-manager", name: "Farhana Akter", email: "salesmanager@mipro.local", role: "Sales Manager", title: "Sales Manager", department: "Sales", phone: "", avatarUrl: "", status: "Active", permissionOverrides: [{ permission: "users", action: "view", effect: "ALLOW" }, { permission: "users", action: "create", effect: "ALLOW" }, { permission: "users", action: "edit", effect: "ALLOW" }, { permission: "reports", action: "export", effect: "DENY" }], capabilities: ["approve_special_price", "manage_users"] },
   sales: { id: "sales1", name: "Rafiq Ahmed", email: "sales1@mipro.local", role: "Sales Executive", title: "Sales Executive", department: "Sales", phone: "", avatarUrl: "", status: "Active", territory: "Dhaka North", capabilities: [] }
 };
 
@@ -79,10 +79,12 @@ const routes = [
   ["accounts-mobile", "/app/accounts", 390, 1100, people.super],
   ["reports-desktop", "/app/reports", 1440, 1000, people.super],
   ["reports-mobile", "/app/reports", 390, 1100, people.super],
+  ["reports-import-override", "/app/reports", 1440, 1000, people.import],
   ["smart-insights-desktop", "/app/insights", 1440, 1000, people.salesManager],
   ["smart-insights-mobile", "/app/insights", 390, 1000, people.sales],
   ["settings-desktop", "/app/settings", 1440, 1100, people.super],
   ["settings-mobile", "/app/settings", 390, 1100, people.super],
+  ["settings-delegated-users", "/app/settings?view=users", 1440, 1000, people.salesManager],
   ["settings-migration-desktop", "/app/settings?view=migration", 1440, 1100, people.super]
 ];
 
@@ -252,9 +254,9 @@ const expectedNavigation = new Map([
   [people.super, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports", "Settings"]],
   [people.md, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports"]],
   [people.accounts, ["Dashboard", "Sales", "Expenses & Accounts", "Reports"]],
-  [people.import, ["Dashboard", "Imports"]],
-  [people.warehouse, ["Dashboard", "Inventory"]],
-  [people.salesManager, ["Dashboard", "Inventory", "Sales", "Reports"]],
+  [people.import, ["Dashboard", "Imports", "Reports", "Settings"]],
+  [people.warehouse, ["Dashboard", "Imports", "Inventory"]],
+  [people.salesManager, ["Dashboard", "Inventory", "Sales", "Reports", "Settings"]],
   [people.sales, ["Dashboard", "Sales", "Reports"]]
 ]);
 const deniedRoute = new Map([
@@ -282,6 +284,45 @@ for (const [user, expected] of expectedNavigation) {
   }
   await page.close();
 }
+
+const delegatedSettings = await preparePage({ name: "delegated-settings-access", width: 1280, height: 900, user: people.salesManager });
+await delegatedSettings.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
+const delegatedTabs = (await delegatedSettings.getByRole("tab").allTextContents()).map((value) => value.trim());
+if (delegatedTabs.length !== 1 || !delegatedTabs[0]?.startsWith("Users & Capabilities")) {
+  issues.push("Delegated employee manager received unrelated Settings tabs: " + JSON.stringify(delegatedTabs));
+}
+if ((await delegatedSettings.getByRole("button", { name: "New User" }).count()) !== 1) issues.push("Delegated employee manager cannot create a permitted employee.");
+await delegatedSettings.getByRole("button", { name: "Edit Rafiq Ahmed" }).click();
+await delegatedSettings.getByRole("dialog").waitFor();
+if ((await delegatedSettings.getByText("Additional Access", { exact: true }).count()) !== 0) issues.push("Delegated employee manager can see access-administration controls.");
+if (await delegatedSettings.getByLabel("Assigned Role").isEditable()) issues.push("Delegated employee manager can change an assigned role.");
+await delegatedSettings.screenshot({ path: "artifacts/settings-delegated-profile-editor.png", fullPage: true });
+await delegatedSettings.close();
+
+const ownerAccessEditor = await preparePage({ name: "owner-access-editor", width: 1440, height: 1050, user: people.super });
+await ownerAccessEditor.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
+await ownerAccessEditor.getByRole("button", { name: "Edit Tanvir Hasan" }).click();
+await ownerAccessEditor.getByRole("dialog").waitFor();
+await ownerAccessEditor.getByText("Additional Access", { exact: false }).click();
+if ((await ownerAccessEditor.getByText("Role Access Summary", { exact: false }).count()) === 0) issues.push("Owner access editor is missing the inherited role summary.");
+if ((await ownerAccessEditor.getByText("Sensitive Capabilities", { exact: true }).count()) === 0) issues.push("Owner access editor is missing sensitive-capability controls.");
+await ownerAccessEditor.screenshot({ path: "artifacts/settings-owner-access-editor.png", fullPage: true });
+await ownerAccessEditor.close();
+
+const allowedExport = await preparePage({ name: "import-officer-report-export", width: 1280, height: 900, user: people.import });
+await allowedExport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
+if ((await allowedExport.getByRole("button", { name: "Export Current Data" }).count()) !== 1) issues.push("Import Officer Reports export ALLOW is not reflected in the UI.");
+await allowedExport.close();
+
+const deniedExport = await preparePage({ name: "sales-manager-report-export", width: 1280, height: 900, user: people.salesManager });
+await deniedExport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
+if ((await deniedExport.getByRole("button", { name: "Export Current Data" }).count()) !== 0) issues.push("Sales Manager Reports export DENY is not reflected in the UI.");
+await deniedExport.close();
+
+const accountsActions = await preparePage({ name: "accounts-action-access", width: 1280, height: 900, user: people.accounts });
+await accountsActions.goto(baseUrl + "/app/accounts", { waitUntil: "networkidle", timeout: 60000 });
+if ((await accountsActions.getByRole("button", { name: "Expense Category" }).count()) !== 0) issues.push("Accounts role can see a Settings-only category administration action.");
+await accountsActions.close();
 
 const salesPage = await preparePage({ name: "sales-executive-own-record", width: 1280, height: 900, user: people.sales });
 await salesPage.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });

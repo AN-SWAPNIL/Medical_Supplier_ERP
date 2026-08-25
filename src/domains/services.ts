@@ -187,7 +187,8 @@ export const accountsService = {
 
 export const reportService = {
   get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema),
-  salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema)
+  salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema),
+  authorizeExport: () => get<{ authorized: true }>("/api/reports/export-authorization", z.object({ authorized: z.literal(true) }))
 };
 
 export const fieldTeamService = {

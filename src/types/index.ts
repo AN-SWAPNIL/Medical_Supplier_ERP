@@ -14,6 +14,7 @@ export type PermissionAction = "view" | "create" | "edit" | "delete" | "approve"
 
 export type PermissionKey =
   | "dashboard"
+  | "users"
   | "suppliers"
   | "customers"
   | "products"
@@ -24,6 +25,14 @@ export type PermissionKey =
   | "reports"
   | "settings"
   | "print";
+
+export type PermissionEffect = "ALLOW" | "DENY";
+
+export type UserPermissionOverride = {
+  permission: PermissionKey;
+  action: PermissionAction;
+  effect: PermissionEffect;
+};
 
 export type ApiMeta = {
   total?: number;
@@ -52,6 +61,7 @@ export type User = {
   status: "Active" | "Pending" | "Inactive";
   territory?: string;
   employeeCode?: string;
+  permissionOverrides?: UserPermissionOverride[];
   capabilities?: import("../domains/erp.types.js").Capability[];
 };
 

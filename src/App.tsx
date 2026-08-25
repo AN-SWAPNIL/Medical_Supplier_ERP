@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
-import { ProtectedRoute, RequirePermission } from "./components/layout/RouteGuards";
+import { ProtectedRoute, RequirePermission, RequireSettingsAccess } from "./components/layout/RouteGuards";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import LoginPage from "./features/auth/LoginPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -62,13 +62,13 @@ function App() {
           <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={guarded("dashboard", <DashboardPage />)} />
           <Route path="imports" element={guarded("import", <ImportsPage />)} />
-          <Route path="imports/new" element={guarded("import", <NewImportPage />)} />
+          <Route path="imports/new" element={<RequirePermission permission="import" action="create">{deferred(<NewImportPage />)}</RequirePermission>} />
           <Route path="imports/:importId" element={guarded("import", <ImportWorkspacePage />)} />
           <Route path="inventory" element={guarded("inventory", <InventoryPage />)} />
           <Route path="sales" element={guarded("sales", <SalesPage />)} />
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />
-          <Route path="settings" element={guarded("settings", <SettingsPage />)} />
+          <Route path="settings" element={<RequireSettingsAccess>{deferred(<SettingsPage />)}</RequireSettingsAccess>} />
           <Route path="insights" element={guarded("dashboard", <SmartInsightsPage />)} />
           <Route path="profile" element={deferred(<ProfilePage />)} />
           <Route path="print/:documentType/:id" element={guarded("print", <PrintPage />)} />

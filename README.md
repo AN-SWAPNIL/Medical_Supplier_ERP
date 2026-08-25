@@ -1,6 +1,6 @@
 # MIPRO Digital Platform
 
-A corporate MiproBD website and protected workflow-driven ERP, backed by a temporary Express mock API. `files/MIPRO_ERP_Simplified_Plan_update4.md` and `files/MIPRO_ERP_Landingpage_Analysis.md` are the latest source of truth. Update3 remains the validated ERP workflow foundation.
+A corporate MiproBD website and protected workflow-driven ERP, backed by a temporary Express mock API. `files/MIPRO_ERP_Simplified_Plan_update5.md` and `files/MIPRO_ERP_AccessRole_Analysis.md` are the latest ERP access-control source of truth. Update4 and the landing-page analysis remain authoritative for the public/private platform separation, while update3 remains the validated operational workflow foundation.
 
 ## Current Scope
 
@@ -76,7 +76,19 @@ Demo accounts are displayed only when `VITE_DEMO_MODE=true`. All active demo use
 | Sales Manager | `salesmanager@mipro.local` |
 | Sales Executive | `sales1@mipro.local` |
 
-Roles are selected only at login for demonstration. There is no role switch inside the application.
+The demo tiles select a real seeded user identity at login; they are not an in-app role switch. A signed-in user's role cannot be changed from the header or main application.
+
+## Effective Access
+
+The seven roles are default templates rather than a growing collection of special roles. Every protected navigation item, route, action, API, document, report and AI context resolves access in this order:
+
+```text
+Role default -> explicit per-user ALLOW/DENY -> sensitive capability -> record/data scope
+```
+
+An explicit `DENY` wins over `ALLOW`, and an inactive user has no effective access. Settings shows and fetches only subviews the user may open. Employee management (`manage_users` plus `users:*`) remains separate from the more sensitive `manage_user_access` authority.
+
+The seed demonstrates this model: the Import Officer receives Reports view/export without a new role; the Sales Manager receives delegated lower-role employee administration but has Reports export explicitly denied. Direct API requests enforce the same result as the sidebar and route guards.
 
 ## Important Routes
 

@@ -457,41 +457,50 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 
 ---
 
-## 21:25-22:25 - Settings And Open Decisions
+## 21:25-22:50 - Settings, Effective Access And Open Decisions
 
 ### Show
 
 1. Open **Settings**.
 2. Show **Client Confirmation Queue**.
 3. Point to a confirmed answer with source/value and a pending decision with disabled behavior.
-4. Open Users & Capabilities, edit a user, and show the read-only **Role Access Summary**.
-5. Open Data Migration and show Opening Batch plus Customer Balance forms.
-6. Point to user image, fixed role, capabilities, product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
+4. Open Users & Capabilities and edit the Import Officer.
+5. Show the read-only **Role Access Summary**, then expand **Additional Access** and point to Reports View/Export set to Allow.
+6. Edit the Sales Manager and show Users View/Create/Edit allowed, `manage_users` enabled and Reports Export denied.
+7. Explain that Default stores no duplicate role rule; only explicit Allow or Deny exceptions are saved.
+8. Open Data Migration and show Opening Batch plus Customer Balance forms.
+9. Point to user image, capabilities, product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
 
 ### Say
 
-> Settings is owner-only. It manages users and explicit capabilities, and the access summary answers what each role will actually see without introducing a second permission system. It also holds canonical products and aliases, suppliers, accounts, warehouse, expense categories, cost presets, stationery identities and opening-data migration.
+> The seven roles are understandable defaults. A specific employee can receive or lose one action through an explicit Allow or Deny without creating another role. Deny wins, sensitive capabilities remain separate, and record scope still limits whose data can be seen.
+
+> Settings itself follows those permissions. Super Admin sees every setup tab. A delegated employee manager sees only Users and can maintain lower-role staff profiles and status, but cannot change roles, passwords, permissions or capabilities. The API protects self, peers, higher roles, every Super Admin and the final active owner account.
 
 > Confirmed decisions retain the actual answer, notes, source, user and time. Local transport CBM and FIFO are confirmed. Invoice requirement, common-cost default, accounting depth, warehouse count, sales tax and finalization authority remain visible rather than silently hard-coded.
 
 ---
 
-## 22:25-23:45 - Prove Role Access
+## 22:50-24:40 - Prove Effective Access
 
 ### Show
 
-1. Use the profile menu and sign out.
-2. Sign in as `sales1@mipro.local` with `password123`.
-3. Show the smaller navigation: Dashboard, Sales and Reports.
-4. Open Sales and point to **My Customers** and **My Quotes & Orders**.
-5. Open My Activity and show that no other employee is returned, then open Reports and show only this executive's performance.
-6. Ask Field Team AI about another salesperson and show the refusal.
-7. Open MIPRO AI and ask `What is the landed cost and profit margin?`; pause on the permission-safe refusal.
-7. Type `/app/accounts` in the address bar and show **Access denied**.
+1. Sign out and sign in as `import@mipro.local` with `password123`.
+2. Show that Reports appears because of a personal Allow, while confidential landed-cost details still require a separate capability.
+3. Sign out and sign in as `salesmanager@mipro.local`.
+4. Open Settings and show that Users is the only tab; create a Sales Executive or edit a lower-role employee's territory/status.
+5. Open Reports and point out that Export is absent because this user's explicit Deny wins over the Sales Manager role default.
+6. Sign out and sign in as `sales1@mipro.local`.
+7. Show Dashboard, Sales and Reports, then point to **My Customers**, **My Quotes & Orders** and own-only performance.
+8. Ask Field Team AI about another salesperson and show the refusal.
+9. Open MIPRO AI and ask `What is the landed cost and profit margin?`; pause on the permission-safe refusal.
+10. Type `/app/accounts` in the address bar and show **Access denied**.
 
 ### Say
 
-> This is not a cosmetic role switch. The Sales Executive receives a small own-record web workspace: Sales plus their own report. They cannot see import costing, accounts, another employee's report or settings.
+> This is not a cosmetic role switch. The same effective-access resolver controls navigation, direct routes, buttons, APIs, documents, reports and AI context. Import Officer plus Reports and Sales Manager plus employee administration are user-specific exceptions, not new roles.
+
+> Delegating employee maintenance does not delegate access administration. The manager can create a Sales Executive and update lower-role employment data, but attempts to assign Accounts, edit a Super Admin or change permissions are rejected by the API.
 
 > Even a direct URL and an AI question are denied at the API boundary. Customers, transactions and employee reports are owner-filtered, and sensitive cost fields are never sent.
 
@@ -542,6 +551,10 @@ Do not open developer tools unless the audience asks. If needed, show one Networ
 
 - [ ] Landing and login are visible.
 - [ ] Role cannot be changed after login.
+- [ ] Import Officer's personal Reports Allow is demonstrated.
+- [ ] Sales Manager's Users delegation and Reports Export Deny are demonstrated.
+- [ ] Settings shows only tabs allowed to the current user.
+- [ ] Employee management is explained separately from access management.
 - [ ] Exactly seven possible main destinations are explained.
 - [ ] Dashboard has no more than six KPIs.
 - [ ] PO-first draft creation and later PI/LC progression are explained.

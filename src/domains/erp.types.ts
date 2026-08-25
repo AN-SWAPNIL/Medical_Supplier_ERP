@@ -25,6 +25,7 @@ export type Capability =
   | "view_profit"
   | "approve_stock_override"
   | "manage_users"
+  | "manage_user_access"
   | "approve_special_price";
 
 export type DocumentEntityType = "import" | "import-cost" | "expense";

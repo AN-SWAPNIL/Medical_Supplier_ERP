@@ -8,7 +8,8 @@ import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Panel, ProductThumb, Segmented, TableFrame, inputClass } from "../components";
 import { aiService, inventoryService } from "../services";
-import { useEffectiveRole } from "../../lib/auth/session";
+import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
+import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
 type View = "stock" | "batches" | "movements";
@@ -18,6 +19,7 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
   const role = useEffectiveRole();
+  const user = useAuthStore((state) => state.session?.user);
   const stockQuery = useQuery({ queryKey: ["inventory", "stock"], queryFn: inventoryService.stock });
   const batchQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches });
   const movementQuery = useQuery({ queryKey: ["inventory", "movements"], queryFn: inventoryService.movements });
@@ -46,8 +48,8 @@ export default function InventoryPage() {
         subtitle="One stock position with batch traceability, FIFO issue order and visible expiry awareness."
         actions={
           <>
-            {["Super Admin", "Warehouse Manager"].includes(role) ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Receive Finalized Import</Button> : null}
-            {role === "Super Admin" ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate("/app/settings?view=products")}>Product Master</Button> : null}
+            {hasEffectivePermission(user, "inventory", "post") && hasEffectivePermission(user, "import", "view") ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Receive Finalized Import</Button> : null}
+            {hasEffectivePermission(user, "products", "view") ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate("/app/settings?view=products")}>Product Master</Button> : null}
           </>
         }
       />

@@ -41,7 +41,18 @@ import type {
   TrackingSession,
   WarehouseReceipt
 } from "../src/domains/erp.types.js";
-import type { ApiResponse, Role, Session, User } from "../src/types/index.js";
+import type { ApiResponse, PermissionAction, PermissionKey, Role, Session, User, UserPermissionOverride } from "../src/types/index.js";
+import {
+  canAssignRole,
+  canGrantCapability,
+  canGrantPermission,
+  canManageEmployees,
+  canManageTargetUser,
+  hasCapability as userHasCapability,
+  hasEffectivePermission,
+  normalizePermissionOverrides
+} from "../src/lib/permissions/effectiveAccess.js";
+import { permissionActions, permissionKeys } from "../src/lib/permissions/definitions.js";
 import {
   accountTransactions as seedAccountTransactions,
   accounts as seedAccounts,
@@ -146,7 +157,7 @@ function userFor(req: Request): User | null {
 }
 
 function hasCapability(req: Request, capability: Capability) {
-  return userFor(req)?.capabilities?.includes(capability) ?? false;
+  return userHasCapability(userFor(req), capability);
 }
 
 function requireUser(req: Request, res: Response) {
@@ -155,24 +166,41 @@ function requireUser(req: Request, res: Response) {
   return user;
 }
 
-const areaRoles: Record<string, Role[]> = {
-  dashboard: ["Super Admin", "Managing Director", "Accounts", "Import Officer", "Warehouse Manager", "Sales Manager", "Sales Executive"],
-  imports: ["Super Admin", "Managing Director", "Import Officer", "Warehouse Manager"],
-  inventory: ["Super Admin", "Managing Director", "Warehouse Manager", "Sales Manager"],
-  sales: ["Super Admin", "Managing Director", "Accounts", "Warehouse Manager", "Sales Manager", "Sales Executive"],
-  accounts: ["Super Admin", "Managing Director", "Accounts"],
-  reports: ["Super Admin", "Managing Director", "Accounts", "Sales Manager", "Sales Executive"],
-  settings: ["Super Admin"]
-};
+const areaPermissions = {
+  dashboard: "dashboard",
+  imports: "import",
+  inventory: "inventory",
+  sales: "sales",
+  accounts: "accounts",
+  reports: "reports",
+  settings: "settings"
+} as const satisfies Record<string, PermissionKey>;
 
-function requireArea(req: Request, res: Response, area: keyof typeof areaRoles) {
+type Area = keyof typeof areaPermissions;
+
+function requestAction(req: Request): PermissionAction {
+  if (req.method === "POST") return "create";
+  if (req.method === "PATCH" || req.method === "PUT") return "edit";
+  if (req.method === "DELETE") return "delete";
+  return "view";
+}
+
+function requirePermission(req: Request, res: Response, permission: PermissionKey, action: PermissionAction = requestAction(req)) {
   const user = requireUser(req, res);
   if (!user) return null;
-  if (!areaRoles[area].includes(user.role)) {
-    fail(res, 403, `${user.role} cannot access ${area}.`);
+  if (!hasEffectivePermission(user, permission, action)) {
+    fail(res, 403, `${user.role} cannot ${action} ${permission}.`);
     return null;
   }
   return user;
+}
+
+function requireArea(req: Request, res: Response, area: Area, action?: PermissionAction) {
+  return requirePermission(req, res, areaPermissions[area], action);
+}
+
+function canAccessArea(user: User, area: Area, action: PermissionAction = "view") {
+  return hasEffectivePermission(user, areaPermissions[area], action);
 }
 
 function id(prefix: string) {
@@ -633,21 +661,21 @@ function aiContextFromRequest(req: Request): AIContext {
 }
 
 function aiSuggestionsFor(user: User, context: AIContext) {
-  if (context.entityType === "import" && areaRoles.imports.includes(user.role)) return ["Explain the current shipment stage", "Which documents are missing?", "What needs attention next?"];
-  if (context.entityType === "inventory" && areaRoles.inventory.includes(user.role)) return ["Which batches need attention?", "Which lot should be issued first?", "Explain the FIFO rule"];
-  if (context.entityType === "sales" && areaRoles.sales.includes(user.role)) return ["Which customers need follow-up?", "Which quotations are still pending?", "Summarize collections and dues"];
+  if (context.entityType === "import" && canAccessArea(user, "imports")) return ["Explain the current shipment stage", "Which documents are missing?", "What needs attention next?"];
+  if (context.entityType === "inventory" && canAccessArea(user, "inventory")) return ["Which batches need attention?", "Which lot should be issued first?", "Explain the FIFO rule"];
+  if (context.entityType === "sales" && canAccessArea(user, "sales")) return ["Which customers need follow-up?", "Which quotations are still pending?", "Summarize collections and dues"];
   if (context.entityType === "field-team" && (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive")) return ["Who is active in the field?", "Summarize today's visits", "Which location updates are stale?"];
   if (context.entityType === "insights") return ["What needs attention first?", "Summarize my operational alerts", "Open the highest priority source"];
-  if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) return ["Summarize this report period", "Compare salesperson performance", "Which customer owes the most?"];
+  if (context.entityType === "reports" && canAccessArea(user, "reports")) return ["Summarize this report period", "Compare salesperson performance", "Which customer owes the most?"];
   return ["What needs attention today?", "Summarize my current workspace", "Which action should I review next?"];
 }
 
 function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendation[] {
   const user = userFor(req)!;
   const result: AIRecommendation[] = [];
-  const canSeeImports = areaRoles.imports.includes(user.role);
-  const canSeeInventory = areaRoles.inventory.includes(user.role) || user.role === "Warehouse Manager";
-  const canSeeSales = areaRoles.sales.includes(user.role) && user.role !== "Warehouse Manager";
+  const canSeeImports = canAccessArea(user, "imports");
+  const canSeeInventory = canAccessArea(user, "inventory");
+  const canSeeSales = canAccessArea(user, "sales");
   const include = (entities: AIContext["entityType"][]) => !context.entityType || context.entityType === "dashboard" || context.entityType === "insights" || entities.includes(context.entityType);
 
   if (canSeeImports && include(["import"])) {
@@ -960,14 +988,14 @@ app.post("/api/ai/chat", (req, res) => {
   if ((asksForCost && !hasCapability(req, "view_sensitive_cost")) || (asksForProfit && !hasCapability(req, "view_profit"))) {
     return res.json(ok({ answer: `I cannot provide supplier pricing, landed cost or profit to the ${user.role} role. I can still help with allowed status, stock, customer, due and workflow information.`, contextLabel: `${user.role} · permission-safe response`, suggestions, sources: [], restricted: true }, "Sensitive request safely restricted"));
   }
-  if ((context.entityType === "import" && !areaRoles.imports.includes(user.role)) || (context.entityType === "inventory" && !areaRoles.inventory.includes(user.role)) || (context.entityType === "reports" && !areaRoles.reports.includes(user.role)) || (context.entityType === "field-team" && !fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive")) {
+  if ((context.entityType === "import" && !canAccessArea(user, "imports")) || (context.entityType === "inventory" && !canAccessArea(user, "inventory")) || (context.entityType === "reports" && !canAccessArea(user, "reports")) || (context.entityType === "field-team" && !fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive")) {
     return res.json(ok({ answer: `The ${context.entityType} workspace is outside the ${user.role} role, so I cannot read or summarize its records.`, contextLabel: `${user.role} · access restricted`, suggestions: aiSuggestionsFor(user, { route: "/app/dashboard", entityType: "dashboard" }), sources: [], restricted: true }, "Context safely restricted"));
   }
 
   let answer = "I reviewed the records available to your role. ";
   let contextLabel = `${user.role} · ${context.entityType ?? "dashboard"}`;
   let sources: { label: string; path: string }[] = [];
-  if (context.entityType === "import" && areaRoles.imports.includes(user.role)) {
+  if (context.entityType === "import" && canAccessArea(user, "imports")) {
     const record = imports.find((entry) => entry.id === context.entityId);
     if (record) {
       contextLabel = `${record.primaryReference} · ${record.status}`;
@@ -979,11 +1007,11 @@ app.post("/api/ai/chat", (req, res) => {
       else if (/allocation|freight|cost/i.test(question) && hasCapability(req, "view_sensitive_cost")) answer = `${record.primaryReference} has ${record.costs.length} recorded import-cost rows. Each row uses its explicit deterministic basis, and the landed-cost preview must reconcile exactly before authorized finalization.`;
       else answer = `${record.primaryReference} is at ${record.status}. Its next valid action follows the controlled import milestones; warehouse receiving stays locked until the landed-cost snapshot is finalized.`;
     } else answer += "The requested import record is not available.";
-  } else if (context.entityType === "inventory" && areaRoles.inventory.includes(user.role)) {
+  } else if (context.entityType === "inventory" && canAccessArea(user, "inventory")) {
     const recs = aiRecommendationsFor(req, context).filter((item) => item.id.startsWith("expiry-") || item.id.startsWith("fifo-"));
     answer = recs.length ? recs.map((item) => `${item.title}: ${item.summary}`).join(" ") : "No current non-expired batch requires special FIFO or expiry attention.";
     sources = [{ label: "Inventory batches", path: "/app/inventory" }];
-  } else if (context.entityType === "sales" && areaRoles.sales.includes(user.role) && user.role !== "Warehouse Manager") {
+  } else if (context.entityType === "sales" && canAccessArea(user, "sales")) {
     const visibleCustomers = customerScoped(req);
     const topDue = [...visibleCustomers].sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue))[0];
     const openQuotes = salesScoped(quotations, req).filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status));
@@ -1001,7 +1029,7 @@ app.post("/api/ai/chat", (req, res) => {
     answer = selected ? `${selected.employee.name} is ${selected.status.toLowerCase().replace("_", " ")}. The last coordinate was recorded at ${selected.recordedAt} with ${selected.accuracyMeters} m accuracy.${selected.currentVisit ? ` Current visit: ${selected.currentVisit.customerName}, checked in at ${selected.currentVisit.checkInAt}.` : " No active customer check-in is attached."}` : `${live} visible employee${live === 1 ? " is" : "s are"} live. ${stale.length} location feed${stale.length === 1 ? " needs" : "s need"} timestamp attention. This is a labelled demo feed, not production tracking.`;
     contextLabel = selected ? `${selected.employee.employeeCode} · ${selected.status}` : `${user.role} · Field Team`;
     sources = [{ label: selected ? `${selected.employee.name} field activity` : "Field Team", path: `/app/sales?view=field-team${selected ? `&employee=${selected.userId}` : ""}` }];
-  } else if (context.entityType === "reports" && areaRoles.reports.includes(user.role)) {
+  } else if (context.entityType === "reports" && canAccessArea(user, "reports")) {
     const from = context.reportFrom && /^\d{4}-\d{2}-\d{2}$/.test(context.reportFrom) ? context.reportFrom : `${businessDate().slice(0, 7)}-01`;
     const to = context.reportTo && /^\d{4}-\d{2}-\d{2}$/.test(context.reportTo) ? context.reportTo : businessDate();
     const performance = salesEmployeesFor(req).map((employee) => salespersonPerformance(employee, from, to));
@@ -1065,7 +1093,11 @@ app.get(["/api/dashboard", "/api/dashboard/summary"], (req, res) => {
   const orderPipeline = openOrders.reduce((sum, order) => sum.plus(order.total), new Decimal(0));
   const accountBalance = accounts.filter((account) => account.active).reduce((sum, account) => sum.plus(account.balance), new Decimal(0));
   const dispatchCount = visibleDeliveries.filter((delivery) => delivery.date.startsWith(currentMonth)).length;
-  const financial = ["Super Admin", "Managing Director"].includes(user.role);
+  const canSeeSales = canAccessArea(user, "sales");
+  const canSeeCustomers = hasEffectivePermission(user, "customers", "view");
+  const canSeeAccounts = canAccessArea(user, "accounts");
+  const canSeeInventory = canAccessArea(user, "inventory");
+  const canSeeImports = canAccessArea(user, "imports");
   const metricsByRole: Record<Role, { id: string; label: string; value: string; unit: string; sensitive?: boolean }[]> = {
     "Super Admin": [
       { id: "sales", label: "Delivered Sales This Month", value: money(salesTotal), unit: "BDT" },
@@ -1120,17 +1152,22 @@ app.get(["/api/dashboard", "/api/dashboard/summary"], (req, res) => {
       { id: "quotes", label: "My Open Quotations", value: String(openQuotes.length), unit: "quotes" }
     ]
   };
-  const salesVisibility = financial || ["Accounts", "Sales Manager", "Sales Executive"].includes(user.role);
-  const expiryVisibility = financial || ["Warehouse Manager", "Sales Manager"].includes(user.role);
+  const metricArea: Record<string, boolean> = {
+    sales: canSeeSales, collection: canSeeSales, pipeline: canSeeSales, quotes: canSeeSales,
+    due: canSeeCustomers, expense: canSeeAccounts, accounts: canSeeAccounts,
+    stock: canSeeInventory, batches: canSeeInventory, expiry: canSeeInventory, dispatch: canSeeInventory,
+    imports: canSeeImports, pi: canSeeImports, shipment: canSeeImports, costing: canSeeImports,
+    receiving: canSeeImports || canSeeInventory
+  };
   res.json(ok({
     role: user.role,
-    metrics: metricsByRole[user.role],
-    importAttention: areaRoles.imports.includes(user.role) ? imports.filter((item) => ["Draft", "PI Received", "At Port", "Costing", "Cost Finalized", "Partially Received"].includes(item.status)).map((item) => importForRole(item, req)) : [],
-    expiryAlerts: expiryVisibility ? expiryAttention.map((batch) => visibleBatch(batch, req)) : [],
-    customerDues: salesVisibility ? visibleCustomers.filter((customer) => decimal(customer.currentDue).gt(0)).sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue)).slice(0, 5) : [],
-    recentSales: salesVisibility ? visibleOrders.slice(0, 5) : [],
-    recentCollections: salesVisibility ? visibleCollections.slice(0, 5) : [],
-    recentExpenses: financial || user.role === "Accounts" ? expenses.filter((expense) => expense.status === "Posted").slice(0, 5) : []
+    metrics: metricsByRole[user.role].filter((metric) => metricArea[metric.id] ?? false),
+    importAttention: canAccessArea(user, "imports") ? imports.filter((item) => ["Draft", "PI Received", "At Port", "Costing", "Cost Finalized", "Partially Received"].includes(item.status)).map((item) => importForRole(item, req)) : [],
+    expiryAlerts: canSeeInventory ? expiryAttention.map((batch) => visibleBatch(batch, req)) : [],
+    customerDues: canSeeCustomers ? visibleCustomers.filter((customer) => decimal(customer.currentDue).gt(0)).sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue)).slice(0, 5) : [],
+    recentSales: canSeeSales ? visibleOrders.slice(0, 5) : [],
+    recentCollections: canSeeSales ? visibleCollections.slice(0, 5) : [],
+    recentExpenses: canSeeAccounts ? expenses.filter((expense) => expense.status === "Posted").slice(0, 5) : []
   }, "Dashboard loaded"));
 });
 
@@ -1139,16 +1176,16 @@ app.get("/api/products", (req, res) => {
   res.json(ok(products, "Products loaded", { total: products.length }));
 });
 app.post("/api/products", (req, res) => {
-  const user = requireUser(req, res);
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Product creation is restricted.") : undefined;
+  const user = requirePermission(req, res, "products", "create");
+  if (!user) return;
   const product = { ...req.body, id: id("prd") };
   products.unshift(product);
   audit(req, "Product created", "Product", product.id, `${product.name} added to canonical product master.`);
   res.status(201).json(ok(product, "Product created"));
 });
 app.patch("/api/products/:productId", (req, res) => {
-  const user = requireUser(req, res);
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Product editing is restricted.") : undefined;
+  const user = requirePermission(req, res, "products", "edit");
+  if (!user) return;
   const index = products.findIndex((product) => product.id === req.params.productId);
   if (index < 0) return fail(res, 404, "Product not found");
   products[index] = { ...products[index], ...req.body, id: products[index].id };
@@ -1156,8 +1193,8 @@ app.patch("/api/products/:productId", (req, res) => {
   res.json(ok(products[index], "Product updated"));
 });
 app.delete("/api/products/:productId", (req, res) => {
-  const user = requireUser(req, res);
-  if (!user || user.role !== "Super Admin") return user ? fail(res, 403, "Only Super Admin can delete products.") : undefined;
+  const user = requirePermission(req, res, "products", "delete");
+  if (!user) return;
   const index = products.findIndex((product) => product.id === req.params.productId);
   if (index < 0) return fail(res, 404, "Product not found");
   const product = products[index];
@@ -1169,20 +1206,20 @@ app.delete("/api/products/:productId", (req, res) => {
 });
 
 app.get("/api/suppliers", (req, res) => {
-  if (!requireArea(req, res, "imports")) return;
+  if (!requirePermission(req, res, "suppliers", "view")) return;
   res.json(ok(suppliers, "Suppliers loaded", { total: suppliers.length }));
 });
 app.post("/api/suppliers", (req, res) => {
-  const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Supplier creation is restricted.") : undefined;
+  const user = requirePermission(req, res, "suppliers", "create");
+  if (!user) return;
   const supplier = { ...req.body, id: id("sup"), active: true };
   suppliers.unshift(supplier);
   audit(req, "Supplier created", "Supplier", supplier.id, `${supplier.name} added.`);
   res.status(201).json(ok(supplier, "Supplier created"));
 });
 app.patch("/api/suppliers/:supplierId", (req, res) => {
-  const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Supplier editing is restricted.") : undefined;
+  const user = requirePermission(req, res, "suppliers", "edit");
+  if (!user) return;
   const index = suppliers.findIndex((supplier) => supplier.id === req.params.supplierId);
   if (index < 0) return fail(res, 404, "Supplier not found");
   suppliers[index] = { ...suppliers[index], ...req.body, id: suppliers[index].id };
@@ -1190,8 +1227,8 @@ app.patch("/api/suppliers/:supplierId", (req, res) => {
   res.json(ok(suppliers[index], "Supplier updated"));
 });
 app.delete("/api/suppliers/:supplierId", (req, res) => {
-  const user = requireArea(req, res, "imports");
-  if (!user || user.role !== "Super Admin") return user ? fail(res, 403, "Only Super Admin can delete suppliers.") : undefined;
+  const user = requirePermission(req, res, "suppliers", "delete");
+  if (!user) return;
   const index = suppliers.findIndex((supplier) => supplier.id === req.params.supplierId);
   if (index < 0) return fail(res, 404, "Supplier not found");
   const supplier = suppliers[index];
@@ -1207,7 +1244,7 @@ app.get("/api/imports", (req, res) => {
 });
 app.post("/api/imports", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import creation is restricted.") : undefined;
+  if (!user) return;
   const supplier = suppliers.find((entry) => entry.id === req.body.supplierId);
   if (!supplier || !String(req.body.poNumber ?? "").trim() || !req.body.poDate) return fail(res, 422, "Supplier, PO number and PO date are required.");
   if (!Array.isArray(req.body.items) || !req.body.items.length) return fail(res, 422, "Add at least one product line to the draft import.");
@@ -1255,7 +1292,7 @@ app.get("/api/imports/:importId", (req, res) => {
 });
 app.delete("/api/imports/:importId", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import deletion is restricted.") : undefined;
+  if (!user) return;
   const index = imports.findIndex((item) => item.id === req.params.importId);
   if (index < 0) return fail(res, 404, "Import not found");
   const record = imports[index];
@@ -1268,7 +1305,7 @@ app.delete("/api/imports/:importId", (req, res) => {
 });
 app.patch("/api/imports/:importId", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import editing is restricted.") : undefined;
+  if (!user) return;
   const index = imports.findIndex((item) => item.id === req.params.importId);
   if (index < 0) return fail(res, 404, "Import not found");
   if (terminalImportLocked(imports[index], res)) return;
@@ -1288,8 +1325,8 @@ app.patch("/api/imports/:importId", (req, res) => {
 });
 
 app.post("/api/imports/:importId/transition", (req, res) => {
-  const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import milestone updates are restricted.") : undefined;
+  const user = requireArea(req, res, "imports", "edit");
+  if (!user) return;
   const record = imports.find((entry) => entry.id === req.params.importId);
   if (!record) return fail(res, 404, "Import not found");
   const target = String(req.body?.status ?? "") as ImportStatus;
@@ -1328,7 +1365,7 @@ app.post("/api/imports/:importId/transition", (req, res) => {
 
 app.post("/api/imports/:importId/items", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import item creation is restricted.") : undefined;
+  if (!user) return;
   const record = imports.find((item) => item.id === req.params.importId);
   if (!record) return fail(res, 404, "Import not found");
   if (terminalImportLocked(record, res)) return;
@@ -1347,7 +1384,7 @@ app.post("/api/imports/:importId/items", (req, res) => {
 });
 app.patch("/api/imports/:importId/items/:itemId", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import item editing is restricted.") : undefined;
+  if (!user) return;
   const record = imports.find((item) => item.id === req.params.importId);
   const index = record?.items.findIndex((item) => item.id === req.params.itemId) ?? -1;
   if (!record || index < 0) return fail(res, 404, "Import item not found");
@@ -1364,7 +1401,7 @@ app.patch("/api/imports/:importId/items/:itemId", (req, res) => {
 });
 app.delete("/api/imports/:importId/items/:itemId", (req, res) => {
   const user = requireArea(req, res, "imports");
-  if (!user || !["Super Admin", "Import Officer"].includes(user.role)) return user ? fail(res, 403, "Import item deletion is restricted.") : undefined;
+  if (!user) return;
   const record = imports.find((item) => item.id === req.params.importId);
   if (!record) return fail(res, 404, "Import not found");
   if (terminalImportLocked(record, res)) return;
@@ -1523,8 +1560,8 @@ app.post("/api/imports/:importId/reopen", (req, res) => {
 });
 
 app.post("/api/imports/:importId/receive", (req, res) => {
-  const user = requireArea(req, res, "inventory");
-  if (!user || !["Super Admin", "Warehouse Manager"].includes(user.role)) return user ? fail(res, 403, "Warehouse receiving is restricted.") : undefined;
+  const user = requireArea(req, res, "inventory", "post");
+  if (!user) return;
   const record = imports.find((item) => item.id === req.params.importId);
   if (!record) return fail(res, 404, "Import not found");
   if (terminalImportLocked(record, res)) return;
@@ -1643,19 +1680,19 @@ app.post("/api/inventory/dispatch-preview", (req, res) => {
 });
 
 app.get("/api/customers", (req, res) => {
-  if (!requireArea(req, res, "sales")) return;
+  if (!requirePermission(req, res, "customers", "view")) return;
   const rows = customerScoped(req);
   res.json(ok(rows, "Customers loaded", { total: rows.length, scoped: rows.length !== customers.length }));
 });
 app.get("/api/customers/:customerId/ledger", (req, res) => {
-  if (!requireArea(req, res, "sales")) return;
+  if (!requirePermission(req, res, "customers", "view")) return;
   if (!ownsCustomer(req, req.params.customerId)) return fail(res, 403, "This customer ledger is outside your assigned records.");
   const ledger = customerLedger(req.params.customerId);
   if (!ledger) return fail(res, 404, "Customer not found");
   res.json(ok(ledger, "Customer transaction ledger loaded"));
 });
 app.post("/api/customers", (req, res) => {
-  const user = requireArea(req, res, "sales");
+  const user = requirePermission(req, res, "customers", "create");
   if (!user) return;
   const customer = { ...req.body, id: id("cus"), assignedSalesUserId: user.role === "Sales Executive" ? user.id : req.body.assignedSalesUserId, currentDue: "0.00", totalSales: "0.00", totalCollected: "0.00", active: true };
   customers.unshift(customer);
@@ -1663,7 +1700,7 @@ app.post("/api/customers", (req, res) => {
   res.status(201).json(ok(customer, "Customer created"));
 });
 app.patch("/api/customers/:customerId", (req, res) => {
-  const user = requireArea(req, res, "sales");
+  const user = requirePermission(req, res, "customers", "edit");
   if (!user) return;
   const index = customers.findIndex((customer) => customer.id === req.params.customerId);
   if (index < 0) return fail(res, 404, "Customer not found");
@@ -1673,8 +1710,8 @@ app.patch("/api/customers/:customerId", (req, res) => {
   res.json(ok(customers[index], "Customer updated"));
 });
 app.delete("/api/customers/:customerId", (req, res) => {
-  const user = requireArea(req, res, "sales");
-  if (!user || !["Super Admin", "Sales Manager"].includes(user.role)) return user ? fail(res, 403, "Customer deletion is restricted.") : undefined;
+  const user = requirePermission(req, res, "customers", "delete");
+  if (!user) return;
   const index = customers.findIndex((customer) => customer.id === req.params.customerId);
   if (index < 0) return fail(res, 404, "Customer not found");
   const customer = customers[index];
@@ -1690,7 +1727,7 @@ app.get("/api/quotations", (req, res) => {
 });
 app.post("/api/quotations", (req, res) => {
   const user = requireArea(req, res, "sales");
-  if (!user || !["Super Admin", "Sales Manager", "Sales Executive"].includes(user.role)) return user ? fail(res, 403, "Quotation creation is restricted.") : undefined;
+  if (!user) return;
   if (!ownsCustomer(req, req.body.customerId)) return fail(res, 403, "You can create quotations only for customers assigned to you.");
   const customer = customers.find((entry) => entry.id === req.body.customerId)!;
   let lines;
@@ -1768,7 +1805,6 @@ app.patch("/api/orders/:orderId", (req, res) => {
   const order = orders.find((entry) => entry.id === req.params.orderId);
   if (!order) return fail(res, 404, "Sales order not found");
   if (user.role === "Sales Executive" && order.ownerId !== user.id) return fail(res, 403, "You can update only your own order details.");
-  if (!["Super Admin", "Sales Manager", "Sales Executive"].includes(user.role)) return fail(res, 403, "Order receiving details are restricted.");
   const allowed = ["deliveryInstruction", "paymentConditions", "paymentConfirmation", "paymentReference", "paymentDate", "requestedDeliveryDate", "orderReceivedByName", "orderReceivedByDesignation", "orderGivenBy", "headOfSalesSignoff", "coeSignoff", "mdSignoff"] as const;
   for (const key of allowed) if (req.body[key] !== undefined) order[key] = String(req.body[key]);
   audit(req, "Order receiving details updated", "SalesOrder", order.id, `${order.orderNumber} office and payment details updated.`);
@@ -1814,8 +1850,8 @@ app.get("/api/deliveries", (req, res) => {
   res.json(ok(userFor(req)?.role === "Sales Executive" ? deliveries.filter((delivery) => visibleOrders.has(delivery.orderId)) : deliveries, "Deliveries loaded"));
 });
 app.post("/api/deliveries", (req, res) => {
-  const user = requireArea(req, res, "sales");
-  if (!user || !["Super Admin", "Warehouse Manager", "Sales Manager"].includes(user.role)) return user ? fail(res, 403, "Only warehouse or sales management can dispatch stock.") : undefined;
+  const user = requireArea(req, res, "sales", "post");
+  if (!user) return;
   const payload = req.body as Delivery;
   const order = orders.find((item) => item.id === payload.orderId);
   if (!order) return fail(res, 404, "Sales order not found");
@@ -1881,8 +1917,8 @@ app.get("/api/payment-accounts", (req, res) => {
   res.json(ok(accounts.filter((account) => account.active).map((account) => ({ ...account, balance: "Restricted" })), "Payment accounts loaded"));
 });
 app.post("/api/collections", (req, res) => {
-  const user = requireArea(req, res, "sales");
-  if (!user || !["Super Admin", "Accounts", "Sales Manager", "Sales Executive"].includes(user.role)) return user ? fail(res, 403, "Collection posting is restricted.") : undefined;
+  const user = requireArea(req, res, "sales", "post");
+  if (!user) return;
   const customer = customers.find((entry) => entry.id === req.body.customerId);
   if (!customer) return fail(res, 404, "Customer not found");
   if (!ownsCustomer(req, customer.id)) return fail(res, 403, "You can post collections only for customers assigned to you.");
@@ -1921,8 +1957,8 @@ app.get("/api/expenses", (req, res) => {
   res.json(ok(expenses, "Expenses loaded"));
 });
 app.post("/api/expenses", (req, res) => {
-  const user = requireArea(req, res, "accounts");
-  if (!user || !["Super Admin", "Accounts"].includes(user.role)) return user ? fail(res, 403, "Expense entry is restricted.") : undefined;
+  const user = requireArea(req, res, "accounts", "post");
+  if (!user) return;
   let amount: Decimal;
   try {
     if (req.body.subtype === "TA/DA") {
@@ -1960,8 +1996,8 @@ app.post("/api/expenses", (req, res) => {
   res.status(201).json(ok(expense, "Expense posted; landed cost remains unchanged"));
 });
 app.post("/api/expenses/:expenseId/reverse", (req, res) => {
-  const user = requireArea(req, res, "accounts");
-  if (!user || !["Super Admin", "Accounts"].includes(user.role)) return user ? fail(res, 403, "Expense reversal is restricted.") : undefined;
+  const user = requireArea(req, res, "accounts", "post");
+  if (!user) return;
   const expense = expenses.find((entry) => entry.id === req.params.expenseId);
   if (!expense) return fail(res, 404, "Expense not found");
   if (expense.status === "Reversed") return fail(res, 409, "Expense is already reversed.");
@@ -1981,8 +2017,7 @@ app.get("/api/expense-categories", (req, res) => {
   res.json(ok(expenseCategories, "Expense categories loaded"));
 });
 app.post("/api/expense-categories", (req, res) => {
-  const user = requireArea(req, res, "accounts");
-  if (!user || user.role !== "Super Admin") return user ? fail(res, 403, "Only Super Admin can add expense categories.") : undefined;
+  if (!requirePermission(req, res, "settings", "create")) return;
   const category = { id: id("ec"), name: String(req.body.name), active: true };
   expenseCategories.push(category);
   res.status(201).json(ok(category, "Expense category created"));
@@ -2019,6 +2054,11 @@ app.get("/api/reports/salespeople", (req, res) => {
     comparison: details.map((detail) => ({ ...detail.employee, ...detail.summary })),
     selected: selectedEmployee ? details.find((detail) => detail.employee.id === selectedEmployee.id) : undefined
   }, selectedEmployee ? `${selectedEmployee.name} performance loaded` : "Sales team comparison loaded"));
+});
+
+app.get("/api/reports/export-authorization", (req, res) => {
+  if (!requireArea(req, res, "reports", "export")) return;
+  res.json(ok({ authorized: true as const }, "Report export authorized"));
 });
 
 app.get("/api/reports", (req, res) => {
@@ -2120,49 +2160,132 @@ app.get("/api/reports", (req, res) => {
   }, `Reports loaded for ${from} to ${to}`));
 });
 
+const validRoles: Role[] = ["Super Admin", "Managing Director", "Accounts", "Import Officer", "Warehouse Manager", "Sales Manager", "Sales Executive"];
+const validCapabilities: Capability[] = ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "manage_users", "manage_user_access", "approve_special_price"];
+
+function canManageUserAccess(user: User) {
+  return user.role === "Super Admin" || userHasCapability(user, "manage_user_access");
+}
+
+function parsePermissionOverrides(value: unknown): UserPermissionOverride[] | null {
+  if (!Array.isArray(value)) return null;
+  const valid = value.every((override) => override && typeof override === "object" && permissionKeys.includes((override as UserPermissionOverride).permission) && permissionActions.includes((override as UserPermissionOverride).action) && ["ALLOW", "DENY"].includes((override as UserPermissionOverride).effect));
+  return valid ? normalizePermissionOverrides(value as UserPermissionOverride[]) : null;
+}
+
+function userForViewer(user: User, viewer: User) {
+  if (canManageUserAccess(viewer)) return user;
+  const profile: User = { ...user };
+  delete profile.capabilities;
+  delete profile.permissionOverrides;
+  return profile;
+}
+
 app.get("/api/settings/users", (req, res) => {
-  if (!requireArea(req, res, "settings")) return;
-  res.json(ok(demoUsers, "Users and capabilities loaded"));
+  const actor = requirePermission(req, res, "users", "view");
+  if (!actor) return;
+  if (!canManageEmployees(actor, "view")) return fail(res, 403, "Employee listing requires delegated user-management authority.");
+  res.json(ok(demoUsers.map((user) => userForViewer(user, actor)), "Users loaded with role-safe access details"));
 });
 app.post("/api/settings/users", (req, res) => {
-  if (!requireArea(req, res, "settings")) return;
+  const actor = requirePermission(req, res, "users", "create");
+  if (!actor) return;
+  if (!canManageEmployees(actor, "create")) return fail(res, 403, "Employee creation requires delegated user-management authority.");
   const email = String(req.body?.email ?? "").trim().toLowerCase();
-  const validRoles: Role[] = ["Super Admin", "Managing Director", "Accounts", "Import Officer", "Warehouse Manager", "Sales Manager", "Sales Executive"];
   if (!email || demoUsers.some((user) => user.email.toLowerCase() === email)) return fail(res, 409, "Enter a unique user email.");
-  if (!validRoles.includes(req.body?.role)) return fail(res, 422, "Select a valid role.");
+
+  const requestedRole = String(req.body?.role ?? "Sales Executive") as Role;
+  if (!validRoles.includes(requestedRole)) return fail(res, 422, "Select a valid role.");
+  if (!canManageUserAccess(actor) && requestedRole !== "Sales Executive") return fail(res, 403, "Delegated employee managers create Sales Executive accounts only.");
+  if (canManageUserAccess(actor) && !canAssignRole(actor, requestedRole)) return fail(res, 403, "You cannot assign that role.");
+
+  const requestedCapabilities = Array.isArray(req.body?.capabilities) ? [...new Set(req.body.capabilities as Capability[])] : [];
+  if (!requestedCapabilities.every((capability) => validCapabilities.includes(capability))) return fail(res, 422, "One or more capabilities are invalid.");
+  const requestedOverrides = req.body?.permissionOverrides === undefined ? [] : parsePermissionOverrides(req.body.permissionOverrides);
+  if (!requestedOverrides) return fail(res, 422, "One or more permission overrides are invalid.");
+  if ((requestedCapabilities.length || requestedOverrides.length || req.body?.password) && !canManageUserAccess(actor)) return fail(res, 403, "Role, access and password assignment require access-management authority.");
+  if (!requestedCapabilities.every((capability) => canGrantCapability(actor, capability))) return fail(res, 403, "You cannot grant a capability you do not control.");
+  if (!requestedOverrides.every((override) => canGrantPermission(actor, override.permission, override.action, override.effect))) return fail(res, 403, "You cannot grant a permission you do not control.");
+
+  const status = ["Active", "Pending", "Inactive"].includes(req.body?.status) ? req.body.status as User["status"] : "Active";
   const user: User = {
     id: id("user"),
-    name: String(req.body.name ?? "New User"),
+    name: String(req.body.name ?? "New User").trim(),
     email,
-    role: req.body.role,
-    title: String(req.body.title ?? req.body.role),
-    department: String(req.body.department ?? req.body.role),
-    phone: String(req.body.phone ?? ""),
-    avatarUrl: String(req.body.avatarUrl ?? ""),
-    status: req.body.status ?? "Active",
-    territory: req.body.territory,
-    capabilities: (req.body.capabilities ?? []).filter((capability: Capability) => capability !== "manage_users")
+    role: requestedRole,
+    title: String(req.body.title ?? requestedRole).trim(),
+    department: String(req.body.department ?? requestedRole).trim(),
+    phone: String(req.body.phone ?? "").trim(),
+    avatarUrl: String(req.body.avatarUrl ?? "").trim(),
+    status,
+    territory: req.body.territory ? String(req.body.territory).trim() : undefined,
+    employeeCode: req.body.employeeCode ? String(req.body.employeeCode).trim() : undefined,
+    permissionOverrides: requestedOverrides,
+    capabilities: requestedCapabilities
   };
   demoUsers.push(user);
-  passwordByEmail.set(user.email, String(req.body.password ?? "password123"));
-  audit(req, "User created", "User", user.id, `${user.name} assigned ${user.role}.`);
-  res.status(201).json(ok(user, "User created"));
+  passwordByEmail.set(user.email, canManageUserAccess(actor) && req.body.password ? String(req.body.password) : "password123");
+  audit(req, "User Created", "User", user.id, `${user.name} created as ${user.role} with ${user.status} status.`);
+  res.status(201).json(ok(userForViewer(user, actor), "User created"));
 });
 app.patch("/api/settings/users/:userId", (req, res) => {
-  const actor = requireArea(req, res, "settings");
+  const actor = requirePermission(req, res, "users", "edit");
   if (!actor) return;
   const index = demoUsers.findIndex((user) => user.id === req.params.userId);
   if (index < 0) return fail(res, 404, "User not found");
-  const previousEmail = demoUsers[index].email;
-  demoUsers[index] = { ...demoUsers[index], ...req.body, id: demoUsers[index].id, capabilities: (req.body.capabilities ?? demoUsers[index].capabilities ?? []).filter((capability: Capability) => capability !== "manage_users") };
-  if (req.body.password) passwordByEmail.set(demoUsers[index].email, String(req.body.password));
-  if (previousEmail !== demoUsers[index].email) {
-    const existingPassword = passwordByEmail.get(previousEmail) ?? "password123";
-    passwordByEmail.delete(previousEmail);
-    passwordByEmail.set(demoUsers[index].email, existingPassword);
+  const before = structuredClone(demoUsers[index]);
+  if (actor.role !== "Super Admin" && before.role === "Super Admin") return fail(res, 403, "A non-Super-Admin cannot modify a Super Admin account.");
+  const nextRole = Object.hasOwn(req.body ?? {}, "role") ? req.body.role as Role : before.role;
+  const nextStatus = Object.hasOwn(req.body ?? {}, "status") ? req.body.status as User["status"] : before.status;
+  if (!validRoles.includes(nextRole)) return fail(res, 422, "Select a valid role.");
+  if (!["Active", "Pending", "Inactive"].includes(nextStatus)) return fail(res, 422, "Select a valid account status.");
+  const activeSuperAdmins = demoUsers.filter((user) => user.role === "Super Admin" && user.status === "Active").length;
+  if (before.role === "Super Admin" && before.status === "Active" && activeSuperAdmins === 1 && (nextRole !== "Super Admin" || nextStatus !== "Active")) return fail(res, 409, "The final active Super Admin cannot be deactivated or assigned another role.");
+  if (!canManageTargetUser(actor, before)) return fail(res, 403, "You can manage only lower-privilege employee accounts, never yourself or a Super Admin.");
+
+  const changesAccess = ["role", "permissionOverrides", "capabilities", "password"].some((field) => Object.hasOwn(req.body ?? {}, field));
+  if (changesAccess && !canManageUserAccess(actor)) return fail(res, 403, "Role, permission, capability and password changes require access-management authority.");
+
+  if (nextRole !== before.role && !canAssignRole(actor, nextRole)) return fail(res, 403, "You cannot assign that role.");
+
+  if (Object.hasOwn(req.body ?? {}, "capabilities") && !Array.isArray(req.body.capabilities)) return fail(res, 422, "Capabilities must be an array.");
+  const nextCapabilities = Object.hasOwn(req.body ?? {}, "capabilities") ? [...new Set(req.body.capabilities as Capability[])] : before.capabilities ?? [];
+  if (!Array.isArray(nextCapabilities) || !nextCapabilities.every((capability) => validCapabilities.includes(capability))) return fail(res, 422, "One or more capabilities are invalid.");
+  if (changesAccess && !nextCapabilities.every((capability) => canGrantCapability(actor, capability))) return fail(res, 403, "You cannot grant or retain a capability you do not control.");
+
+  const nextOverrides = Object.hasOwn(req.body ?? {}, "permissionOverrides") ? parsePermissionOverrides(req.body.permissionOverrides) : before.permissionOverrides ?? [];
+  if (!nextOverrides) return fail(res, 422, "One or more permission overrides are invalid.");
+  if (changesAccess && !nextOverrides.every((override) => canGrantPermission(actor, override.permission, override.action, override.effect))) return fail(res, 403, "You cannot grant or retain a permission you do not control.");
+
+  const nextEmail = Object.hasOwn(req.body ?? {}, "email") ? String(req.body.email).trim().toLowerCase() : before.email;
+  if (!nextEmail || demoUsers.some((user, userIndex) => userIndex !== index && user.email.toLowerCase() === nextEmail)) return fail(res, 409, "Enter a unique user email.");
+  if (req.body.password && String(req.body.password).length < 6) return fail(res, 422, "Password must contain at least 6 characters.");
+
+  const editableProfile = ["name", "title", "department", "phone", "avatarUrl", "territory", "employeeCode"] as const;
+  const profileChanges = Object.fromEntries(editableProfile.filter((field) => Object.hasOwn(req.body ?? {}, field)).map((field) => [field, req.body[field]]));
+  const updated: User = { ...before, ...profileChanges, email: nextEmail, role: nextRole, status: nextStatus, capabilities: nextCapabilities, permissionOverrides: nextOverrides };
+  demoUsers[index] = updated;
+
+  if (req.body.password) {
+    passwordByEmail.set(nextEmail, String(req.body.password));
+    audit(req, "Password Reset", "User", updated.id, `Password reset for ${updated.name}.`);
+  } else if (before.email !== nextEmail) {
+    const existingPassword = passwordByEmail.get(before.email) ?? "password123";
+    passwordByEmail.delete(before.email);
+    passwordByEmail.set(nextEmail, existingPassword);
   }
-  audit(req, "User capabilities updated", "User", demoUsers[index].id, `${demoUsers[index].name}: ${demoUsers[index].role} with ${demoUsers[index].capabilities?.length ?? 0} explicit capabilities.`);
-  res.json(ok(demoUsers[index], "User and capabilities updated"));
+  if (editableProfile.some((field) => before[field] !== updated[field]) || before.email !== updated.email) audit(req, "User Profile Updated", "User", updated.id, `${updated.name}'s employee profile was updated.`);
+  if (before.status !== updated.status) audit(req, updated.status === "Inactive" ? "User Deactivated" : "User Activated", "User", updated.id, `${updated.name}: ${before.status} to ${updated.status}.`);
+  if (before.role !== updated.role) audit(req, "Role Changed", "User", updated.id, `${updated.name}: ${before.role} to ${updated.role}.`);
+
+  const beforeOverrides = new Map((before.permissionOverrides ?? []).map((override) => [`${override.permission}:${override.action}`, override.effect]));
+  const afterOverrides = new Map(nextOverrides.map((override) => [`${override.permission}:${override.action}`, override.effect]));
+  for (const [key, effect] of afterOverrides) if (beforeOverrides.get(key) !== effect) audit(req, effect === "ALLOW" ? "Permission Allowed" : "Permission Denied", "User", updated.id, `${updated.name}: ${key} ${effect}.`);
+  for (const key of beforeOverrides.keys()) if (!afterOverrides.has(key)) audit(req, "Permission Reset To Default", "User", updated.id, `${updated.name}: ${key} now follows the role default.`);
+  for (const capability of nextCapabilities) if (!(before.capabilities ?? []).includes(capability)) audit(req, "Capability Granted", "User", updated.id, `${updated.name}: ${capability}.`);
+  for (const capability of before.capabilities ?? []) if (!nextCapabilities.includes(capability)) audit(req, "Capability Revoked", "User", updated.id, `${updated.name}: ${capability}.`);
+
+  res.json(ok(userForViewer(updated, actor), "User access updated"));
 });
 app.get("/api/settings/decisions", (req, res) => {
   if (!requireArea(req, res, "settings")) return;
@@ -2293,11 +2416,11 @@ app.post("/api/settings/customer-opening-balances", (req, res) => {
 });
 
 app.get("/api/settings/product-aliases", (req, res) => {
-  if (!requireArea(req, res, "settings")) return;
+  if (!requirePermission(req, res, "products", "view")) return;
   res.json(ok(productAliases, "Product aliases loaded"));
 });
 app.post("/api/settings/product-aliases", (req, res) => {
-  if (!requireArea(req, res, "settings")) return;
+  if (!requirePermission(req, res, "products", "create")) return;
   const product = products.find((entry) => entry.id === req.body.productId);
   const aliasText = String(req.body.aliasText ?? "").trim();
   if (!product || aliasText.length < 2) return fail(res, 422, "Enter an alias and select its canonical product.");
@@ -2307,7 +2430,7 @@ app.post("/api/settings/product-aliases", (req, res) => {
   res.status(201).json(ok(alias, "Product alias mapped"));
 });
 app.delete("/api/settings/product-aliases/:aliasId", (req, res) => {
-  if (!requireArea(req, res, "settings")) return;
+  if (!requirePermission(req, res, "products", "delete")) return;
   const index = productAliases.findIndex((entry) => entry.id === req.params.aliasId);
   if (index < 0) return fail(res, 404, "Product alias not found");
   const [alias] = productAliases.splice(index, 1);
@@ -2354,8 +2477,8 @@ app.patch("/api/settings/print", (req, res) => {
   res.json(ok(printConfiguration, "Print configuration updated"));
 });
 app.get(["/api/audit", "/api/security/audit-log"], (req, res) => {
-  const user = requireUser(req, res);
-  if (!user || !["Super Admin", "Managing Director", "Accounts"].includes(user.role)) return user ? fail(res, 403, "Audit access is restricted.") : undefined;
+  const user = requirePermission(req, res, "reports", "view");
+  if (!user || !["Super Admin", "Managing Director", "Accounts"].includes(user.role)) return user ? fail(res, 403, "Audit data scope is restricted to owner, management and accounts.") : undefined;
   res.json(ok(auditEvents, "Audit events loaded", { total: auditEvents.length }));
 });
 

@@ -19,7 +19,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
-import { useEffectiveRole } from "../../lib/auth/session";
+import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
+import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { businessDate } from "../../lib/date";
 import { formatCurrency, formatNumber } from "../../utils/format";
 import type { ReportTable, SalespersonPerformanceData, SalespersonPerformanceSummary } from "../erp.types";
@@ -52,6 +53,9 @@ function displayValue(value: string, key = "") {
 export default function ReportsPage() {
   const today = businessDate();
   const role = useEffectiveRole();
+  const user = useAuthStore((state) => state.session?.user);
+  const canExport = hasEffectivePermission(user, "reports", "export");
+  const canPrint = hasEffectivePermission(user, "print", "view");
   const [params, setParams] = useSearchParams();
   const requestedView = params.get("view") as View | null;
   const [view, setView] = useState<View>(requestedView ?? (role === "Sales Executive" ? "sales" : "overview"));
@@ -104,7 +108,8 @@ export default function ReportsPage() {
 
   const performanceTables = buildPerformanceExportTables(performanceQuery.data);
   const exportedTables = tableId === "salesperson-performance" ? performanceTables : selectedTable ? [selectedTable] : groups.flatMap((group) => group.tables);
-  const exportCsv = () => {
+  const exportCsv = async () => {
+    await reportService.authorizeExport();
     const lines: string[] = [];
     for (const table of exportedTables) {
       lines.push(csvCell(table.title));
@@ -128,8 +133,8 @@ export default function ReportsPage() {
         subtitle="Period-specific operating reports built from the same import, stock, delivery, collection and expense records."
         actions={
           <>
-            <Button icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export Current Data</Button>
-            <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Current Report</Button>
+            {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Current Data</Button> : null}
+            {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Current Report</Button> : null}
           </>
         }
       />

@@ -58,9 +58,9 @@ import type {
   WarehouseReceipt
 } from "../erp.types";
 import { aiService, importService, settingsService } from "../services";
-import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
+import { useAuthStore } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
-import { hasCapability } from "../../lib/permissions/matrix";
+import { hasCapability, hasEffectivePermission } from "../../lib/permissions/matrix";
 import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency, formatNumber, formatUsd } from "../../utils/format";
 
@@ -80,7 +80,6 @@ export default function ImportWorkspacePage() {
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const session = useAuthStore((state) => state.session);
-  const role = useEffectiveRole();
   const [modal, setModal] = useState<"commercial" | "shipment" | "item" | "cost" | "document" | "receive" | "reopen" | null>(null);
   const [editingItem, setEditingItem] = useState<ImportItem | undefined>();
   const [editingCost, setEditingCost] = useState<ImportCostLine | undefined>();
@@ -134,17 +133,17 @@ export default function ImportWorkspacePage() {
   const receipts = receiptsQuery.data ?? [];
   const locked = Boolean(record.snapshot);
   const terminal = ["Closed", "Cancelled"].includes(record.status);
-  const canEdit = ["Super Admin", "Import Officer"].includes(role) && !locked && !terminal;
+  const canEdit = hasEffectivePermission(session?.user, "import", "edit") && !locked && !terminal;
   const canSeeCost = hasCapability(session?.user, "view_sensitive_cost");
-  const canEditCost = hasCapability(session?.user, "edit_sensitive_cost") && !locked && !terminal;
-  const canFinalize = hasCapability(session?.user, "finalize_landed_cost") && !locked && !terminal;
-  const canReopen = hasCapability(session?.user, "reopen_landed_cost") && locked && receipts.length === 0;
-  const canReceive = ["Super Admin", "Warehouse Manager"].includes(role) && record.costingStatus === "Finalized" && record.warehouseStatus !== "Received";
+  const canEditCost = hasEffectivePermission(session?.user, "import", "edit") && hasCapability(session?.user, "edit_sensitive_cost") && !locked && !terminal;
+  const canFinalize = hasEffectivePermission(session?.user, "import", "create") && hasCapability(session?.user, "finalize_landed_cost") && !locked && !terminal;
+  const canReopen = hasEffectivePermission(session?.user, "import", "create") && hasCapability(session?.user, "reopen_landed_cost") && locked && receipts.length === 0;
+  const canReceive = hasEffectivePermission(session?.user, "inventory", "post") && record.costingStatus === "Finalized" && record.warehouseStatus !== "Received";
   const result = record.snapshot ?? preview;
   const currentMilestone = milestoneIndex(record.status);
   const nextOperationalStatus = record.status === "LC/TT Opened" ? "In Production" : record.status === "In Production" ? "Shipped" : record.status === "Shipped" ? "At Port" : null;
   const canCancel = canEdit && ["Draft", "PI Received", "LC/TT Opened", "In Production", "Shipped", "At Port", "Costing"].includes(record.status);
-  const canClose = ["Super Admin", "Import Officer"].includes(role) && record.status === "Received";
+  const canClose = hasEffectivePermission(session?.user, "import", "edit") && record.status === "Received";
   const applyExtractedFields = (fields: AIDocumentExtractionField[]) => {
     action.mutate({
       success: `${fields.length} reviewed field${fields.length === 1 ? "" : "s"} applied through normal validation`,
@@ -173,7 +172,7 @@ export default function ImportWorkspacePage() {
             {canCancel ? <Button variant="danger" icon={<CircleX className="h-4 w-4" />} disabled={action.isPending} onClick={() => setPendingTransition("Cancelled")}>Cancel Case</Button> : null}
             {canEdit && nextOperationalStatus ? <Button variant="primary" icon={<Ship className="h-4 w-4" />} disabled={action.isPending} onClick={() => action.mutate({ run: () => importService.transition(record.id, nextOperationalStatus), success: `Import moved to ${nextOperationalStatus}` })}>Mark {nextOperationalStatus}</Button> : null}
             {canClose ? <Button variant="primary" icon={<Archive className="h-4 w-4" />} disabled={action.isPending} onClick={() => setPendingTransition("Closed")}>Close Case</Button> : null}
-            {canSeeCost && result ? <Button icon={<Printer className="h-4 w-4" />} onClick={() => navigate("/app/print/import-cost/" + record.id)}>Print Cost</Button> : null}
+            {canSeeCost && result && hasEffectivePermission(session?.user, "print", "view") ? <Button icon={<Printer className="h-4 w-4" />} onClick={() => navigate("/app/print/import-cost/" + record.id)}>Print Cost</Button> : null}
             <StatusBadge status={record.status} />
           </>
         }
@@ -306,7 +305,7 @@ export default function ImportWorkspacePage() {
         actions={canEditCost ? <Button variant="ghost" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingCost(undefined); setModal("cost"); }}>Add Cost</Button> : undefined}
       >
         {!canSeeCost ? (
-          <div className="flex items-start gap-3 bg-amber-50 p-4 text-sm text-amber-900"><LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" /><p><strong>Sensitive cost values are restricted for {role}.</strong> Shipment and receiving status remain available without exposing supplier price, landed cost or profit.</p></div>
+          <div className="flex items-start gap-3 bg-amber-50 p-4 text-sm text-amber-900"><LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" /><p><strong>Sensitive cost values are restricted for {session?.user.role}.</strong> Shipment and receiving status remain available without exposing supplier price, landed cost or profit.</p></div>
         ) : (
           <>
             <div className="grid gap-2 p-3 md:hidden">

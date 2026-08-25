@@ -9,7 +9,8 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Modal, Panel, Segmented, TableFrame, inputClass, labelClass, textareaClass } from "../components";
 import type { DocumentRecord, DocumentUpload, Expense } from "../erp.types";
 import { accountsService, salesService } from "../services";
-import { useEffectiveRole } from "../../lib/auth/session";
+import { useAuthStore } from "../../lib/auth/session";
+import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { businessDate } from "../../lib/date";
 import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency } from "../../utils/format";
@@ -24,11 +25,13 @@ export default function AccountsPage() {
   const [reverseExpense, setReverseExpense] = useState<Expense | null>(null);
   const [reverseReason, setReverseReason] = useState("");
   const [viewingDocument, setViewingDocument] = useState<DocumentRecord | null>(null);
-  const role = useEffectiveRole();
+  const user = useAuthStore((state) => state.session?.user);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
-  const canPost = ["Super Admin", "Accounts"].includes(role);
+  const canPost = hasEffectivePermission(user, "accounts", "post");
+  const canCreateCategory = hasEffectivePermission(user, "settings", "create");
+  const canPostCollection = hasEffectivePermission(user, "sales", "post");
 
   const expenseQuery = useQuery({ queryKey: ["accounts", "expenses"], queryFn: accountsService.expenses });
   const categoriesQuery = useQuery({ queryKey: ["accounts", "categories"], queryFn: accountsService.categories });
@@ -76,7 +79,7 @@ export default function AccountsPage() {
         eyebrow="Operational finance"
         title="Expenses & Accounts"
         subtitle="Daily expenditure, TA/DA, collections, customer dues and simple cash/bank transactions. This is not a full accounting replacement."
-        actions={view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "dues" ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : undefined}
+        actions={view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : undefined}
       />
 
       <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
@@ -100,7 +103,7 @@ export default function AccountsPage() {
       />
 
       {view === "expenses" ? (
-        <Panel title="Daily expenditure" subtitle="Posted financial rows are reversed with a reason instead of being silently deleted." actions={role === "Super Admin" ? <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCategoryOpen(true)}>Expense Category</Button> : undefined}>
+        <Panel title="Daily expenditure" subtitle="Posted financial rows are reversed with a reason instead of being silently deleted." actions={canCreateCategory ? <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCategoryOpen(true)}>Expense Category</Button> : undefined}>
           <TableFrame>
             <table className="min-w-[1050px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Detail</th><th className="px-4 py-3">Paid From</th><th className="px-4 py-3">Attachment</th><th className="px-4 py-3 text-right">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{expenses.map((expense) => <tr className={expense.status === "Reversed" ? "opacity-55" : ""} key={expense.id}><td className="px-4 py-3 text-slate-600">{expense.date}</td><td className="px-4 py-3"><strong>{expense.categoryName}</strong><small className="block text-slate-500">{expense.subtype}</small></td><td className="max-w-80 px-4 py-3"><span className="block truncate text-slate-700">{expense.remarks}</span>{expense.subtype === "TA/DA" ? <small className="text-slate-500">TA {formatCurrency(expense.taAmount ?? 0)} · DA {formatCurrency(expense.daAmount ?? 0)} · {expense.employee}</small> : null}</td><td className="px-4 py-3 text-slate-600">{accounts.find((account) => account.id === expense.paidFromAccountId)?.name ?? expense.paidFromAccountId}</td><td className="px-4 py-3 text-xs text-slate-500">{expense.attachmentName ?? "-"}</td><td className="px-4 py-3 text-right font-bold">{formatCurrency(expense.amount)}</td><td className="px-4 py-3"><StatusBadge status={expense.status} /></td><td className="px-4 py-3 text-right">{canPost && expense.status === "Posted" ? <Button variant="ghost" icon={<RotateCcw className="h-4 w-4 text-amber-700" />} onClick={() => setReverseExpense(expense)}>Reverse</Button> : null}</td></tr>)}</tbody></table>
           </TableFrame>

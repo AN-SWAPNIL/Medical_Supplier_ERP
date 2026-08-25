@@ -16,7 +16,8 @@ import Button from "../ui/Button";
 import Avatar from "../ui/Avatar";
 import Toasts from "../ui/Toasts";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
-import { hasPermission, navSections } from "../../lib/permissions/matrix";
+import { navSections } from "../../lib/permissions/matrix";
+import { canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { useAIContextStore } from "../../lib/ai/context";
 
 export default function AppLayout() {
@@ -46,8 +47,8 @@ export default function AppLayout() {
   }, []);
 
   const visibleItems = useMemo(
-    () => navSections.flatMap((section) => section.items).filter((item) => item.roles.includes(role) && hasPermission(role, item.permission)),
-    [role]
+    () => navSections.flatMap((section) => section.items).filter((item) => item.permission === "settings" ? canAccessSettings(session?.user) : hasEffectivePermission(session?.user, item.permission)),
+    [session?.user]
   );
 
   const signOut = () => {

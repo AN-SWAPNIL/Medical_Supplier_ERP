@@ -94,6 +94,31 @@ async function run() {
   const monthStart = today.slice(0, 7) + "-01";
   const suffix = String(Date.now()).slice(-7);
 
+  console.log("0. Effective access, delegated employee management and escalation protection");
+  const delegatedUsers = await api("/api/settings/users", { as: identities.salesManager });
+  assert.ok(delegatedUsers.length > 1);
+  assert.equal(delegatedUsers[0].capabilities, undefined);
+  assert.equal(delegatedUsers[0].permissionOverrides, undefined);
+  await api("/api/settings/decisions", { as: identities.salesManager, expected: 403 });
+  await api("/api/reports/export-authorization", { as: identities.salesManager, expected: 403 });
+  await api("/api/expense-categories", { method: "POST", as: identities.accounts, expected: 403, body: { name: "Unauthorized Category " + suffix } });
+  await api("/api/reports?from=" + monthStart + "&to=" + today, { as: identities.import });
+  await api("/api/reports/export-authorization", { as: identities.import });
+  await api("/api/audit", { as: identities.import, expected: 403 });
+
+  const delegatedEmployee = await api("/api/settings/users", {
+    method: "POST",
+    expected: 201,
+    as: identities.salesManager,
+    body: { name: "Delegated Employee " + suffix, email: "delegated-" + suffix + "@mipro.local", role: "Sales Executive", title: "Sales Executive", department: "Sales", territory: "Dhaka", employeeCode: "SE-" + suffix, status: "Active" }
+  });
+  assert.equal(delegatedEmployee.role, "Sales Executive");
+  assert.equal((await api("/api/settings/users/" + delegatedEmployee.id, { method: "PATCH", as: identities.salesManager, body: { territory: "Dhaka North", status: "Pending" } })).status, "Pending");
+  await api("/api/settings/users", { method: "POST", as: identities.salesManager, expected: 403, body: { name: "Escalation Attempt", email: "escalate-" + suffix + "@mipro.local", role: "Accounts", title: "Accounts", department: "Accounts" } });
+  await api("/api/settings/users/" + delegatedEmployee.id, { method: "PATCH", as: identities.salesManager, expected: 403, body: { role: "Accounts" } });
+  await api("/api/settings/users/u-super", { method: "PATCH", as: identities.salesManager, expected: 403, body: { status: "Inactive" } });
+  await api("/api/settings/users/u-super", { method: "PATCH", as: identities.super, expected: 409, body: { status: "Inactive" } });
+
   console.log("1. PO-first import, authoritative status and server-derived item bases");
   const importRecord = await api("/api/imports", {
     method: "POST",
@@ -606,7 +631,7 @@ async function run() {
     body: { name: "<b>Bad</b>", phone: "123", message: "<script>alert(1)</script>" }
   });
 
-  console.log("All update4 digital-platform scenarios passed.");
+  console.log("All update5 digital-platform and effective-access scenarios passed.");
 }
 
 try {

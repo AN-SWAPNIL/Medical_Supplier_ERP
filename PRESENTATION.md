@@ -2,9 +2,9 @@
 
 ## Client Presentation Guide
 
-**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 25 August 2026 update4 platform separation
+**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 25 August 2026 flexible-access update5
 
-**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update4.md` and `files/MIPRO_ERP_Landingpage_Analysis.md`, with update3 retained as the validated internal ERP foundation
+**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update5.md` and `files/MIPRO_ERP_AccessRole_Analysis.md` for access control; update4 and the landing-page analysis for the public/private platform; update3 for the validated internal ERP workflow
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -60,6 +60,8 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Authorized manufacturer certificate scans migrated from the previous MiproBD site, with holder, product scope, visible dates, current/historical status, preview and download; none are presented as MIPRO corporate certificates.
 - Employee Portal login that is production-safe by default; demo users require `VITE_DEMO_MODE=true`.
 - Public signup removed; employee provisioning remains in Settings -> Users & Capabilities.
+- Seven stable role templates plus per-user Allow/Deny exceptions, without inventing a new role for every staff variation.
+- Delegated employee administration is separate from role, permission and sensitive-capability administration.
 - SEO metadata, sitemap, robots rules and old MiproBD product redirects.
 - Exactly seven possible main destinations.
 - Draft imports begin with supplier, PO and product lines; PI and LC/TT are added later to the same case.
@@ -109,19 +111,33 @@ Workflow stages appear inside these areas as sections or segmented views. They a
 
 ## 4. Role Access
 
-A user chooses the appropriate demo identity only while signing in. The role cannot be changed inside the application. In production, the Super Admin creates users and assigns roles/capabilities in Settings.
+The login page selects a seeded user identity for the demonstration. It does not temporarily impersonate a role, and there is no role switch after login. In production, authorized administrators create employee accounts in Settings.
 
-| Role | Main navigation visible | Contextual access |
+The seven roles remain understandable default templates:
+
+| Role | Default main navigation | Contextual access |
 |---|---|---|
-| Super Admin / Owner | All seven areas | All owner-authorized actions |
+| Super Admin / Owner | All seven areas | Full owner-authorized actions and access administration |
 | Managing Director | Dashboard, Imports, Inventory, Sales, Expenses & Accounts, Reports | Review and operational visibility |
-| Import Officer | Dashboard, Imports | Commercial/import maintenance; sensitive costing only if explicitly granted |
-| Warehouse Manager | Dashboard, Inventory | Finalized import receiving reference and delivery work |
+| Import Officer | Dashboard, Imports, Settings | Commercial/import work plus permitted Product and Supplier setup |
+| Warehouse Manager | Dashboard, Imports, Inventory | Finalized import receiving reference and warehouse work |
 | Accounts | Dashboard, Sales, Expenses & Accounts, Reports | Customer dues, collections, expenses, cash/bank |
-| Sales Manager | Dashboard, Inventory, Sales, Reports | Available stock and commercial records |
-| Sales Executive | Dashboard, Sales, Reports | Own customers, quotations/orders, collections, and own performance report only |
+| Sales Manager | Dashboard, Inventory, Sales, Reports | Team commercial records and available stock |
+| Sales Executive | Dashboard, Sales, Reports | Own customers, sales records, activity and performance only |
 
-Directly typing an unauthorized URL still shows **Access denied**. The server also checks the role and capability; hiding a menu item is not the only control.
+The final access calculation is:
+
+```text
+Role default
+  -> explicit per-user DENY or ALLOW
+  -> sensitive capability check
+  -> record/data scope
+  -> sidebar, route, action, API, document, report and AI result
+```
+
+An explicit Deny wins. The current demo makes the behavior visible: Tanvir remains an Import Officer but receives Reports View/Export; Farhana remains a Sales Manager but receives delegated employee management and has Reports Export denied. Settings then shows Farhana only the Users tab, while Tanvir sees only his permitted setup tabs. No new hybrid role is required.
+
+Directly typing an unauthorized URL still shows **Access denied**, and a direct API attempt returns `403`. Menu hiding is only the first visible layer.
 
 ### Sensitive capabilities
 
@@ -132,8 +148,10 @@ Directly typing an unauthorized URL still shows **Access denied**. The server al
 - `view_profit`
 - `approve_stock_override`
 - `approve_special_price`
+- `manage_users`
+- `manage_user_access`
 
-The Super Admin is the temporary sole landed-cost finalizer/reopener until the client confirms another authority.
+`manage_users` permits employee lifecycle work only when the matching `users:view/create/edit` action is also allowed. `manage_user_access` controls role, password, permission and capability changes and is Super Admin-only in the current seed. The Super Admin is also the temporary sole landed-cost finalizer/reopener until the client confirms another authority.
 
 ---
 
@@ -183,7 +201,8 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | Expense category | Super Admin | Super Admin | Protect referenced categories | Super Admin | Dynamic daily expense classification |
 | Opening stock batch | Super Admin | Posted migration transaction | No silent delete | Super Admin posts | Legacy lot joins FIFO/expiry stock |
 | Customer opening balance | Super Admin | Posted migration transaction | One opening per customer | Super Admin posts | First running-ledger due at cutover |
-| User/capabilities | Super Admin | Super Admin | Deactivate rather than erase history | Super Admin | Route, action, and sensitive-field access |
+| Employee/user profile | Super Admin or delegated lower-role employee manager | Only lower-ranked employees; never self, peers, higher roles or Super Admin | Deactivate rather than erase history; final active Super Admin is protected | `manage_users` plus matching `users:*` action | Employment/status update with audit history |
+| Role/permission/capability/password | Super Admin or explicit access manager | Protected by hierarchy and grant-authority checks | No hard-delete; every access change is audited | `manage_user_access`; only Super Admin can delegate that authority | Effective route, action, document and sensitive-field access |
 | AI extraction | Import user requests it | User selects fields to apply through normal forms | Extraction itself changes nothing | Human review is mandatory | Suggested values pass through existing validation and audit |
 | AI recommendation/chat | System reads role-scoped records | User may dismiss locally or open its source | No operational record is deleted | AI cannot approve/post/finalize | Explanation and next-step guidance only |
 | Current field location | Future salesperson web/mobile client | The same salesperson supplies newer points | Coordinates stay as history; no ordinary delete | Tracking session and API scope validate the write | Role-scoped live/last marker with timestamp and accuracy |
@@ -517,23 +536,27 @@ Access is enforced by the API: Super Admin and Managing Director see the full op
 
 ---
 
-## 14. Settings And Client Confirmation Queue
+## 14. Settings, Delegation And Client Confirmation Queue
 
-Settings is for Super Admin only.
+Settings is one permission-filtered workspace, not one all-or-nothing owner page. It appears when the signed-in user can view at least one permitted subview, and it fetches data only for the active permitted tab.
 
-It contains:
+| Settings subview | Required access |
+|---|---|
+| Client Confirmation Queue | `settings:view` |
+| Users & Capabilities | `users:view` plus `manage_users` |
+| Products & Aliases | `products:view` |
+| Suppliers | `suppliers:view` |
+| Business Setup | `settings:view` |
+| Data Migration | `settings:view` |
 
-- Users and capabilities
-- Read-only Role Access Summary inside user create/edit
-- Products with medical product imagery and legacy aliases
-- Suppliers
-- Cash and bank accounts
-- Main warehouse
-- Expense categories
-- Import cost presets
-- Print identity/configuration
-- Data Migration for opening stock batches and customer balances
-- Client Confirmation Queue
+Super Admin sees all setup data: users, products/images/aliases, suppliers, cash/bank accounts, main warehouse, expense categories, import cost presets, print configuration, opening-data migration and client decisions.
+
+The same user modal deliberately separates two jobs:
+
+- **Employee manager:** profile, employment, territory and account status for lower-ranked staff only.
+- **Access manager:** assigned role, read-only Role Access Summary, per-action Default/Allow/Deny exceptions, sensitive capabilities and password changes.
+
+A delegated manager cannot edit self, peers, higher-ranked users or any Super Admin; cannot assign a role or capability they do not have authority to grant; and cannot disable the final active Super Admin. Access changes record actor, target, before/after values and time without recording plaintext passwords.
 
 The queue makes unresolved requirements visible:
 
@@ -662,6 +685,7 @@ You are not showing code for its own sake. You are proving:
 | `GET /api/account-transactions` | Simple transaction ledger |
 | `GET /api/reports?from=...&to=...` | Date-filtered role-safe totals and detailed report tables |
 | `GET /api/reports/salespeople?from=...&to=...&employeeId=...` | All-person comparison or one authorized employee report |
+| `GET /api/reports/export-authorization` | Enforce `reports:export` before generating the current filtered CSV |
 | `POST /api/ai/chat` | Return a current-context, role-safe answer and source links |
 | `GET /api/ai/insights` | Return compact page/report summaries |
 | `GET /api/ai/recommendations` | Return role-safe import, inventory, sales, collection, finance, or field-team actions; powers Smart Insights |
@@ -671,6 +695,7 @@ You are not showing code for its own sake. You are proving:
 | `/api/settings/opening-stock` | Post a historical stock batch and receive movement |
 | `/api/settings/customer-opening-balances` | Post a reconciled legacy customer due |
 | `/api/settings/product-aliases` | Map legacy names to canonical products |
+| `GET/POST/PATCH /api/settings/users/*` | List, create or update users with effective-permission, hierarchy and escalation checks |
 | `/api/settings/*` | Users, decisions, accounts, warehouse, presets, and print calibration |
 | `GET /api/audit` | Narrow high-risk audit trail |
 
@@ -788,8 +813,10 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 13. Collections: explain due and account update.
 14. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
 15. MIPRO AI: ask about the current import and Field Team, then show role-safe source links.
-16. Settings: show users/capabilities, Role Access Summary, aliases, opening data, print identities, and decisions.
-17. Sign in as Sales Executive: prove own Sales/Reports/My Activity, direct employee denial, and AI cost/location refusal.
+16. Settings: edit a user, show Role Access Summary, Additional Access Default/Allow/Deny, sensitive capabilities, aliases, opening data, print identities, and decisions.
+17. Sign in as Import Officer: show Reports added by a personal Allow while confidential cost remains protected.
+18. Sign in as Sales Manager: show Settings with only Users, create/edit a lower-role employee, and show the missing Report Export action.
+19. Sign in as Sales Executive: prove own Sales/Reports/My Activity, direct employee denial, and AI cost/location refusal.
 
 ---
 
@@ -798,7 +825,8 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 ### Complete in this release
 
 - Simplified route and navigation architecture
-- Role and capability-aware frontend/server behavior
+- Canonical role-default, per-user Allow/Deny, sensitive-capability and data-scope enforcement across frontend and server
+- Delegated employee administration with hierarchy, final-owner and privilege-escalation protection
 - Connected import, costing, receipt, stock, sales, collection, expense, report, and settings flows
 - PO-first drafts, server-derived milestones, terminal case controls, and authoritative Decimal item bases
 - Deterministic Decimal.js allocation engine
