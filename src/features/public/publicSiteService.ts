@@ -1,46 +1,100 @@
-import type { ApiResponse } from "../../types";
 import { z } from "zod";
-import { publicCertificates, publicProductCategories, publicProducts, publicResources } from "./public.content";
-import type { PublicInquiryInput, PublicInquiryReceipt, PublicProductCategory } from "./public.types";
+import type { ApiResponse, Session } from "../../types";
+import {
+  PublicCertificateSchema,
+  PublicContentAdminSnapshotSchema,
+  PublicHeroSlideSchema,
+  PublicInquiryRecordSchema,
+  PublicProductCategoryRecordSchema,
+  PublicProductSchema,
+  PublicResourceSchema,
+  PublicSiteSettingsSchema
+} from "./public.schemas";
+import type {
+  PublicCertificate,
+  PublicHeroSlide,
+  PublicInquiryInput,
+  PublicInquiryReceipt,
+  PublicInquiryStatus,
+  PublicProduct,
+  PublicProductCategory,
+  PublicProductCategoryRecord,
+  PublicResource,
+  PublicSiteSettings
+} from "./public.types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const publicInquiryReceiptSchema = z.object({ inquiryId: z.string().startsWith("INQ-"), receivedAt: z.string().datetime(), status: z.literal("Received") });
+const SESSION_KEY = "mipro-erp-session";
+const IdResponseSchema = z.object({ id: z.string() });
+const PublicInquiryReceiptSchema = z.object({ inquiryId: z.string().startsWith("INQ-"), receivedAt: z.string().datetime(), status: z.literal("Received") });
 
-async function post<T>(path: string, payload: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
-  if (!response.ok || !body?.success) throw new Error(body?.message || "Unable to submit the inquiry.");
-  return body.data;
+function requestHeaders(authenticated = false) {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (!authenticated) return headers;
+  const raw = window.localStorage.getItem(SESSION_KEY);
+  if (!raw) return headers;
+  try {
+    const session = JSON.parse(raw) as Session;
+    headers.set("Authorization", `Bearer ${session.token}`);
+    headers.set("x-user-id", session.user.id);
+    headers.set("x-role", session.user.role);
+  } catch {
+    window.localStorage.removeItem(SESSION_KEY);
+  }
+  return headers;
 }
 
+async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit, authenticated = false): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: requestHeaders(authenticated) });
+  const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null;
+  if (!response.ok || !body?.success) throw new Error(body?.message || `Request failed (${response.status})`);
+  const parsed = schema.safeParse(body.data);
+  if (!parsed.success) throw new Error(`API contract validation failed for ${path}: ${parsed.error.issues[0]?.message}`);
+  return parsed.data;
+}
+
+const get = <T>(path: string, schema: z.ZodType<T>, authenticated = false) => request(path, schema, undefined, authenticated);
+const post = <T>(path: string, payload: unknown, schema: z.ZodType<T>, authenticated = false) => request(path, schema, { method: "POST", body: JSON.stringify(payload) }, authenticated);
+const patch = <T>(path: string, payload: unknown, schema: z.ZodType<T>, authenticated = false) => request(path, schema, { method: "PATCH", body: JSON.stringify(payload) }, authenticated);
+const remove = (path: string) => request(path, IdResponseSchema, { method: "DELETE" }, true);
+
 export const publicSiteService = {
-  async categories() {
-    return publicProductCategories;
+  settings: () => get<PublicSiteSettings>("/api/public/site", PublicSiteSettingsSchema),
+  heroSlides: () => get<PublicHeroSlide[]>("/api/public/hero-slides", z.array(PublicHeroSlideSchema)),
+  categories: () => get<PublicProductCategoryRecord[]>("/api/public/categories", z.array(PublicProductCategoryRecordSchema)),
+  products(filters?: { category?: PublicProductCategory; search?: string; featured?: boolean }) {
+    const params = new URLSearchParams();
+    if (filters?.category) params.set("category", filters.category);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.featured !== undefined) params.set("featured", String(filters.featured));
+    const query = params.toString();
+    return get<PublicProduct[]>(`/api/public/products${query ? `?${query}` : ""}`, z.array(PublicProductSchema));
   },
-  async products(filters?: { category?: PublicProductCategory; search?: string; featured?: boolean }) {
-    const query = filters?.search?.trim().toLowerCase();
-    return publicProducts.filter((product) => {
-      if (!product.published) return false;
-      if (filters?.category && product.category !== filters.category) return false;
-      if (filters?.featured !== undefined && product.featured !== filters.featured) return false;
-      if (query && !`${product.name} ${product.category} ${product.shortDescription}`.toLowerCase().includes(query)) return false;
-      return true;
-    });
-  },
-  async product(slug: string) {
-    return publicProducts.find((product) => product.published && product.slug === slug) ?? null;
-  },
-  async certificates() {
-    return publicCertificates;
-  },
-  async resources() {
-    return publicResources;
-  },
-  async submitInquiry(payload: PublicInquiryInput) {
-    return publicInquiryReceiptSchema.parse(await post<PublicInquiryReceipt>("/api/public/contact", payload));
-  }
+  product: (slug: string) => get<PublicProduct | null>(`/api/public/products/${encodeURIComponent(slug)}`, PublicProductSchema.nullable()),
+  legacyProduct: (legacySlug: string) => get<PublicProduct | null>(`/api/public/legacy-products/${encodeURIComponent(legacySlug)}`, PublicProductSchema.nullable()),
+  certificates: () => get<PublicCertificate[]>("/api/public/certificates", z.array(PublicCertificateSchema)),
+  resources: () => get<PublicResource[]>("/api/public/resources", z.array(PublicResourceSchema)),
+  submitInquiry: (payload: PublicInquiryInput) => post<PublicInquiryReceipt>("/api/public/contact", payload, PublicInquiryReceiptSchema)
+};
+
+export const websiteContentService = {
+  snapshot: () => get("/api/settings/website", PublicContentAdminSnapshotSchema, true),
+  updateSettings: (payload: PublicSiteSettings) => patch("/api/settings/website/site", payload, PublicSiteSettingsSchema, true),
+  createHero: (payload: PublicHeroSlide) => post("/api/settings/website/hero-slides", payload, PublicHeroSlideSchema, true),
+  updateHero: (id: string, payload: PublicHeroSlide) => patch(`/api/settings/website/hero-slides/${encodeURIComponent(id)}`, payload, PublicHeroSlideSchema, true),
+  removeHero: (id: string) => remove(`/api/settings/website/hero-slides/${encodeURIComponent(id)}`),
+  createCategory: (payload: PublicProductCategoryRecord) => post("/api/settings/website/categories", payload, PublicProductCategoryRecordSchema, true),
+  updateCategory: (id: string, payload: PublicProductCategoryRecord) => patch(`/api/settings/website/categories/${encodeURIComponent(id)}`, payload, PublicProductCategoryRecordSchema, true),
+  removeCategory: (id: string) => remove(`/api/settings/website/categories/${encodeURIComponent(id)}`),
+  createProduct: (payload: PublicProduct) => post("/api/settings/website/products", payload, PublicProductSchema, true),
+  updateProduct: (slug: string, payload: PublicProduct) => patch(`/api/settings/website/products/${encodeURIComponent(slug)}`, payload, PublicProductSchema, true),
+  removeProduct: (slug: string) => remove(`/api/settings/website/products/${encodeURIComponent(slug)}`),
+  createCertificate: (payload: PublicCertificate) => post("/api/settings/website/certificates", payload, PublicCertificateSchema, true),
+  updateCertificate: (id: string, payload: PublicCertificate) => patch(`/api/settings/website/certificates/${encodeURIComponent(id)}`, payload, PublicCertificateSchema, true),
+  removeCertificate: (id: string) => remove(`/api/settings/website/certificates/${encodeURIComponent(id)}`),
+  createResource: (payload: PublicResource) => post("/api/settings/website/resources", payload, PublicResourceSchema, true),
+  updateResource: (slug: string, payload: PublicResource) => patch(`/api/settings/website/resources/${encodeURIComponent(slug)}`, payload, PublicResourceSchema, true),
+  removeResource: (slug: string) => remove(`/api/settings/website/resources/${encodeURIComponent(slug)}`),
+  updateInquiry: (id: string, payload: { status: PublicInquiryStatus; internalNotes?: string }) => patch(`/api/settings/website/inquiries/${encodeURIComponent(id)}`, payload, PublicInquiryRecordSchema, true),
+  removeInquiry: (id: string) => remove(`/api/settings/website/inquiries/${encodeURIComponent(id)}`)
 };

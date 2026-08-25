@@ -1,8 +1,33 @@
-export type PublicProductCategory =
-  | "Hemodialysis"
-  | "Puncture & Access"
-  | "Catheter & Airway"
-  | "Protective Products";
+export type PublicProductCategory = string;
+
+export type PublicSiteSettings = {
+  company: string;
+  tagline: string;
+  description: string;
+  addressLines: string[];
+  phone: string;
+  phoneHref: string;
+  email: string;
+  website: string;
+  officeHours: string;
+  mapCenter: [number, number];
+  whatsappHref: string;
+};
+
+export type PublicHeroSlide = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  image: string;
+  imageAlt: string;
+  primaryLabel: string;
+  primaryHref: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+  published: boolean;
+  sortOrder: number;
+};
 
 export type PublicProductSpecification = {
   label: string;
@@ -27,12 +52,16 @@ export type PublicProduct = {
   certificateIds: string[];
   featured: boolean;
   published: boolean;
+  sortOrder?: number;
 };
 
 export type PublicProductCategoryRecord = {
+  id: string;
   name: PublicProductCategory;
   description: string;
   image: string;
+  published: boolean;
+  sortOrder: number;
 };
 
 export type PublicCertificate = {
@@ -51,11 +80,13 @@ export type PublicCertificate = {
   statusNote: string;
   file: {
     url: string;
-    mediaType: "image/jpeg";
+    mediaType: "image/jpeg" | "image/png" | "image/webp";
     alt: string;
     downloadName: string;
     sourceUrl: string;
   };
+  published?: boolean;
+  sortOrder?: number;
 };
 
 export type PublicResource = {
@@ -65,6 +96,8 @@ export type PublicResource = {
   summary: string;
   body: string[];
   image: string;
+  published?: boolean;
+  sortOrder?: number;
 };
 
 export type PublicInquiryInput = {
@@ -81,4 +114,23 @@ export type PublicInquiryReceipt = {
   inquiryId: string;
   receivedAt: string;
   status: "Received";
+};
+
+export type PublicInquiryStatus = "Received" | "Contacted" | "Qualified" | "Closed" | "Spam";
+
+export type PublicInquiryRecord = PublicInquiryInput & {
+  inquiryId: string;
+  receivedAt: string;
+  status: PublicInquiryStatus;
+  internalNotes?: string;
+};
+
+export type PublicContentAdminSnapshot = {
+  settings: PublicSiteSettings;
+  heroSlides: PublicHeroSlide[];
+  categories: PublicProductCategoryRecord[];
+  products: PublicProduct[];
+  certificates: PublicCertificate[];
+  resources: PublicResource[];
+  inquiries: PublicInquiryRecord[];
 };

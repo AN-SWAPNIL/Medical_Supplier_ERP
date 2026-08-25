@@ -1,41 +1,103 @@
 import type {
   PublicCertificate,
+  PublicHeroSlide,
   PublicProduct,
   PublicProductCategoryRecord,
-  PublicResource
-} from "./public.types";
+  PublicResource,
+  PublicSiteSettings
+} from "./public.types.js";
 
-export const publicContact = {
+export const publicSiteSettings: PublicSiteSettings = {
   company: "MIPRO Healthcare Corporation",
   tagline: "Precision in Healthcare",
+  description: "Medical devices and consumables supplied through structured procurement, import, warehousing and institutional distribution in Bangladesh.",
   addressLines: ["Flat B2, House 26, Road 06, Sector 09", "Uttara, Dhaka 1230, Bangladesh"],
   phone: "+880 1805 050780",
   phoneHref: "+8801805050780",
   email: "ledtrackers@gmail.com",
   website: "www.miprobd.com",
-  mapCenter: [23.8748, 90.4007] as [number, number]
+  officeHours: "Saturday to Thursday, 9:00 AM to 6:00 PM",
+  mapCenter: [23.8748, 90.4007],
+  whatsappHref: "8801805050780"
 };
+
+export const publicHeroSlides: PublicHeroSlide[] = [
+  {
+    id: "hero-healthcare-supply",
+    eyebrow: "Precision in Healthcare",
+    title: "Dependable medical supply for institutional care",
+    body: "MIPRO connects verified product requirements, overseas procurement and organized distribution for healthcare providers in Bangladesh.",
+    image: "/medical-products.png",
+    imageAlt: "MIPRO medical consumables and hemodialysis product collection",
+    primaryLabel: "Explore products",
+    primaryHref: "/products",
+    secondaryLabel: "Contact our team",
+    secondaryHref: "/contact",
+    published: true,
+    sortOrder: 1
+  },
+  {
+    id: "hero-hemodialysis",
+    eyebrow: "Hemodialysis Supply",
+    title: "Product clarity before every institutional quotation",
+    body: "Review dialyzers, blood tubing and vascular-access products with model-specific documentation and a direct sales inquiry path.",
+    image: "/products/dialyzer.jpg",
+    imageAlt: "Hollow fiber hemodialyzers supplied through MIPRO",
+    primaryLabel: "View hemodialysis",
+    primaryHref: "/products?category=Hemodialysis",
+    secondaryLabel: "Request information",
+    secondaryHref: "/contact",
+    published: true,
+    sortOrder: 2
+  },
+  {
+    id: "hero-distribution",
+    eyebrow: "Procurement to Distribution",
+    title: "One connected supply path from source to customer",
+    body: "Commercial review, import coordination, batch-aware warehouse handling and institutional delivery stay aligned around the requested product.",
+    image: "/mipro-warehouse.png",
+    imageAlt: "Medical supply cartons in the MIPRO warehouse",
+    primaryLabel: "How MIPRO works",
+    primaryHref: "/about",
+    secondaryLabel: "Business inquiry",
+    secondaryHref: "/contact",
+    published: true,
+    sortOrder: 3
+  }
+];
 
 export const publicProductCategories: PublicProductCategoryRecord[] = [
   {
+    id: "cat-hemodialysis",
     name: "Hemodialysis",
     description: "Dialyzers, blood tubing sets and vascular-access consumables for dialysis care.",
-    image: "/products/dialyzer.jpg"
+    image: "/products/dialyzer.jpg",
+    published: true,
+    sortOrder: 1
   },
   {
+    id: "cat-puncture-access",
     name: "Puncture & Access",
     description: "Single-use access products including fistula, IV and flashback needle formats.",
-    image: "/products/av-fistula-needle.jpg"
+    image: "/products/av-fistula-needle.jpg",
+    published: true,
+    sortOrder: 2
   },
   {
+    id: "cat-catheter-airway",
     name: "Catheter & Airway",
     description: "Catheter and airway products supplied for professional healthcare settings.",
-    image: "/products/tracheostomy-tube.png"
+    image: "/products/tracheostomy-tube.png",
+    published: true,
+    sortOrder: 3
   },
   {
+    id: "cat-protective-products",
     name: "Protective Products",
     description: "Single-use protective clothing and respiratory protection products.",
-    image: "/products/protective-clothing.jpg"
+    image: "/products/protective-clothing.jpg",
+    published: true,
+    sortOrder: 4
   }
 ];
 

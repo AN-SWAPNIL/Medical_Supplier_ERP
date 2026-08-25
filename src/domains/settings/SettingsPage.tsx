@@ -66,8 +66,9 @@ import type {
   WarehouseConfig
 } from "../erp.types";
 import { accountsService, inventoryService, salesService, settingsService } from "../services";
+import WebsiteContentWorkspace from "./WebsiteContentWorkspace";
 
-type View = "decisions" | "users" | "products" | "suppliers" | "business" | "migration";
+type View = "decisions" | "users" | "products" | "suppliers" | "business" | "migration" | "website";
 type ModalType = "decision" | "user" | "product" | "alias" | "supplier" | "account" | "warehouse" | "preset" | "print" | "category" | "opening" | "customer-opening" | null;
 type Task = { run: () => Promise<unknown>; success: string };
 type DeleteTarget = { type: "product" | "supplier" | "account" | "preset" | "alias"; id: string; label: string };
@@ -108,10 +109,13 @@ export default function SettingsPage() {
     products: hasEffectivePermission(actor, "products", "view"),
     suppliers: hasEffectivePermission(actor, "suppliers", "view"),
     business: hasEffectivePermission(actor, "settings", "view"),
-    migration: hasEffectivePermission(actor, "settings", "view")
+    migration: hasEffectivePermission(actor, "settings", "view"),
+    website: actor?.role === "Super Admin"
   }), [actor]);
   const allowedViews = useMemo(() => (Object.keys(viewAccess) as View[]).filter((key) => viewAccess[key]), [viewAccess]);
-  const settingsSubtitle = viewAccess.decisions
+  const settingsSubtitle = view === "website"
+    ? "Publish the corporate homepage, public product catalogue, documents, resources and business inquiry queue without exposing ERP stock or cost data."
+    : viewAccess.decisions
     ? "Users, master records, company setup, migration tools and client decisions live here without creating more top-level modules."
     : allowedViews.length === 1 && viewAccess.users
       ? "Maintain permitted employee profiles, employment details and account status without exposing access administration."
@@ -138,7 +142,7 @@ export default function SettingsPage() {
   const batchesQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches, enabled: view === "migration" && viewAccess.migration });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: salesService.customers, enabled: view === "migration" && viewAccess.migration });
   const customerOpeningsQuery = useQuery({ queryKey: ["settings", "customer-opening-balances"], queryFn: settingsService.customerOpeningBalances, enabled: view === "migration" && viewAccess.migration });
-  const queries = view === "decisions" ? [decisionsQuery] : view === "users" ? [usersQuery] : view === "products" ? [productsQuery, aliasesQuery] : view === "suppliers" ? [suppliersQuery] : view === "business" ? [accountsQuery, warehouseQuery, presetsQuery, printQuery, categoriesQuery] : [productsQuery, warehouseQuery, batchesQuery, customersQuery, customerOpeningsQuery];
+  const queries = view === "decisions" ? [decisionsQuery] : view === "users" ? [usersQuery] : view === "products" ? [productsQuery, aliasesQuery] : view === "suppliers" ? [suppliersQuery] : view === "business" ? [accountsQuery, warehouseQuery, presetsQuery, printQuery, categoriesQuery] : view === "migration" ? [productsQuery, warehouseQuery, batchesQuery, customersQuery, customerOpeningsQuery] : [];
 
   const closeEditor = () => {
     setModal(null);
@@ -216,7 +220,8 @@ export default function SettingsPage() {
           { value: "products", label: "Products & Aliases", count: products.length },
           { value: "suppliers", label: "Suppliers", count: suppliers.length },
           { value: "business", label: "Business Setup" },
-          { value: "migration", label: "Data Migration", count: openingBatches.length + customerOpenings.length }
+          { value: "migration", label: "Data Migration", count: openingBatches.length + customerOpenings.length },
+          { value: "website", label: "Website Content" }
         ] as Array<{ value: View; label: string; count?: number }>).filter((option) => viewAccess[option.value])}
       />
 
@@ -226,6 +231,7 @@ export default function SettingsPage() {
       {view === "suppliers" ? <SuppliersTable suppliers={suppliers} canEdit={hasEffectivePermission(actor, "suppliers", "edit")} canDelete={hasEffectivePermission(actor, "suppliers", "delete")} onEdit={(supplier) => { setEditingSupplier(supplier); setModal("supplier"); }} onDelete={setDeleteTarget} /> : null}
       {view === "business" ? <BusinessSetup accounts={accounts} warehouse={warehouse} categories={categories} presets={presets} printConfiguration={printConfiguration} canCreate={hasEffectivePermission(actor, "settings", "create")} canEdit={hasEffectivePermission(actor, "settings", "edit")} canDelete={hasEffectivePermission(actor, "settings", "delete")} onModal={setModal} onEditAccount={(account) => { setEditingAccount(account); setModal("account"); }} onEditPreset={(preset) => { setEditingPreset(preset); setModal("preset"); }} onDelete={setDeleteTarget} /> : null}
       {view === "migration" ? <MigrationWorkspace batches={openingBatches} customerOpenings={customerOpenings} canCreate={hasEffectivePermission(actor, "settings", "create")} onOpeningStock={() => setModal("opening")} onCustomerBalance={() => setModal("customer-opening")} /> : null}
+      {view === "website" ? <WebsiteContentWorkspace /> : null}
 
       {modal === "decision" && editingDecision ? <Modal open title="Record client decision" subtitle="A confirmed item must store the answer, source and notes, not only a status flag." onClose={closeEditor}><DecisionForm decision={editingDecision} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => settingsService.updateDecision(editingDecision.id, payload), success: "Client decision recorded" })} /></Modal> : null}
       {modal === "user" && actor ? <Modal open title={editingUser ? (canManageAccess ? "Edit user access" : "Edit employee") : "Create ERP user"} subtitle={canManageAccess ? "Role defaults and explicit exceptions resolve into one effective access profile." : "You can maintain lower-privilege employee profile, employment and status details."} onClose={closeEditor} width="max-w-5xl"><div className="grid gap-4" onChangeCapture={(event) => { const target = event.target; if (target instanceof HTMLSelectElement && roles.includes(target.value as Role)) setAccessPreviewRole(target.value as Role); }}>{canManageAccess ? <RoleAccessSummary role={accessPreviewRole} /> : null}<UserForm actor={actor} canManageAccess={canManageAccess} user={editingUser} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingUser ? settingsService.updateUser(editingUser.id, payload) : settingsService.createUser(payload), success: editingUser ? "User access updated" : "User created" })} /></div></Modal> : null}

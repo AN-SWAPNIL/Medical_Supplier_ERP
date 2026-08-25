@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:5173";
+const apiBaseUrl = process.env.SMOKE_API_BASE_URL ?? baseUrl;
 const browserChannel = process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? "msedge";
 const sessionKey = "mipro-erp-session";
 await mkdir("artifacts", { recursive: true });
@@ -102,9 +103,9 @@ await profilePassword.getByLabel("Confirm Password").fill("temporary123");
 await profilePassword.getByRole("button", { name: "Update Password" }).click({ force: true });
 await profilePassword.getByText("Password updated", { exact: true }).waitFor({ timeout: 30000 });
 await profilePassword.close();
-const changedLogin = await fetch(baseUrl + "/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: people.super.email, password: "temporary123" }) });
+const changedLogin = await fetch(apiBaseUrl + "/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: people.super.email, password: "temporary123" }) });
 if (!changedLogin.ok) issues.push("Profile password change did not update login.");
-await fetch(baseUrl + "/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: people.super.email, password: "password123" }) });
+await fetch(apiBaseUrl + "/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: people.super.email, password: "password123" }) });
 
 const costing = await preparePage({ name: "costing-result-desktop", width: 1440, height: 1200, user: people.super });
 await costing.goto(baseUrl + "/app/imports/imp-77612", { waitUntil: "networkidle", timeout: 60000 });
@@ -309,6 +310,35 @@ if ((await ownerAccessEditor.getByText("Sensitive Capabilities", { exact: true }
 await ownerAccessEditor.screenshot({ path: "artifacts/settings-owner-access-editor.png", fullPage: true });
 await ownerAccessEditor.close();
 
+const liveRoleTarget = await preparePage({ name: "live-role-target", width: 1280, height: 900, user: people.md });
+const liveRoleAdmin = await preparePage({ name: "live-role-admin", width: 1440, height: 1000, user: people.super });
+try {
+  await liveRoleTarget.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
+  if ((await liveRoleTarget.getByText("Could not load this workspace", { exact: true }).count()) !== 0) issues.push("Managing Director Sales failed before the live role test.");
+
+  await liveRoleAdmin.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
+  await liveRoleAdmin.getByRole("button", { name: "Edit Mahmud Rahman" }).click();
+  const roleDialog = liveRoleAdmin.getByRole("dialog");
+  await roleDialog.getByLabel("Assigned Role").selectOption("Warehouse Manager");
+  await roleDialog.getByRole("button", { name: "Save User Access" }).click();
+  await liveRoleAdmin.getByText("User access updated", { exact: true }).waitFor({ timeout: 15000 });
+
+  await liveRoleTarget.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await liveRoleTarget.getByText("Access denied", { exact: true }).waitFor({ timeout: 15000 });
+  const refreshedRole = await liveRoleTarget.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.user?.role, sessionKey);
+  if (refreshedRole !== "Warehouse Manager") issues.push("An open session did not adopt its reassigned role after focus.");
+  if ((await liveRoleTarget.getByText("Could not load this workspace", { exact: true }).count()) !== 0) issues.push("A reassigned user reached an unauthorized API query instead of route denial.");
+  await liveRoleTarget.screenshot({ path: "artifacts/live-role-access-reconciled.png", fullPage: true });
+} finally {
+  await fetch(apiBaseUrl + "/api/settings/users/u-md", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "x-user-id": people.super.id, "x-role": people.super.role },
+    body: JSON.stringify({ role: "Managing Director" })
+  });
+  await liveRoleTarget.close();
+  await liveRoleAdmin.close();
+}
+
 const allowedExport = await preparePage({ name: "import-officer-report-export", width: 1280, height: 900, user: people.import });
 await allowedExport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
 if ((await allowedExport.getByRole("button", { name: "Export Current Data" }).count()) !== 1) issues.push("Import Officer Reports export ALLOW is not reflected in the UI.");
@@ -331,32 +361,32 @@ await salesPage.close();
 
 const headers = { "x-user-id": people.super.id, "x-role": people.super.role, "Content-Type": "application/json" };
 for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
-  const response = await fetch(baseUrl + path, { headers });
+  const response = await fetch(apiBaseUrl + path, { headers });
   console.log("api " + path + ": " + response.status);
   if (!response.ok) issues.push(path + " returned " + response.status);
 }
 
-const finalizedImport = await fetch(baseUrl + "/api/imports/imp-77612", { headers }).then((response) => response.json());
+const finalizedImport = await fetch(apiBaseUrl + "/api/imports/imp-77612", { headers }).then((response) => response.json());
 if (!finalizedImport.data?.snapshot?.immutable) issues.push("Finalized landed-cost snapshot is missing or mutable.");
 
 const importHeaders = { "x-user-id": people.import.id, "x-role": people.import.role, "Content-Type": "application/json" };
-const redactedImport = await fetch(baseUrl + "/api/imports/imp-77612", { headers: importHeaders }).then((response) => response.json());
+const redactedImport = await fetch(apiBaseUrl + "/api/imports/imp-77612", { headers: importHeaders }).then((response) => response.json());
 if (redactedImport.data?.costs?.length || redactedImport.data?.snapshot) issues.push("Sensitive import values were exposed to Import Officer.");
 
-const deniedCostAction = await fetch(baseUrl + "/api/imports/imp-77612/costs", {
+const deniedCostAction = await fetch(apiBaseUrl + "/api/imports/imp-77612/costs", {
   method: "POST",
   headers: importHeaders,
   body: JSON.stringify({ name: "Denied", amountForeign: "1.00", amountBdt: "1.00", currency: "BDT", exchangeRate: "1", allocationMethod: "QUANTITY", appliesToItemIds: [] })
 });
 if (deniedCostAction.status !== 403) issues.push("Sensitive import action was not denied.");
 
-const preview = await fetch(baseUrl + "/api/imports/imp-77612/cost-preview", { method: "POST", headers });
+const preview = await fetch(apiBaseUrl + "/api/imports/imp-77612/cost-preview", { method: "POST", headers });
 const previewBody = await preview.json();
 if (!preview.ok || previewBody.data?.validationErrors?.length || previewBody.data?.allocations?.length < 3) issues.push("Multi-product landed-cost preview failed.");
 const sum = previewBody.data?.products?.reduce((total, row) => total + Number(row.finalTotalBdt), 0).toFixed(2);
 if (sum !== previewBody.data?.totalShipmentCostBdt) issues.push("Landed-cost product results do not reconcile.");
 
-const fifo = await fetch(baseUrl + "/api/inventory/dispatch-preview", {
+const fifo = await fetch(apiBaseUrl + "/api/inventory/dispatch-preview", {
   method: "POST",
   headers,
   body: JSON.stringify({ productId: "prd-d17h", batchId: "bat-d17-new", quantity: "60" })

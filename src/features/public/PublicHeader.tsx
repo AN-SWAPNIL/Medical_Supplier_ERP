@@ -3,7 +3,7 @@ import { LockKeyhole, Mail, Menu, Phone, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import MiproLogo from "../../components/branding/MiproLogo";
-import { publicContact } from "./public.content";
+import { usePublicSettings } from "./usePublicSettings";
 
 const publicNavigation = [
   ["Home", "/"],
@@ -17,6 +17,7 @@ const publicNavigation = [
 export default function PublicHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const settings = usePublicSettings().data;
 
   useEffect(() => {
     setMobileOpen(false);
@@ -29,8 +30,8 @@ export default function PublicHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/98 shadow-sm">
       <div className="hidden bg-blue-950 text-xs text-slate-200 md:block">
         <div className="mx-auto flex h-8 max-w-7xl items-center justify-end gap-6 px-6 lg:px-8">
-          <a className="inline-flex items-center gap-1.5 hover:text-white" href={`tel:${publicContact.phoneHref}`}><Phone className="h-3.5 w-3.5" /> {publicContact.phone}</a>
-          <a className="inline-flex items-center gap-1.5 hover:text-white" href={`mailto:${publicContact.email}`}><Mail className="h-3.5 w-3.5" /> {publicContact.email}</a>
+          {settings ? <><a className="inline-flex items-center gap-1.5 hover:text-white" href={`tel:${settings.phoneHref}`}><Phone className="h-3.5 w-3.5" /> {settings.phone}</a>
+          <a className="inline-flex items-center gap-1.5 hover:text-white" href={`mailto:${settings.email}`}><Mail className="h-3.5 w-3.5" /> {settings.email}</a></> : null}
         </div>
       </div>
       <div className="mx-auto flex h-[72px] max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { AlertCircle, ChevronDown, Inbox, LoaderCircle, X } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { useEffect, type ComponentType, type ReactNode } from "react";
 import Button from "../components/ui/Button";
 
 export const inputClass =
@@ -96,6 +96,12 @@ export function Modal({
   footer?: ReactNode;
   width?: string;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>

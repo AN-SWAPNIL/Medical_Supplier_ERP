@@ -27,6 +27,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
     import: ["view", "approve", "export"],
     inventory: read,
     sales: ["view", "approve", "export"],
+    customers: read,
     accounts: read,
     reports: read,
     print: read

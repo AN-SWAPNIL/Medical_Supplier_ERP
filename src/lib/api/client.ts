@@ -3,6 +3,16 @@ import type { ApiResponse, Session } from "../../types";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const SESSION_KEY = "mipro-erp-session";
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 function sessionHeaders(): Record<string, string> {
   const raw = window.localStorage.getItem(SESSION_KEY);
   if (!raw) {
@@ -38,7 +48,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
   }))) as ApiResponse<T>;
 
   if (!response.ok || !body.success) {
-    throw new Error(body.message || `API request failed: ${response.status}`);
+    throw new ApiRequestError(body.message || `API request failed: ${response.status}`, response.status);
   }
 
   return body;

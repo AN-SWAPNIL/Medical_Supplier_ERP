@@ -5,6 +5,7 @@ import type { Session, User } from "../../types";
 type AuthState = {
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
+  refreshSession: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -37,6 +38,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: loadSession(),
   async login(email, password) {
     const response = await apiClient.login(email, password);
+    persistSession(response.data);
+    set({ session: response.data });
+  },
+  async refreshSession() {
+    const current = get().session;
+    if (!current) return;
+    const response = await apiClient.me();
+    if (get().session?.user.id !== current.user.id) return;
     persistSession(response.data);
     set({ session: response.data });
   },

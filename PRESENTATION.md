@@ -26,7 +26,21 @@ PROTECTED MIPRO ERP
 Imports -> Inventory -> Sales -> Collections -> Accounts -> Reports
 ```
 
-The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures. Employee accounts are created internally by Super Admin; the public Request Access flow has been removed.
+The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. Its visual homepage rotates approved product and distribution messages, calculates published catalogue/document counts, filters product families, and lets visitors inspect the supply process. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures.
+
+Super Admin controls that content inside `Settings -> Website Content`:
+
+```text
+Super Admin input
+  -> hero / category / public product / document / resource
+  -> publish or keep as draft
+  -> /api/public/* returns published projection only
+  -> public website updates without reading ERP inventory
+```
+
+The public product record is not the ERP product master. The public record contains approved images, descriptions, variants, specifications and document relationships. The ERP record contains internal code, unit, price, stock, landed cost and aliases. This separation is the control that prevents confidential operational data from leaking onto the website.
+
+Employee accounts are created internally by Super Admin; the public Request Access flow has been removed. The first Super Admin is provisioned once through the production identity/backend deployment process. After that, the owner creates employees and assigns roles under `Settings -> Users & Capabilities`; routine direct database editing and public owner registration are both avoided.
 
 Inside the protected boundary, MIPRO ERP connects two real business flows through warehouse stock:
 
@@ -55,7 +69,9 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 
 ### Current application
 
-- Corporate public website with separate typed product projections and no e-commerce cart.
+- Dynamic corporate public website with managed hero slides, catalogue counts, product-family filters, interactive supply stages and no e-commerce cart.
+- Super Admin Website Content workspace for public company details, map, categories, products, documents, resources and inquiry follow-up.
+- Public content CRUD remains separate from ERP product CRUD and flows through typed API contracts.
 - Registered MIPRO identity, product imagery, corporate About, curated resources, contact map and inquiry flow.
 - Authorized manufacturer certificate scans migrated from the previous MiproBD site, with holder, product scope, visible dates, current/historical status, preview and download; none are presented as MIPRO corporate certificates.
 - Employee Portal login that is production-safe by default; demo users require `VITE_DEMO_MODE=true`.
@@ -103,7 +119,7 @@ There is no GPS sidebar module or AI Command Center. Field Team stays inside Sal
 | Sales | Customers, quotations/orders, deliveries, collections, and role-scoped Field Team |
 | Expenses & Accounts | Operating expenses, cash/bank, dues, and transaction ledger |
 | Reports | Grouped operational reports and narrow audit history |
-| Settings | Users, capabilities, master data, setup, print identity, and open client decisions |
+| Settings | Users, capabilities, Website Content, master data, setup, print identity, and open client decisions |
 
 Workflow stages appear inside these areas as sections or segmented views. They are not extra navigation modules.
 
@@ -181,7 +197,11 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 
 | Record or action | Who enters it | Who may edit it | Delete/cancel rule | Who approves/posts | Result |
 |---|---|---|---|---|---|
-| Product | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced; otherwise deactivate | No separate approval | Canonical item used by import, stock, and sales |
+| Public site settings / hero / category | Super Admin | Super Admin | Hero keeps at least one published slide; category deletion is blocked while products use it | Super Admin chooses Draft or Published | Header, homepage, contact, map and catalogue discovery update through public APIs |
+| Public product | Super Admin | Super Admin | Independent public record may be unpublished or deleted without touching ERP stock | Super Admin chooses Draft, Published and Featured | Approved image/copy/specifications appear publicly; no price, cost, stock or supplier data is exposed |
+| Public certificate / resource | Super Admin | Super Admin | Delete removes only the public projection and cleans public relationships | Super Admin verifies ownership/scope and publication state | Approved document or guidance appears on Certificates/Resources |
+| Website business inquiry | Public visitor submits validated form | Super Admin records status and internal follow-up note | Prototype permits removal; production should retain according to policy | Super Admin marks Received, Contacted, Qualified, Closed or Spam | Commercial follow-up queue; never creates an ERP login automatically |
+| ERP canonical product | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced; otherwise deactivate | No separate approval | Internal item used by import, stock, and sales |
 | Product alias | Super Admin | Super Admin | Remove mapping without deleting the canonical product | Super Admin | Legacy spreadsheet spelling maps to one product |
 | Supplier | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced | No separate approval | Reused by import cases |
 | Import commercial data | Import Officer or Super Admin | Same roles before finalization | Draft/unposted case only | No separate approval | One connected import case |
@@ -548,8 +568,17 @@ Settings is one permission-filtered workspace, not one all-or-nothing owner page
 | Suppliers | `suppliers:view` |
 | Business Setup | `settings:view` |
 | Data Migration | `settings:view` |
+| Website Content | Super Admin in the current release |
 
-Super Admin sees all setup data: users, products/images/aliases, suppliers, cash/bank accounts, main warehouse, expense categories, import cost presets, print configuration, opening-data migration and client decisions.
+Super Admin sees all setup data: users, ERP products/images/aliases, suppliers, public website content, website inquiries, cash/bank accounts, main warehouse, expense categories, import cost presets, print configuration, opening-data migration and client decisions.
+
+Use these direct presentation paths:
+
+```text
+/app/settings?view=website  -> public content, publication and inquiry queue
+/app/settings?view=products -> ERP canonical products and aliases
+/app/settings?view=users    -> employee roles, exceptions and capabilities
+```
 
 The same user modal deliberately separates two jobs:
 

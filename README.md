@@ -10,7 +10,21 @@ The platform separates two surfaces:
 Public MIPRO website -> Employee Portal -> Protected MIPRO ERP
 ```
 
-The public website provides Home, About, Products, Product Detail, Certificates, News & Resources, Contact, an OpenStreetMap office view, and a validated business inquiry. Authorized manufacturer-document scans are stored locally under `public/certificates`, with visible validity context and preview/download actions. They are not described as MIPRO corporate certificates. The public website never reads protected inventory, cost, supplier, stock or sales data.
+The public website provides a rotating visual homepage, live catalogue/document counts, interactive product-family and supply-process sections, About, Products, Product Detail, Certificates, News & Resources, Contact, an OpenStreetMap office view, and a validated business inquiry. Authorized manufacturer-document scans are stored locally under `public/certificates`, with visible validity context and preview/download actions. They are not described as MIPRO corporate certificates. The public website never reads protected inventory, cost, supplier, stock or sales data.
+
+Super Admin manages this public surface at `Settings -> Website Content`. The workspace supports company/contact/map settings, hero slides, public categories, public products, certificates, resources and inquiry follow-up. Published content loads through explicit `/api/public/*` endpoints; page components do not import fixtures. Changes persist only for the running mock API process in this phase and will later map to database rows plus managed image storage.
+
+Public products and ERP products are intentionally separate:
+
+```text
+Settings -> Website Content -> Public Products
+  image, public description, variants, specifications, approved documents
+
+Settings -> Products & Aliases -> ERP Product
+  internal code, unit, sale price, stock, landed cost and aliases
+```
+
+The first Super Admin is provisioned once through the production identity/backend deployment process, not through a public registration page and not through routine manual database editing. That owner then creates employee accounts under `Settings -> Users & Capabilities`.
 
 The internal application connects:
 
@@ -110,6 +124,8 @@ The seed demonstrates this model: the Import Officer receives Reports view/expor
 /app/accounts
 /app/reports
 /app/settings
+/app/settings?view=website
+/app/settings?view=users
 /app/profile
 /app/print/:documentType/:id
 ```
@@ -125,7 +141,7 @@ src/domains/
   sales/         customer, quote/order, delivery and collection
   accounts/      expenses, accounts, transactions and dues
   reports/       grouped operational reports
-  settings/      users, capabilities and master/setup records
+  settings/      users, capabilities, master/setup records and Website Content
   print/         business document previews
   erp.types.ts   shared DTO contracts
   schemas.ts     Zod API response schemas
@@ -134,6 +150,7 @@ src/domains/
 src/features/public/
   PublicLayout   corporate header/footer boundary
   public.types   published website-only contracts
+  public.schemas validated public and website-admin contracts
   publicSiteService  replaceable public content/inquiry boundary
   Home/About/Products/Certificates/News/Contact pages
 

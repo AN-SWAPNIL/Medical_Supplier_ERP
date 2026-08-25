@@ -26,6 +26,12 @@ test("role defaults are used when no override exists", () => {
   assert.equal(hasEffectivePermission(officer, "reports", "view"), false);
 });
 
+test("Managing Director can open the connected Sales customer view", () => {
+  const director = user({ role: "Managing Director" });
+  assert.equal(hasEffectivePermission(director, "sales", "view"), true);
+  assert.equal(hasEffectivePermission(director, "customers", "view"), true);
+});
+
 test("ALLOW adds access and DENY removes role-default access", () => {
   const officer = user({ permissionOverrides: [{ permission: "reports", action: "view", effect: "ALLOW" }] });
   const manager = user({ role: "Sales Manager", permissionOverrides: [{ permission: "reports", action: "export", effect: "DENY" }] });

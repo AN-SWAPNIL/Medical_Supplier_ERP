@@ -9,6 +9,7 @@ const testPort = 4300 + (process.pid % 500);
 const base = externalBase || "http://127.0.0.1:" + testPort;
 const identities = {
   super: { id: "u-super", role: "Super Admin" },
+  md: { id: "u-md", role: "Managing Director" },
   import: { id: "u-import", role: "Import Officer" },
   warehouse: { id: "u-warehouse", role: "Warehouse Manager" },
   accounts: { id: "u-accounts", role: "Accounts" },
@@ -118,6 +119,34 @@ async function run() {
   await api("/api/settings/users/" + delegatedEmployee.id, { method: "PATCH", as: identities.salesManager, expected: 403, body: { role: "Accounts" } });
   await api("/api/settings/users/u-super", { method: "PATCH", as: identities.salesManager, expected: 403, body: { status: "Inactive" } });
   await api("/api/settings/users/u-super", { method: "PATCH", as: identities.super, expected: 409, body: { status: "Inactive" } });
+
+  const liveAccessUser = await api("/api/settings/users", {
+    method: "POST",
+    expected: 201,
+    as: identities.super,
+    body: { name: "Live Access User " + suffix, email: "live-access-" + suffix + "@mipro.local", role: "Managing Director", title: "Access Test", department: "Management", status: "Active", capabilities: [], permissionOverrides: [] }
+  });
+  const liveIdentity = { id: liveAccessUser.id, role: "Managing Director" };
+  assert.equal((await api("/api/me", { as: liveIdentity })).user.role, "Managing Director");
+  const reassignedUser = await api("/api/settings/users/" + liveAccessUser.id, {
+    method: "PATCH",
+    as: identities.super,
+    body: { ...liveAccessUser, role: "Warehouse Manager" }
+  });
+  assert.equal(reassignedUser.role, "Warehouse Manager");
+  assert.equal((await api("/api/me", { as: liveIdentity })).user.role, "Warehouse Manager", "The server must refresh an already-open session from the stored user, not its stale role header.");
+  await api("/api/customers", { as: liveIdentity, expected: 403 });
+  await api("/api/inventory/batches", { as: liveIdentity });
+
+  await api("/api/settings/users/" + liveAccessUser.id, {
+    method: "PATCH",
+    as: identities.super,
+    body: { permissionOverrides: [{ permission: "customers", action: "view", effect: "ALLOW" }, { permission: "inventory", action: "view", effect: "DENY" }] }
+  });
+  await api("/api/customers", { as: liveIdentity });
+  await api("/api/inventory/batches", { as: liveIdentity, expected: 403 });
+  await api("/api/settings/users/" + liveAccessUser.id, { method: "PATCH", as: identities.super, body: { status: "Inactive" } });
+  await api("/api/me", { as: liveIdentity, expected: 401 });
 
   console.log("1. PO-first import, authoritative status and server-derived item bases");
   const importRecord = await api("/api/imports", {
@@ -631,7 +660,43 @@ async function run() {
     body: { name: "<b>Bad</b>", phone: "123", message: "<script>alert(1)</script>" }
   });
 
-  console.log("All update5 digital-platform and effective-access scenarios passed.");
+  console.log("11. Public content publication and Super Admin boundary");
+  await api("/api/settings/website", { as: identities.md, expected: 403 });
+  const website = await api("/api/settings/website", { as: identities.super });
+  assert.ok(website.heroSlides.length >= 3);
+  assert.ok(website.products.length >= 8);
+  assert.ok(website.inquiries.some((entry) => entry.inquiryId === inquiry.inquiryId));
+  const publicProduct = {
+    slug: "temporary-publication-test",
+    legacySlug: "",
+    name: "Temporary Publication Test",
+    category: "Hemodialysis",
+    shortDescription: "Temporary public content integration record.",
+    description: "This record verifies that draft and published website data are projected separately.",
+    brand: "Distributed by MIPRO",
+    manufacturer: "",
+    intendedApplication: "Automated prototype verification only.",
+    images: ["/products/dialyzer.jpg"],
+    imageAlt: "Temporary test dialyzer",
+    features: ["Temporary verification"],
+    variants: ["Test variant"],
+    specifications: [{ label: "Purpose", value: "Automated test" }],
+    certificateIds: [],
+    featured: false,
+    published: false,
+    sortOrder: 99
+  };
+  await api("/api/settings/website/products", { method: "POST", expected: 201, as: identities.super, body: publicProduct });
+  assert.equal(await api("/api/public/products/temporary-publication-test"), null);
+  const publishedProduct = await api("/api/settings/website/products/temporary-publication-test", { method: "PATCH", as: identities.super, body: { ...publicProduct, published: true } });
+  assert.equal(publishedProduct.published, true);
+  assert.equal((await api("/api/public/products/temporary-publication-test")).name, publicProduct.name);
+  await api("/api/settings/website/products/temporary-publication-test", { method: "DELETE", as: identities.super });
+  assert.equal(await api("/api/public/products/temporary-publication-test"), null);
+  const reviewedInquiry = await api("/api/settings/website/inquiries/" + inquiry.inquiryId, { method: "PATCH", as: identities.super, body: { status: "Qualified", internalNotes: "Automated follow-up verification." } });
+  assert.equal(reviewedInquiry.status, "Qualified");
+
+  console.log("All digital-platform, effective-access and public-content scenarios passed.");
 }
 
 try {

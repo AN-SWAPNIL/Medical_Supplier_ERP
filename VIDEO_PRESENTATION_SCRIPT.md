@@ -52,15 +52,19 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 ### Show
 
 1. Start at `/`.
-2. Keep the registered logo, corporate navigation and `Precision in Healthcare` hero in view.
-3. Scroll through product categories, featured products, About MIPRO, supply capability, documentation and resources.
-4. Point to the visually separate Employee Portal button.
+2. Keep the registered logo and corporate navigation in view, then use the hero arrows to move between the product, hemodialysis and distribution messages.
+3. Point out that the four counts describe published website content, not confidential ERP sales or stock statistics.
+4. Filter Featured Products by a product family and select a supply-process stage.
+5. Scroll through product categories, About MIPRO, documentation and resources.
+6. Point to the visually separate Employee Portal button.
 
 ### Say
 
 > This is the MIPRO digital platform. The public side presents MIPRO Healthcare Corporation, its medical product catalogue, documentation approach and business contact. It does not advertise ERP software or publish internal sales, stock, cost or role figures.
 
 > Public products are deliberately separated from ERP product records. Visitors can review a product and contact sales, but cannot see landed cost, supplier price, stock valuation or internal aliases.
+
+> The homepage is not hard-coded presentation artwork. Its hero slides, category order, public products, document records, resources and company contact details come through published content APIs that the owner can manage inside Settings.
 
 > The Employee Portal is the boundary into the internal application. Employee accounts are provisioned by Super Admin, not requested by strangers on the public website.
 
@@ -469,7 +473,9 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 6. Edit the Sales Manager and show Users View/Create/Edit allowed, `manage_users` enabled and Reports Export denied.
 7. Explain that Default stores no duplicate role rule; only explicit Allow or Deny exceptions are saved.
 8. Open Data Migration and show Opening Batch plus Customer Balance forms.
-9. Point to user image, capabilities, product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
+9. Open **Website Content**. Show Overview, then Public Products and the New Public Product form with image upload, category, copy, specifications, document links, Featured and Published controls.
+10. Open Inquiries and show how Super Admin records Contacted/Qualified/Closed plus an internal follow-up note.
+11. Point to user image, capabilities, ERP product images, accounts, warehouse, cost presets and MIPRO/LED print calibration.
 
 ### Say
 
@@ -478,6 +484,8 @@ Move the pointer slowly, pause after every click, and keep the current heading v
 > Settings itself follows those permissions. Super Admin sees every setup tab. A delegated employee manager sees only Users and can maintain lower-role staff profiles and status, but cannot change roles, passwords, permissions or capabilities. The API protects self, peers, higher roles, every Super Admin and the final active owner account.
 
 > Confirmed decisions retain the actual answer, notes, source, user and time. Local transport CBM and FIFO are confirmed. Invoice requirement, common-cost default, accounting depth, warehouse count, sales tax and finalization authority remain visible rather than silently hard-coded.
+
+> Website Products and ERP Products are two controlled records. Website Content publishes approved image and descriptive information. Products & Aliases holds internal codes, prices, stock and costing relationships. The first owner is provisioned securely during backend deployment; that owner creates employees here, so there is no public Super Admin registration page and no routine manual database editing.
 
 ---
 

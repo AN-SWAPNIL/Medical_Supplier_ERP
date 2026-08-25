@@ -5,7 +5,32 @@ import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { calculateLandedCost, importDisplayReference } from "../src/domains/imports/costing.js";
-import type { PublicInquiryInput, PublicInquiryReceipt } from "../src/features/public/public.types.js";
+import {
+  PublicCertificateSchema,
+  PublicHeroSlideSchema,
+  PublicProductCategoryRecordSchema,
+  PublicProductSchema,
+  PublicResourceSchema,
+  PublicSiteSettingsSchema
+} from "../src/features/public/public.schemas.js";
+import type {
+  PublicCertificate,
+  PublicHeroSlide,
+  PublicInquiryReceipt,
+  PublicInquiryRecord,
+  PublicProduct,
+  PublicProductCategoryRecord,
+  PublicResource,
+  PublicSiteSettings
+} from "../src/features/public/public.types.js";
+import {
+  publicCertificates as seedPublicCertificates,
+  publicHeroSlides as seedPublicHeroSlides,
+  publicProductCategories as seedPublicProductCategories,
+  publicProducts as seedPublicProducts,
+  publicResources as seedPublicResources,
+  publicSiteSettings as seedPublicSiteSettings
+} from "../src/features/public/public.content.js";
 import type {
   AIContext,
   AIInsight,
@@ -120,7 +145,17 @@ const warehouseConfig = structuredClone(seedWarehouseConfig);
 const printConfiguration = structuredClone(seedPrintConfiguration);
 const productAliases: ProductAlias[] = structuredClone(seedProductAliases);
 const customerOpeningBalances: CustomerOpeningBalance[] = structuredClone(seedCustomerOpeningBalances);
-const publicInquiries: Array<PublicInquiryInput & PublicInquiryReceipt> = [];
+let publicSiteSettings: PublicSiteSettings = structuredClone(seedPublicSiteSettings);
+const publicHeroSlides: PublicHeroSlide[] = structuredClone(seedPublicHeroSlides);
+const publicProductCategories: PublicProductCategoryRecord[] = structuredClone(seedPublicProductCategories);
+const publicProducts: PublicProduct[] = structuredClone(seedPublicProducts);
+const publicCertificates: PublicCertificate[] = structuredClone(seedPublicCertificates);
+const publicResources: PublicResource[] = structuredClone(seedPublicResources);
+const publicInquiries: PublicInquiryRecord[] = [
+  { inquiryId: "INQ-2026-003", receivedAt: "2026-08-24T09:35:00.000Z", status: "Received", name: "Dr. Afsana Kabir", organization: "North Point Dialysis Centre", phone: "+880 1712 450910", email: "procurement@northpoint.example", subject: "Dialyzer and blood tubing supply", productInterest: "Hollow Fiber Hemodialyzer", message: "Please share available dialyzer variants, compatible blood tubing options and manufacturer documentation for institutional review." },
+  { inquiryId: "INQ-2026-002", receivedAt: "2026-08-23T12:20:00.000Z", status: "Contacted", name: "Mohammad Tariqul Islam", organization: "Careline Medical Services", phone: "+880 1818 620044", email: "tariqul@careline.example", subject: "A.V. fistula needle quotation", productInterest: "Disposable A.V. Fistula Needle", message: "We need pricing and lead time for 16G and 17G fistula needles for our next procurement cycle.", internalNotes: "Sales team called; customer requested a formal quotation after confirming monthly volume." },
+  { inquiryId: "INQ-2026-001", receivedAt: "2026-08-22T07:45:00.000Z", status: "Qualified", name: "Sabina Yasmin", organization: "Metro Clinical Hospital", phone: "+880 1911 335508", email: "supply@metroclinical.example", subject: "IV catheter product information", productInterest: "IV Catheter, Pen Type", message: "Please send the available gauge list, packaging details and relevant conformity documents.", internalNotes: "Qualified institutional requirement; assigned to sales manager for product confirmation." }
+];
 const publicInquiryRate = new Map<string, { count: number; expiresAt: number }>();
 const documentContents = new Map<string, string>();
 const seededPdfPath = fileURLToPath(new URL("./assets/mipro-source-document.pdf", import.meta.url));
@@ -746,6 +781,35 @@ const publicInquirySchema = z.object({
   message: safePublicText(10, 2000)
 });
 
+const sortPublicContent = <T extends { sortOrder?: number }>(rows: T[]) => [...rows].sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+app.get("/api/public/site", (_req, res) => res.json(ok(publicSiteSettings, "Public site settings loaded")));
+app.get("/api/public/hero-slides", (_req, res) => res.json(ok(sortPublicContent(publicHeroSlides.filter((slide) => slide.published)), "Published hero slides loaded")));
+app.get("/api/public/categories", (_req, res) => res.json(ok(sortPublicContent(publicProductCategories.filter((category) => category.published)), "Published product categories loaded")));
+app.get("/api/public/products", (req, res) => {
+  const category = String(req.query.category ?? "").trim();
+  const search = String(req.query.search ?? "").trim().toLowerCase();
+  const featured = req.query.featured === undefined ? undefined : String(req.query.featured) === "true";
+  const rows = sortPublicContent(publicProducts.filter((product) => {
+    if (!product.published) return false;
+    if (category && product.category !== category) return false;
+    if (featured !== undefined && product.featured !== featured) return false;
+    if (search && !`${product.name} ${product.category} ${product.shortDescription} ${product.brand}`.toLowerCase().includes(search)) return false;
+    return true;
+  }));
+  res.json(ok(rows, "Published products loaded", { total: rows.length }));
+});
+app.get("/api/public/legacy-products/:legacySlug", (req, res) => {
+  const product = publicProducts.find((entry) => entry.published && entry.legacySlug === req.params.legacySlug) ?? null;
+  res.json(ok(product, product ? "Legacy product route resolved" : "Product not found"));
+});
+app.get("/api/public/products/:slug", (req, res) => {
+  const product = publicProducts.find((entry) => entry.published && entry.slug === req.params.slug) ?? null;
+  res.json(ok(product, product ? "Published product loaded" : "Product not found"));
+});
+app.get("/api/public/certificates", (_req, res) => res.json(ok(sortPublicContent(publicCertificates.filter((certificate) => certificate.published !== false)), "Published certificates loaded")));
+app.get("/api/public/resources", (_req, res) => res.json(ok(sortPublicContent(publicResources.filter((resource) => resource.published !== false)), "Published resources loaded")));
+
 app.post("/api/public/contact", (req, res) => {
   const forwarded = String(req.headers["x-forwarded-for"] ?? req.ip ?? "unknown").split(",")[0].trim();
   const now = Date.now();
@@ -785,7 +849,9 @@ app.post("/api/auth/reset-password", (req, res) => {
 });
 app.get("/api/me", (req, res) => {
   const user = requireUser(req, res);
-  if (user) res.json(ok({ token: `mock-token-${user.id}`, user }, "Current session"));
+  if (!user) return;
+  if (user.status !== "Active") return fail(res, 401, "This ERP account is no longer active.");
+  res.json(ok({ token: `mock-token-${user.id}`, user }, "Current access profile refreshed"));
 });
 
 app.get("/api/field-team/current", (req, res) => {
@@ -2180,6 +2246,246 @@ function userForViewer(user: User, viewer: User) {
   delete profile.permissionOverrides;
   return profile;
 }
+
+function requireWebsiteAdmin(req: Request, res: Response) {
+  const user = requireUser(req, res);
+  if (!user) return null;
+  if (user.role !== "Super Admin") {
+    fail(res, 403, "Only the Super Admin can manage public website content in this release.");
+    return null;
+  }
+  return user;
+}
+
+function parseWebsiteContent<T>(schema: z.ZodType<T>, payload: unknown, res: Response) {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    fail(res, 422, parsed.error.issues[0]?.message ?? "Website content is invalid.");
+    return null;
+  }
+  return parsed.data;
+}
+
+function publicSlug(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+}
+
+app.get("/api/settings/website", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  res.json(ok({
+    settings: publicSiteSettings,
+    heroSlides: sortPublicContent(publicHeroSlides),
+    categories: sortPublicContent(publicProductCategories),
+    products: sortPublicContent(publicProducts),
+    certificates: sortPublicContent(publicCertificates),
+    resources: sortPublicContent(publicResources),
+    inquiries: [...publicInquiries].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+  }, "Website content workspace loaded"));
+});
+
+app.patch("/api/settings/website/site", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const parsed = parseWebsiteContent(PublicSiteSettingsSchema, req.body, res);
+  if (!parsed) return;
+  publicSiteSettings = parsed;
+  audit(req, "Public site settings updated", "Website", "public-site", "Company contact, positioning or map settings updated.");
+  res.json(ok(publicSiteSettings, "Public site settings updated"));
+});
+
+app.post("/api/settings/website/hero-slides", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const candidate = { ...req.body, id: String(req.body?.id || `hero-${publicSlug(req.body?.title)}`), sortOrder: Number(req.body?.sortOrder ?? publicHeroSlides.length + 1) };
+  const parsed = parseWebsiteContent(PublicHeroSlideSchema, candidate, res);
+  if (!parsed) return;
+  if (publicHeroSlides.some((slide) => slide.id === parsed.id)) return fail(res, 409, "A hero slide with this ID already exists.");
+  publicHeroSlides.push(parsed);
+  audit(req, "Hero slide created", "WebsiteHero", parsed.id, `${parsed.title} added to the public homepage.`);
+  res.status(201).json(ok(parsed, "Hero slide created"));
+});
+
+app.patch("/api/settings/website/hero-slides/:slideId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicHeroSlides.findIndex((slide) => slide.id === req.params.slideId);
+  if (index < 0) return fail(res, 404, "Hero slide not found.");
+  const parsed = parseWebsiteContent(PublicHeroSlideSchema, { ...req.body, id: publicHeroSlides[index].id }, res);
+  if (!parsed) return;
+  publicHeroSlides[index] = parsed;
+  audit(req, "Hero slide updated", "WebsiteHero", parsed.id, `${parsed.title} homepage content updated.`);
+  res.json(ok(parsed, "Hero slide updated"));
+});
+
+app.delete("/api/settings/website/hero-slides/:slideId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicHeroSlides.findIndex((slide) => slide.id === req.params.slideId);
+  if (index < 0) return fail(res, 404, "Hero slide not found.");
+  if (publicHeroSlides[index].published && publicHeroSlides.filter((slide) => slide.published).length === 1) return fail(res, 409, "Keep at least one published hero slide.");
+  const [removed] = publicHeroSlides.splice(index, 1);
+  audit(req, "Hero slide deleted", "WebsiteHero", removed.id, `${removed.title} removed from website content.`);
+  res.json(ok({ id: removed.id }, "Hero slide deleted"));
+});
+
+app.post("/api/settings/website/categories", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const candidate = { ...req.body, id: String(req.body?.id || `cat-${publicSlug(req.body?.name)}`), sortOrder: Number(req.body?.sortOrder ?? publicProductCategories.length + 1) };
+  const parsed = parseWebsiteContent(PublicProductCategoryRecordSchema, candidate, res);
+  if (!parsed) return;
+  if (publicProductCategories.some((category) => category.id === parsed.id || category.name.toLowerCase() === parsed.name.toLowerCase())) return fail(res, 409, "This public product category already exists.");
+  publicProductCategories.push(parsed);
+  audit(req, "Public category created", "WebsiteCategory", parsed.id, `${parsed.name} added to the public catalogue.`);
+  res.status(201).json(ok(parsed, "Public product category created"));
+});
+
+app.patch("/api/settings/website/categories/:categoryId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicProductCategories.findIndex((category) => category.id === req.params.categoryId);
+  if (index < 0) return fail(res, 404, "Public product category not found.");
+  const original = publicProductCategories[index];
+  const parsed = parseWebsiteContent(PublicProductCategoryRecordSchema, { ...req.body, id: original.id }, res);
+  if (!parsed) return;
+  if (publicProductCategories.some((category, candidateIndex) => candidateIndex !== index && category.name.toLowerCase() === parsed.name.toLowerCase())) return fail(res, 409, "This public product category name already exists.");
+  publicProductCategories[index] = parsed;
+  if (original.name !== parsed.name) publicProducts.forEach((product) => { if (product.category === original.name) product.category = parsed.name; });
+  audit(req, "Public category updated", "WebsiteCategory", parsed.id, `${parsed.name} public category updated.`);
+  res.json(ok(parsed, "Public product category updated"));
+});
+
+app.delete("/api/settings/website/categories/:categoryId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicProductCategories.findIndex((category) => category.id === req.params.categoryId);
+  if (index < 0) return fail(res, 404, "Public product category not found.");
+  const category = publicProductCategories[index];
+  if (publicProducts.some((product) => product.category === category.name)) return fail(res, 409, "Move or delete products in this category before deleting it.");
+  publicProductCategories.splice(index, 1);
+  audit(req, "Public category deleted", "WebsiteCategory", category.id, `${category.name} removed from website content.`);
+  res.json(ok({ id: category.id }, "Public product category deleted"));
+});
+
+app.post("/api/settings/website/products", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const candidate = { ...req.body, slug: String(req.body?.slug || publicSlug(req.body?.name)), legacySlug: String(req.body?.legacySlug ?? ""), sortOrder: Number(req.body?.sortOrder ?? publicProducts.length + 1) };
+  const parsed = parseWebsiteContent(PublicProductSchema, candidate, res);
+  if (!parsed) return;
+  if (!publicProductCategories.some((category) => category.name === parsed.category)) return fail(res, 422, "Select an existing public product category.");
+  if (publicProducts.some((product) => product.slug === parsed.slug)) return fail(res, 409, "This public product URL slug already exists.");
+  publicProducts.push(parsed);
+  audit(req, "Public product created", "WebsiteProduct", parsed.slug, `${parsed.name} added to the public catalogue.`);
+  res.status(201).json(ok(parsed, "Public product created"));
+});
+
+app.patch("/api/settings/website/products/:slug", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicProducts.findIndex((product) => product.slug === req.params.slug);
+  if (index < 0) return fail(res, 404, "Public product not found.");
+  const parsed = parseWebsiteContent(PublicProductSchema, req.body, res);
+  if (!parsed) return;
+  if (!publicProductCategories.some((category) => category.name === parsed.category)) return fail(res, 422, "Select an existing public product category.");
+  if (publicProducts.some((product, candidateIndex) => candidateIndex !== index && product.slug === parsed.slug)) return fail(res, 409, "This public product URL slug already exists.");
+  const oldSlug = publicProducts[index].slug;
+  publicProducts[index] = parsed;
+  if (oldSlug !== parsed.slug) publicCertificates.forEach((certificate) => { certificate.relatedProductSlugs = certificate.relatedProductSlugs.map((slug) => slug === oldSlug ? parsed.slug : slug); });
+  audit(req, "Public product updated", "WebsiteProduct", parsed.slug, `${parsed.name} public catalogue details updated.`);
+  res.json(ok(parsed, "Public product updated"));
+});
+
+app.delete("/api/settings/website/products/:slug", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicProducts.findIndex((product) => product.slug === req.params.slug);
+  if (index < 0) return fail(res, 404, "Public product not found.");
+  const [removed] = publicProducts.splice(index, 1);
+  publicCertificates.forEach((certificate) => { certificate.relatedProductSlugs = certificate.relatedProductSlugs.filter((slug) => slug !== removed.slug); });
+  audit(req, "Public product deleted", "WebsiteProduct", removed.slug, `${removed.name} removed from the public catalogue.`);
+  res.json(ok({ id: removed.slug }, "Public product deleted"));
+});
+
+app.post("/api/settings/website/certificates", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const candidate = { ...req.body, id: String(req.body?.id || `certificate-${publicSlug(req.body?.title)}`), sortOrder: Number(req.body?.sortOrder ?? publicCertificates.length + 1) };
+  const parsed = parseWebsiteContent(PublicCertificateSchema, candidate, res);
+  if (!parsed) return;
+  if (publicCertificates.some((certificate) => certificate.id === parsed.id)) return fail(res, 409, "This certificate ID already exists.");
+  publicCertificates.push(parsed);
+  audit(req, "Public certificate created", "WebsiteCertificate", parsed.id, `${parsed.title} added as a public document record.`);
+  res.status(201).json(ok(parsed, "Public certificate created"));
+});
+
+app.patch("/api/settings/website/certificates/:certificateId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicCertificates.findIndex((certificate) => certificate.id === req.params.certificateId);
+  if (index < 0) return fail(res, 404, "Public certificate not found.");
+  const parsed = parseWebsiteContent(PublicCertificateSchema, { ...req.body, id: publicCertificates[index].id }, res);
+  if (!parsed) return;
+  publicCertificates[index] = parsed;
+  audit(req, "Public certificate updated", "WebsiteCertificate", parsed.id, `${parsed.title} publication details updated.`);
+  res.json(ok(parsed, "Public certificate updated"));
+});
+
+app.delete("/api/settings/website/certificates/:certificateId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicCertificates.findIndex((certificate) => certificate.id === req.params.certificateId);
+  if (index < 0) return fail(res, 404, "Public certificate not found.");
+  const [removed] = publicCertificates.splice(index, 1);
+  publicProducts.forEach((product) => { product.certificateIds = product.certificateIds.filter((id) => id !== removed.id); });
+  audit(req, "Public certificate deleted", "WebsiteCertificate", removed.id, `${removed.title} removed from website content.`);
+  res.json(ok({ id: removed.id }, "Public certificate deleted"));
+});
+
+app.post("/api/settings/website/resources", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const candidate = { ...req.body, slug: String(req.body?.slug || publicSlug(req.body?.title)), sortOrder: Number(req.body?.sortOrder ?? publicResources.length + 1) };
+  const parsed = parseWebsiteContent(PublicResourceSchema, candidate, res);
+  if (!parsed) return;
+  if (publicResources.some((resource) => resource.slug === parsed.slug)) return fail(res, 409, "This resource URL slug already exists.");
+  publicResources.push(parsed);
+  audit(req, "Public resource created", "WebsiteResource", parsed.slug, `${parsed.title} added to News & Resources.`);
+  res.status(201).json(ok(parsed, "Public resource created"));
+});
+
+app.patch("/api/settings/website/resources/:slug", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicResources.findIndex((resource) => resource.slug === req.params.slug);
+  if (index < 0) return fail(res, 404, "Public resource not found.");
+  const parsed = parseWebsiteContent(PublicResourceSchema, req.body, res);
+  if (!parsed) return;
+  if (publicResources.some((resource, candidateIndex) => candidateIndex !== index && resource.slug === parsed.slug)) return fail(res, 409, "This resource URL slug already exists.");
+  publicResources[index] = parsed;
+  audit(req, "Public resource updated", "WebsiteResource", parsed.slug, `${parsed.title} publication details updated.`);
+  res.json(ok(parsed, "Public resource updated"));
+});
+
+app.delete("/api/settings/website/resources/:slug", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicResources.findIndex((resource) => resource.slug === req.params.slug);
+  if (index < 0) return fail(res, 404, "Public resource not found.");
+  const [removed] = publicResources.splice(index, 1);
+  audit(req, "Public resource deleted", "WebsiteResource", removed.slug, `${removed.title} removed from News & Resources.`);
+  res.json(ok({ id: removed.slug }, "Public resource deleted"));
+});
+
+app.patch("/api/settings/website/inquiries/:inquiryId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const inquiry = publicInquiries.find((entry) => entry.inquiryId === req.params.inquiryId);
+  if (!inquiry) return fail(res, 404, "Website inquiry not found.");
+  const parsed = z.object({ status: z.enum(["Received", "Contacted", "Qualified", "Closed", "Spam"]), internalNotes: z.string().trim().max(2000).optional() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 422, parsed.error.issues[0]?.message ?? "Inquiry update is invalid.");
+  inquiry.status = parsed.data.status;
+  inquiry.internalNotes = parsed.data.internalNotes;
+  audit(req, "Website inquiry updated", "WebsiteInquiry", inquiry.inquiryId, `${inquiry.organization || inquiry.name} marked ${inquiry.status}.`);
+  res.json(ok(inquiry, "Website inquiry updated"));
+});
+
+app.delete("/api/settings/website/inquiries/:inquiryId", (req, res) => {
+  if (!requireWebsiteAdmin(req, res)) return;
+  const index = publicInquiries.findIndex((entry) => entry.inquiryId === req.params.inquiryId);
+  if (index < 0) return fail(res, 404, "Website inquiry not found.");
+  const [removed] = publicInquiries.splice(index, 1);
+  audit(req, "Website inquiry deleted", "WebsiteInquiry", removed.inquiryId, `${removed.organization || removed.name} inquiry removed from the prototype queue.`);
+  res.json(ok({ id: removed.inquiryId }, "Website inquiry deleted"));
+});
 
 app.get("/api/settings/users", (req, res) => {
   const actor = requirePermission(req, res, "users", "view");
