@@ -3,14 +3,18 @@ import {
   AlertTriangle,
   Activity,
   ArrowRight,
+  BarChart3,
   Banknote,
   Boxes,
   CircleDollarSign,
   Clock3,
   FileDown,
+  FilePlus2,
   MapPinned,
   ReceiptText,
-  ShoppingCart
+  ShoppingCart,
+  UserPlus,
+  UsersRound
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -20,6 +24,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Panel, TableFrame } from "../../domains/components";
 import { aiService, dashboardService } from "../../domains/services";
 import { useAuthStore } from "../../lib/auth/session";
+import { canAccessEmployeeHub, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
 const metricIcons = { sales: ShoppingCart, collection: CircleDollarSign, due: Banknote, expense: ReceiptText, stock: Boxes, imports: FileDown, accounts: Banknote, pi: FileDown, shipment: FileDown, costing: CircleDollarSign, receiving: Boxes, batches: Boxes, expiry: AlertTriangle, dispatch: ShoppingCart, pipeline: ShoppingCart, quotes: ReceiptText };
@@ -34,6 +39,46 @@ export default function DashboardPage() {
   if (query.isLoading) return <LoadingBlock label="Preparing your role dashboard" />;
   if (query.isError || !query.data) return <ErrorBlock error={query.error} onRetry={() => void query.refetch()} />;
   const data = query.data;
+  const user = session?.user;
+  const quickCandidates = user?.role === "Sales Executive"
+    ? [
+        { label: "Report Activity", path: "/app/sales?view=marketing&action=activity", icon: Activity, allowed: hasEffectivePermission(user, "marketing", "create") },
+        { label: "New Lead", path: "/app/sales?view=marketing&action=lead", icon: UserPlus, allowed: hasEffectivePermission(user, "marketing", "create") },
+        { label: "New Quotation", path: "/app/sales?view=orders&action=quotation", icon: FilePlus2, allowed: hasEffectivePermission(user, "sales", "create") },
+        { label: "My Reports", path: "/app/reports?view=marketing&preset=my-day", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
+      ]
+    : user?.role === "Sales Manager"
+      ? [
+          { label: "Open Marketing", path: "/app/sales?view=marketing", icon: Activity, allowed: hasEffectivePermission(user, "marketing", "view") },
+          { label: "Employees", path: "/app/employees?view=activity", icon: UsersRound, allowed: canAccessEmployeeHub(user) },
+          { label: "Generate Report", path: "/app/reports?view=marketing&preset=month", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") },
+          { label: "New Quotation", path: "/app/sales?view=orders&action=quotation", icon: FilePlus2, allowed: hasEffectivePermission(user, "sales", "create") }
+        ]
+      : user?.role === "Accounts"
+        ? [
+            { label: "Post Expense", path: "/app/accounts?view=expenses&action=expense", icon: ReceiptText, allowed: hasEffectivePermission(user, "accounts", "post") },
+            { label: "Post Collection", path: "/app/sales?view=collections&action=collection", icon: Banknote, allowed: hasEffectivePermission(user, "sales", "post") },
+            { label: "Customer Dues", path: "/app/accounts?view=dues", icon: CircleDollarSign, allowed: hasEffectivePermission(user, "accounts", "view") },
+            { label: "Reports", path: "/app/reports", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
+          ]
+        : user?.role === "Import Officer"
+          ? [
+              { label: "New Import", path: "/app/imports/new", icon: FilePlus2, allowed: hasEffectivePermission(user, "import", "create") },
+              { label: "Import Register", path: "/app/imports", icon: FileDown, allowed: hasEffectivePermission(user, "import", "view") },
+              { label: "Reports", path: "/app/reports", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
+            ]
+          : user?.role === "Warehouse Manager"
+            ? [
+                { label: "Inventory", path: "/app/inventory", icon: Boxes, allowed: hasEffectivePermission(user, "inventory", "view") },
+                { label: "Receive Finalized Import", path: "/app/imports", icon: FileDown, allowed: hasEffectivePermission(user, "import", "view") }
+              ]
+            : [
+                { label: "New Import", path: "/app/imports/new", icon: FilePlus2, allowed: hasEffectivePermission(user, "import", "create") },
+                { label: "Open Marketing", path: "/app/sales?view=marketing", icon: Activity, allowed: hasEffectivePermission(user, "marketing", "view") },
+                { label: "Employees", path: "/app/employees", icon: UsersRound, allowed: canAccessEmployeeHub(user) },
+                { label: "Generate Report", path: "/app/reports", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
+              ];
+  const quickActions = quickCandidates.filter((action) => action.allowed).slice(0, 4);
 
   return (
     <>
@@ -43,6 +88,8 @@ export default function DashboardPage() {
         subtitle="Today's operational position, filtered to the records and amounts your role is allowed to see."
         actions={<span className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Connected API</span>}
       />
+
+      {quickActions.length ? <section className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center" aria-label="Quick actions"><span className="shrink-0 text-xs font-bold uppercase text-slate-500">Quick actions</span><div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:flex sm:flex-wrap">{quickActions.map((action) => { const Icon = action.icon; return <Link className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-cyan-400 hover:text-blue-950" to={action.path} key={action.label}><Icon className="h-4 w-4 shrink-0 text-cyan-700" /><span className="truncate">{action.label}</span></Link>; })}</div></section> : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" aria-label="Key performance indicators">
         {data.metrics.slice(0, 6).map((metric, index) => {

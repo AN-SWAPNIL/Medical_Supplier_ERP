@@ -91,12 +91,15 @@ export default function ReportsPage() {
   const canPrint = hasEffectivePermission(user, "print", "view");
   const [params, setParams] = useSearchParams();
   const preset = params.get("preset") ?? "";
+  const requestedFrom = params.get("from");
+  const requestedTo = params.get("to");
+  const hasRequestedPeriod = Boolean(requestedFrom && requestedTo && /^\d{4}-\d{2}-\d{2}$/.test(requestedFrom) && /^\d{4}-\d{2}-\d{2}$/.test(requestedTo) && requestedFrom <= requestedTo);
   const requestedView = params.get("view") as View | null;
   const [view, setView] = useState<View>(requestedView ?? (role === "Sales Executive" ? "sales" : "overview"));
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => initialPeriodPreset(preset));
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => hasRequestedPeriod ? "custom" : initialPeriodPreset(preset));
   const initialPeriod = periodForPreset(initialPeriodPreset(preset), today);
-  const [from, setFrom] = useState(initialPeriod.from);
-  const [to, setTo] = useState(initialPeriod.to);
+  const [from, setFrom] = useState(hasRequestedPeriod ? requestedFrom! : initialPeriod.from);
+  const [to, setTo] = useState(hasRequestedPeriod ? requestedTo! : initialPeriod.to);
   const [tableId, setTableId] = useState(params.get("table") ?? (role === "Sales Executive" ? "salesperson-performance" : ""));
   const [taDaEmployee, setTaDaEmployee] = useState("All employees");
   const [salesEmployeeId, setSalesEmployeeId] = useState(params.get("employee") ?? (role === "Sales Executive" ? "self" : "all"));
@@ -225,8 +228,8 @@ export default function ReportsPage() {
           role={role}
           onSalesEmployeeChange={(employeeId) => { setSalesEmployeeId(employeeId); setParams((current) => { const next = new URLSearchParams(current); next.set("view", "sales"); next.set("table", "salesperson-performance"); next.set("employee", employeeId); return next; }, { replace: true }); }}
           onPrintEmployee={(employeeId) => navigate(`/app/print/employee-performance/${employeeId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)}
-          onViewMarketingActivity={(employeeId) => navigate(`/app/sales?view=marketing&employee=${employeeId}`)}
-          onViewFieldActivity={(employeeId) => navigate(`/app/sales?view=marketing&marketing=field-team&employee=${employeeId}`)}
+          onViewMarketingActivity={(employeeId) => navigate(`/app/employees?view=activity&employee=${employeeId}`)}
+          onViewFieldActivity={(employeeId) => navigate(`/app/employees?view=field-team&employee=${employeeId}`)}
         />
       ) : null}
       {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}

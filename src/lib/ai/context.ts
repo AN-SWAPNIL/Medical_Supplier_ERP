@@ -14,6 +14,8 @@ function contextForRoute(route: string): AIContext {
   if (importMatch) return { route, entityType: "import", entityId: importMatch[1] };
   if (path.startsWith("/app/imports")) return { route, entityType: "import" };
   if (path.startsWith("/app/inventory")) return { route, entityType: "inventory" };
+  if (path.startsWith("/app/employees") && params.get("view") === "field-team") return { route, entityType: "field-team", employeeId: params.get("employee") ?? undefined };
+  if (path.startsWith("/app/employees")) return { route, entityType: "employees", employeeId: params.get("employee") ?? undefined };
   if (path.startsWith("/app/sales") && (params.get("view") === "field-team" || params.get("marketing") === "field-team")) return { route, entityType: "field-team", employeeId: params.get("employee") ?? undefined };
   if (path.startsWith("/app/sales") && params.get("view") === "marketing") return { route, entityType: "marketing", employeeId: params.get("employee") ?? undefined };
   if (path.startsWith("/app/sales")) return { route, entityType: "sales" };

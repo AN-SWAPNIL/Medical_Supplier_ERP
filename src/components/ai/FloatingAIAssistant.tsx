@@ -13,6 +13,7 @@ function contextName(route: string) {
   if (route.includes("/imports/")) return "Current import case";
   if (route.includes("/imports")) return "Import register";
   if (route.includes("/inventory")) return "Inventory";
+  if (route.includes("/employees")) return "Employees";
   if (route.includes("/sales")) return "Sales";
   if (route.includes("/reports")) return "Reports";
   if (route.includes("/accounts")) return "Expenses & Accounts";
@@ -43,6 +44,8 @@ export default function FloatingAIAssistant() {
       ? ["Which lot should be issued first?", "Which batches need attention?"]
       : context.entityType === "sales"
         ? ["Which customers need follow-up?", "Which quotations are still pending?"]
+        : context.entityType === "employees"
+          ? ["Summarize this employee's activity", "Who has overdue follow-ups?", "Who is below target this month?"]
         : context.entityType === "field-team"
           ? ["Who is active in the field?", "Summarize today's visits", "Which location updates are stale?"]
           : context.entityType === "insights"
@@ -101,7 +104,7 @@ export default function FloatingAIAssistant() {
               <label className="min-w-0 flex-1"><span className="sr-only">Ask MIPRO AI</span><textarea className="min-h-10 max-h-24 w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" rows={1} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about this workspace..." /></label>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-950 text-white hover:bg-blue-900 disabled:opacity-50" type="submit" disabled={chat.isPending || !draft.trim()} aria-label="Send question" title="Send"><Send className="h-4 w-4" /></button>
             </form>
-            <p className="mt-1.5 text-[9px] leading-4 text-slate-400">Rule-backed prototype. Workflow calculations and approvals remain authoritative in the ERP.</p>
+            <p className="mt-1.5 text-[9px] leading-4 text-slate-400">Answers follow your access. Saved business records and approvals remain the source of truth.</p>
           </div>
         </section>
       )}

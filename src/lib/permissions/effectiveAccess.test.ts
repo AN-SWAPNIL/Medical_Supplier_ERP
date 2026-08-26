@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { User } from "../../types/index.js";
-import { canAssignRole, canGrantCapability, canManageTargetUser, hasEffectivePermission, normalizePermissionOverrides } from "./effectiveAccess.js";
+import {
+  canAccessEmployeeHub,
+  canAccessSettings,
+  canAssignRole,
+  canGrantCapability,
+  canManageTargetUser,
+  canManageUserAccess,
+  canViewEmployeeDirectory,
+  canViewManagedEmployeeActivity,
+  getMarketingEmployeeScope,
+  hasEffectivePermission,
+  normalizePermissionOverrides
+} from "./effectiveAccess.js";
 
 function user(overrides: Partial<User> = {}): User {
   return {
@@ -84,4 +96,41 @@ test("access authority cannot be propagated by a non-Super-Admin", () => {
   const accessManager = user({ role: "Managing Director", capabilities: ["manage_user_access", "manage_users"] });
   assert.equal(canGrantCapability(accessManager, "manage_user_access"), false);
   assert.equal(canAssignRole(accessManager, "Super Admin"), false);
+});
+
+test("employee hub composes directory, access and team-management authority", () => {
+  const lifecycleManager = user({
+    role: "Accounts",
+    capabilities: ["manage_users"],
+    permissionOverrides: [{ permission: "users", action: "view", effect: "ALLOW" }]
+  });
+  const accessManager = user({ role: "Import Officer", capabilities: ["manage_user_access"] });
+  const salesManager = user({ role: "Sales Manager" });
+  const salesExecutive = user({ role: "Sales Executive" });
+
+  assert.equal(canViewEmployeeDirectory(lifecycleManager), true);
+  assert.equal(canAccessEmployeeHub(lifecycleManager), true);
+  assert.equal(canAccessSettings(lifecycleManager), false, "users:view alone must not expose generic Settings");
+  assert.equal(canManageUserAccess(accessManager), true);
+  assert.equal(canAccessEmployeeHub(accessManager), true);
+  assert.equal(canViewManagedEmployeeActivity(salesManager), true);
+  assert.equal(canAccessEmployeeHub(salesManager), true);
+  assert.equal(canViewManagedEmployeeActivity(salesExecutive), false);
+  assert.equal(canAccessEmployeeHub(salesExecutive), false);
+});
+
+test("marketing scope follows effective access and never turns a deny into role access", () => {
+  assert.equal(getMarketingEmployeeScope(user({ role: "Super Admin" })), "ALL");
+  assert.equal(getMarketingEmployeeScope(user({ role: "Managing Director" })), "ALL");
+  assert.equal(getMarketingEmployeeScope(user({ role: "Sales Manager" })), "TEAM");
+  assert.equal(getMarketingEmployeeScope(user({ role: "Sales Executive" })), "SELF");
+  assert.equal(getMarketingEmployeeScope(user({ role: "Accounts" })), "NONE");
+  assert.equal(getMarketingEmployeeScope(user({
+    role: "Sales Manager",
+    permissionOverrides: [{ permission: "marketing", action: "view", effect: "DENY" }]
+  })), "NONE");
+  assert.equal(getMarketingEmployeeScope(user({
+    role: "Import Officer",
+    permissionOverrides: [{ permission: "marketing", action: "view", effect: "ALLOW" }]
+  })), "SELF");
 });

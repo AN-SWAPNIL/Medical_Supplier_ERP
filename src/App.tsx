@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
-import { ProtectedRoute, RequireAnyPermission, RequirePermission, RequireSettingsAccess } from "./components/layout/RouteGuards";
+import { ProtectedRoute, RequireAnyPermission, RequireEmployeeHubAccess, RequirePermission, RequireSettingsAccess } from "./components/layout/RouteGuards";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import LoginPage from "./features/auth/LoginPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -24,6 +24,7 @@ const InventoryPage = lazy(() => import("./domains/inventory/InventoryPage"));
 const PrintPage = lazy(() => import("./domains/print/PrintPage"));
 const ReportsPage = lazy(() => import("./domains/reports/ReportsPage"));
 const SalesPage = lazy(() => import("./domains/sales/SalesPage"));
+const EmployeesPage = lazy(() => import("./domains/employees/EmployeesPage"));
 const SettingsPage = lazy(() => import("./domains/settings/SettingsPage"));
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage"));
 const ProfilePage = lazy(() => import("./features/users/ProfilePage"));
@@ -38,6 +39,12 @@ const deferred = (element: ReactNode) => (
 const guarded = (permission: PermissionKey, element: ReactNode) => (
   <RequirePermission permission={permission}>{deferred(element)}</RequirePermission>
 );
+
+function SettingsEntry() {
+  const location = useLocation();
+  if (new URLSearchParams(location.search).get("view") === "users") return <Navigate to="/app/employees?view=directory" replace />;
+  return <RequireSettingsAccess>{deferred(<SettingsPage />)}</RequireSettingsAccess>;
+}
 
 function App() {
   return (
@@ -67,8 +74,9 @@ function App() {
           <Route path="inventory" element={guarded("inventory", <InventoryPage />)} />
           <Route path="sales" element={<RequireAnyPermission permissions={["sales", "marketing"]}>{deferred(<SalesPage />)}</RequireAnyPermission>} />
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
+          <Route path="employees" element={<RequireEmployeeHubAccess>{deferred(<EmployeesPage />)}</RequireEmployeeHubAccess>} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />
-          <Route path="settings" element={<RequireSettingsAccess>{deferred(<SettingsPage />)}</RequireSettingsAccess>} />
+          <Route path="settings" element={<SettingsEntry />} />
           <Route path="insights" element={guarded("dashboard", <SmartInsightsPage />)} />
           <Route path="profile" element={deferred(<ProfilePage />)} />
           <Route path="print/:documentType/:id" element={guarded("print", <PrintPage />)} />
@@ -83,8 +91,8 @@ function App() {
           <Route path="accounts/*" element={<Navigate to="/app/accounts" replace />} />
           <Route path="expenses/*" element={<Navigate to="/app/accounts" replace />} />
           <Route path="audit/*" element={<Navigate to="/app/reports" replace />} />
-          <Route path="users/*" element={<Navigate to="/app/settings" replace />} />
-          <Route path="roles/*" element={<Navigate to="/app/settings" replace />} />
+          <Route path="users/*" element={<Navigate to="/app/employees?view=directory" replace />} />
+          <Route path="roles/*" element={<Navigate to="/app/employees?view=access" replace />} />
           <Route path="master/*" element={<Navigate to="/app/settings" replace />} />
           <Route path="products/*" element={<Navigate to="/app/settings?view=products" replace />} />
           <Route path="suppliers/*" element={<Navigate to="/app/settings?view=suppliers" replace />} />

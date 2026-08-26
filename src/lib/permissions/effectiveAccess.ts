@@ -39,6 +39,32 @@ export function canAccessSettings(user: User | null | undefined) {
   return settingsEntryPermissions.some((permission) => hasEffectivePermission(user, permission, "view"));
 }
 
+export type MarketingEmployeeScope = "NONE" | "SELF" | "TEAM" | "ALL";
+
+export function getMarketingEmployeeScope(user: User | null | undefined): MarketingEmployeeScope {
+  if (!hasEffectivePermission(user, "marketing", "view")) return "NONE";
+  if (user?.role === "Super Admin" || user?.role === "Managing Director") return "ALL";
+  if (user?.role === "Sales Manager") return "TEAM";
+  return "SELF";
+}
+
+export function canViewEmployeeDirectory(user: User | null | undefined) {
+  return hasEffectivePermission(user, "users", "view");
+}
+
+export function canManageUserAccess(user: User | null | undefined) {
+  return Boolean(user?.role === "Super Admin" || hasCapability(user, "manage_user_access"));
+}
+
+export function canViewManagedEmployeeActivity(user: User | null | undefined) {
+  const scope = getMarketingEmployeeScope(user);
+  return scope === "TEAM" || scope === "ALL";
+}
+
+export function canAccessEmployeeHub(user: User | null | undefined) {
+  return canViewEmployeeDirectory(user) || canManageUserAccess(user) || canViewManagedEmployeeActivity(user);
+}
+
 export function canManageEmployees(user: User | null | undefined, action: Extract<PermissionAction, "view" | "create" | "edit">) {
   return hasEffectivePermission(user, "users", action) && (user?.role === "Super Admin" || hasCapability(user, "manage_users"));
 }

@@ -17,7 +17,7 @@ import Avatar from "../ui/Avatar";
 import Toasts from "../ui/Toasts";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { navSections } from "../../lib/permissions/matrix";
-import { canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import { canAccessEmployeeHub, canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { useAIContextStore } from "../../lib/ai/context";
 
 export default function AppLayout() {
@@ -46,8 +46,18 @@ export default function AppLayout() {
     robots.content = "noindex,nofollow";
   }, []);
 
-  const visibleItems = useMemo(
-    () => navSections.flatMap((section) => section.items).filter((item) => item.permission === "settings" ? canAccessSettings(session?.user) : item.path === "/app/sales" ? hasEffectivePermission(session?.user, "sales") || hasEffectivePermission(session?.user, "marketing") : hasEffectivePermission(session?.user, item.permission)),
+  const visibleSections = useMemo(
+    () => navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => {
+          if (item.path === "/app/settings") return canAccessSettings(session?.user);
+          if (item.path === "/app/employees") return canAccessEmployeeHub(session?.user);
+          if (item.path === "/app/sales") return hasEffectivePermission(session?.user, "sales") || hasEffectivePermission(session?.user, "marketing");
+          return hasEffectivePermission(session?.user, item.permission);
+        })
+      }))
+      .filter((section) => section.items.length > 0),
     [session?.user]
   );
 
@@ -85,26 +95,32 @@ export default function AppLayout() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Primary navigation">
-        <p className={clsx("mb-2 px-2 text-[10px] font-bold uppercase text-slate-400", collapsed && "sr-only")}>Workspace</p>
-        <div className="grid gap-1">
-          {visibleItems.map((item) => (
-            <NavLink
-              className={({ isActive }) =>
-                clsx(
-                  "flex h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-semibold transition",
-                  isActive
-                    ? "border-cyan-600 bg-cyan-50 text-blue-950"
-                    : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-                )
-              }
-              key={item.path}
-              to={item.path}
-              onClick={() => setMobileOpen(false)}
-              title={collapsed ? item.label : undefined}
-            >
-              <item.icon className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed ? <span className="truncate">{item.label}</span> : null}
-            </NavLink>
+        <div className="grid gap-4">
+          {visibleSections.map((section) => (
+            <section key={section.label}>
+              <p className={clsx("mb-1.5 px-2 text-[10px] font-bold uppercase text-slate-400", collapsed && "sr-only")}>{section.label}</p>
+              <div className="grid gap-1">
+                {section.items.map((item) => (
+                  <NavLink
+                    className={({ isActive }) =>
+                      clsx(
+                        "flex h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-semibold transition",
+                        isActive
+                          ? "border-cyan-600 bg-cyan-50 text-blue-950"
+                          : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                      )
+                    }
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileOpen(false)}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <item.icon className="h-[18px] w-[18px] shrink-0" />
+                    {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                  </NavLink>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </nav>

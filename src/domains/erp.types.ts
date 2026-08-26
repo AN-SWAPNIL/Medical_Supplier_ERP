@@ -330,6 +330,8 @@ export type Quotation = {
   customerContactSnapshot?: string;
   ownerId: string;
   createdByUserId?: string;
+  createdAt?: string;
+  submittedAt?: string;
   validityDays: number;
   paymentTerms: string;
   remarks?: string;
@@ -352,6 +354,7 @@ export type SalesOrder = {
   customerContactSnapshot?: string;
   ownerId: string;
   createdByUserId?: string;
+  createdAt?: string;
   paymentConditions: string;
   deliveryInstruction: string;
   amountReceived: DecimalString;
@@ -384,6 +387,7 @@ export type Delivery = {
   customerName: string;
   salesOwnerId?: string;
   dispatchedByUserId?: string;
+  postedAt?: string;
   date: string;
   remarks: string;
   receiverName?: string;
@@ -406,6 +410,7 @@ export type Collection = {
   remarks?: string;
   ownerId: string;
   postedByUserId?: string;
+  postedAt?: string;
   status: "Posted" | "Reversed";
 };
 
@@ -617,6 +622,8 @@ export type PrintConfiguration = {
 export type EmployeeDirectoryEntry = SalespersonEmployee & {
   employeeCode: string;
   department: string;
+  phone?: string;
+  avatarUrl?: string;
   status: "Active" | "Pending" | "Inactive";
 };
 
@@ -809,6 +816,7 @@ export type MarketingReportData = {
 };
 
 export type EmployeeMarketingSnapshot = {
+  period: { from: string; to: string };
   employee: EmployeeDirectoryEntry;
   performance: MarketingPerformanceRow;
   recentActivities: MarketingActivity[];
@@ -1019,7 +1027,7 @@ export type LocationUpdateInput = {
 
 export type AIContext = {
   route: string;
-  entityType?: "import" | "inventory" | "sales" | "marketing" | "reports" | "dashboard" | "accounts" | "settings" | "field-team" | "insights";
+  entityType?: "import" | "inventory" | "sales" | "marketing" | "employees" | "reports" | "dashboard" | "accounts" | "settings" | "field-team" | "insights";
   entityId?: string;
   employeeId?: string;
   reportFrom?: string;

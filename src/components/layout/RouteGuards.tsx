@@ -4,7 +4,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Button from "../ui/Button";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { ApiRequestError } from "../../lib/api/client";
-import { canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import { canAccessEmployeeHub, canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import type { PermissionAction, PermissionKey } from "../../types";
 
 export function ProtectedRoute() {
@@ -92,6 +92,11 @@ export function RequireSettingsAccess({ children }: { children: ReactNode }) {
   return canAccessSettings(user) ? <>{children}</> : <AccessDenied permission="settings" />;
 }
 
+export function RequireEmployeeHubAccess({ children }: { children: ReactNode }) {
+  const user = useAuthStore((state) => state.session?.user);
+  return canAccessEmployeeHub(user) ? <>{children}</> : <AccessDenied />;
+}
+
 export function AccessDenied({ permission }: { permission?: PermissionKey }) {
   const navigate = useNavigate();
   const role = useEffectiveRole();
@@ -104,7 +109,7 @@ export function AccessDenied({ permission }: { permission?: PermissionKey }) {
       <h1 className="mt-5 text-2xl font-bold text-slate-950">Access denied</h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         Your current {role} access profile cannot view {permission ? permission.replace("-", " ") : "this module"}.
-        Sign in with an authorized user. Role defaults, personal exceptions and sensitive capabilities are controlled in Settings.
+        Sign in with an authorized user. Role defaults, personal exceptions and sensitive capabilities are controlled in Employees.
       </p>
       <div className="mt-5 flex justify-center gap-2">
         <Button variant="primary" onClick={() => navigate("/app/dashboard")}>

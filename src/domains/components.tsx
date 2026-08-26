@@ -23,7 +23,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={clsx("overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm", className)}>
+    <section className={clsx("min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm", className)}>
       {title || actions ? (
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -76,7 +76,7 @@ export function Segmented<T extends string>({
 }
 
 export function TableFrame({ children }: { children: ReactNode }) {
-  return <div className="w-full overflow-x-auto">{children}</div>;
+  return <div className="min-w-0 max-w-full overflow-x-auto">{children}</div>;
 }
 
 export function Modal({

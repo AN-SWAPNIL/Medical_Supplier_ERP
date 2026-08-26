@@ -84,4 +84,4 @@ export const roleRank: Record<Role, number> = {
   "Sales Executive": 10
 };
 
-export const settingsEntryPermissions: PermissionKey[] = ["settings", "users", "products", "suppliers"];
+export const settingsEntryPermissions: PermissionKey[] = ["settings", "products", "suppliers"];

@@ -76,7 +76,12 @@ const routes = [
   ["sales-mobile", "/app/sales", 390, 1100, people.super],
   ["marketing-desktop", "/app/sales?view=marketing", 1440, 1200, people.salesManager],
   ["marketing-mobile", "/app/sales?view=marketing", 390, 1200, people.sales],
-  ["field-team-desktop", "/app/sales?view=marketing&marketing=field-team", 1440, 1100, people.salesManager],
+  ["employees-directory-desktop", "/app/employees?view=directory", 1440, 1100, people.super],
+  ["employees-directory-mobile", "/app/employees?view=directory", 390, 1100, people.super],
+  ["employees-access-desktop", "/app/employees?view=access", 1440, 1100, people.super],
+  ["employees-activity-desktop", "/app/employees?view=activity&employee=sales1", 1440, 1200, people.salesManager],
+  ["employees-activity-mobile", "/app/employees?view=activity&employee=sales1", 390, 1200, people.salesManager],
+  ["field-team-desktop", "/app/employees?view=field-team", 1440, 1100, people.salesManager],
   ["field-team-mobile", "/app/sales?view=marketing&marketing=field-team", 390, 1100, people.sales],
   ["accounts-desktop", "/app/accounts", 1440, 1000, people.super],
   ["accounts-mobile", "/app/accounts", 390, 1100, people.super],
@@ -89,7 +94,7 @@ const routes = [
   ["smart-insights-mobile", "/app/insights", 390, 1000, people.sales],
   ["settings-desktop", "/app/settings", 1440, 1100, people.super],
   ["settings-mobile", "/app/settings", 390, 1100, people.super],
-  ["settings-delegated-users", "/app/settings?view=users", 1440, 1000, people.salesManager],
+  ["legacy-settings-users-redirect", "/app/settings?view=users", 1440, 1000, people.salesManager],
   ["settings-migration-desktop", "/app/settings?view=migration", 1440, 1100, people.super]
 ];
 
@@ -197,8 +202,25 @@ await employeeReport.getByText("SALES EMPLOYEE PERFORMANCE REPORT", { exact: tru
 await employeeReport.screenshot({ path: "artifacts/print-employee-performance.png", fullPage: true });
 await employeeReport.close();
 
+const employeeHub = await preparePage({ name: "employee-hub-activity-flow", width: 1440, height: 1100, user: people.salesManager });
+await employeeHub.goto(baseUrl + "/app/employees?view=activity&employee=sales1", { waitUntil: "networkidle", timeout: 60000 });
+await employeeHub.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
+await employeeHub.getByLabel("Period").selectOption("This Month");
+await employeeHub.getByText("Employee Activity Timeline", { exact: true }).waitFor();
+if ((await employeeHub.getByText(/Time unavailable/).count()) === 0) issues.push("Employee activity invented or hid the missing time on legacy date-only transactions.");
+const employeeHubText = await employeeHub.locator("body").textContent();
+for (const expectedMetric of ["Verified Visits", "Qualified Leads", "Delivered Sales", "Collections", "Target Progress"]) {
+  if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity & Performance is missing " + expectedMetric + ".");
+}
+await employeeHub.screenshot({ path: "artifacts/employee-hub-activity-flow.png", fullPage: true });
+await employeeHub.getByRole("button", { name: "Full Report" }).click();
+await employeeHub.getByRole("heading", { name: "Marketing Report Builder" }).waitFor({ timeout: 30000 });
+const reportUrl = new URL(employeeHub.url());
+if (reportUrl.searchParams.get("employee") !== "sales1" || !reportUrl.searchParams.get("from") || !reportUrl.searchParams.get("to")) issues.push("Employee Full Report did not carry employee and period context.");
+await employeeHub.close();
+
 const fieldTeam = await preparePage({ name: "field-team-interactions", width: 1440, height: 1050, user: people.salesManager });
-await fieldTeam.goto(baseUrl + "/app/sales?view=marketing&marketing=field-team", { waitUntil: "domcontentloaded", timeout: 60000 });
+await fieldTeam.goto(baseUrl + "/app/employees?view=field-team", { waitUntil: "domcontentloaded", timeout: 60000 });
 await fieldTeam.getByTestId("field-team-workspace").waitFor({ timeout: 30000 });
 await fieldTeam.locator(".leaflet-container").waitFor({ timeout: 30000 });
 await fieldTeam.waitForTimeout(1000);
@@ -274,21 +296,21 @@ await mobileAi.screenshot({ path: "artifacts/contextual-ai-mobile.png", fullPage
 await mobileAi.close();
 
 const expectedNavigation = new Map([
-  [people.super, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports", "Settings"]],
-  [people.md, ["Dashboard", "Imports", "Inventory", "Sales", "Expenses & Accounts", "Reports"]],
-  [people.accounts, ["Dashboard", "Sales", "Expenses & Accounts", "Reports"]],
+  [people.super, ["Dashboard", "Imports", "Inventory", "Sales & Marketing", "Expenses & Accounts", "Employees", "Reports", "Settings"]],
+  [people.md, ["Dashboard", "Imports", "Inventory", "Sales & Marketing", "Expenses & Accounts", "Employees", "Reports"]],
+  [people.accounts, ["Dashboard", "Sales & Marketing", "Expenses & Accounts", "Reports"]],
   [people.import, ["Dashboard", "Imports", "Reports", "Settings"]],
   [people.warehouse, ["Dashboard", "Imports", "Inventory"]],
-  [people.salesManager, ["Dashboard", "Inventory", "Sales", "Reports", "Settings"]],
-  [people.sales, ["Dashboard", "Sales", "Reports"]]
+  [people.salesManager, ["Dashboard", "Inventory", "Sales & Marketing", "Employees", "Reports"]],
+  [people.sales, ["Dashboard", "Sales & Marketing", "Reports"]]
 ]);
 const deniedRoute = new Map([
   [people.md, "/app/settings"],
-  [people.accounts, "/app/imports"],
+  [people.accounts, "/app/employees"],
   [people.import, "/app/accounts"],
   [people.warehouse, "/app/accounts"],
   [people.salesManager, "/app/imports"],
-  [people.sales, "/app/accounts"]
+  [people.sales, "/app/employees"]
 ]);
 
 for (const [user, expected] of expectedNavigation) {
@@ -310,26 +332,28 @@ for (const [user, expected] of expectedNavigation) {
 
 const delegatedSettings = await preparePage({ name: "delegated-settings-access", width: 1280, height: 900, user: people.salesManager });
 await delegatedSettings.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
+if (new URL(delegatedSettings.url()).pathname !== "/app/employees") issues.push("Legacy Settings user route did not redirect to Employees.");
 const delegatedTabs = (await delegatedSettings.getByRole("tab").allTextContents()).map((value) => value.trim());
-if (delegatedTabs.length !== 1 || !delegatedTabs[0]?.startsWith("Users & Capabilities")) {
-  issues.push("Delegated employee manager received unrelated Settings tabs: " + JSON.stringify(delegatedTabs));
+if (!delegatedTabs.some((tab) => tab.startsWith("Employee Directory")) || delegatedTabs.some((tab) => tab.startsWith("Access & Roles"))) {
+  issues.push("Delegated employee manager received incorrect Employees tabs: " + JSON.stringify(delegatedTabs));
 }
-if ((await delegatedSettings.getByRole("button", { name: "New User" }).count()) !== 1) issues.push("Delegated employee manager cannot create a permitted employee.");
-await delegatedSettings.getByRole("button", { name: "Edit Rafiq Ahmed" }).click();
+if ((await delegatedSettings.getByRole("button", { name: "New Employee" }).count()) !== 1) issues.push("Delegated employee manager cannot create a permitted employee.");
+await delegatedSettings.getByRole("button", { name: "Open Rafiq Ahmed" }).click();
 await delegatedSettings.getByRole("dialog").waitFor();
-if ((await delegatedSettings.getByText("Additional Access", { exact: true }).count()) !== 0) issues.push("Delegated employee manager can see access-administration controls.");
+if ((await delegatedSettings.getByText("Employee-specific access", { exact: false }).count()) !== 0) issues.push("Delegated employee manager can see access-administration controls.");
 if (await delegatedSettings.getByLabel("Assigned Role").isEditable()) issues.push("Delegated employee manager can change an assigned role.");
-await delegatedSettings.screenshot({ path: "artifacts/settings-delegated-profile-editor.png", fullPage: true });
+await delegatedSettings.screenshot({ path: "artifacts/employees-delegated-profile-editor.png", fullPage: true });
 await delegatedSettings.close();
 
 const ownerAccessEditor = await preparePage({ name: "owner-access-editor", width: 1440, height: 1050, user: people.super });
-await ownerAccessEditor.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
-await ownerAccessEditor.getByRole("button", { name: "Edit Tanvir Hasan" }).click();
-await ownerAccessEditor.getByRole("dialog").waitFor();
-await ownerAccessEditor.getByText("Additional Access", { exact: false }).click();
-if ((await ownerAccessEditor.getByText("Role Access Summary", { exact: false }).count()) === 0) issues.push("Owner access editor is missing the inherited role summary.");
-if ((await ownerAccessEditor.getByText("Sensitive Capabilities", { exact: true }).count()) === 0) issues.push("Owner access editor is missing sensitive-capability controls.");
-await ownerAccessEditor.screenshot({ path: "artifacts/settings-owner-access-editor.png", fullPage: true });
+await ownerAccessEditor.goto(baseUrl + "/app/employees?view=access", { waitUntil: "networkidle", timeout: 60000 });
+await ownerAccessEditor.getByRole("button", { name: "Edit Tanvir Hasan access" }).click();
+const ownerAccessDialog = ownerAccessEditor.getByRole("dialog");
+await ownerAccessDialog.waitFor();
+await ownerAccessDialog.locator("summary").filter({ hasText: "Employee-specific access" }).click();
+if ((await ownerAccessDialog.getByText("Role default access", { exact: false }).count()) === 0) issues.push("Owner access editor is missing the inherited role summary.");
+if ((await ownerAccessDialog.getByText("Sensitive capabilities", { exact: true }).count()) === 0) issues.push("Owner access editor is missing sensitive-capability controls.");
+await ownerAccessEditor.screenshot({ path: "artifacts/employees-owner-access-editor.png", fullPage: true });
 await ownerAccessEditor.close();
 
 const liveRoleTarget = await preparePage({ name: "live-role-target", width: 1280, height: 900, user: people.md });
@@ -338,12 +362,12 @@ try {
   await liveRoleTarget.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
   if ((await liveRoleTarget.getByText("Could not load this workspace", { exact: true }).count()) !== 0) issues.push("Managing Director Sales failed before the live role test.");
 
-  await liveRoleAdmin.goto(baseUrl + "/app/settings?view=users", { waitUntil: "networkidle", timeout: 60000 });
-  await liveRoleAdmin.getByRole("button", { name: "Edit Mahmud Rahman" }).click();
+  await liveRoleAdmin.goto(baseUrl + "/app/employees?view=access", { waitUntil: "networkidle", timeout: 60000 });
+  await liveRoleAdmin.getByRole("button", { name: "Edit Mahmud Rahman access" }).click();
   const roleDialog = liveRoleAdmin.getByRole("dialog");
   await roleDialog.getByLabel("Assigned Role").selectOption("Warehouse Manager");
-  await roleDialog.getByRole("button", { name: "Save User Access" }).click();
-  await liveRoleAdmin.getByText("User access updated", { exact: true }).waitFor({ timeout: 15000 });
+  await roleDialog.getByRole("button", { name: "Save Access" }).click();
+  await liveRoleAdmin.getByText("Mahmud Rahman's access updated", { exact: true }).waitFor({ timeout: 15000 });
 
   await liveRoleTarget.evaluate(() => window.dispatchEvent(new Event("focus")));
   await liveRoleTarget.getByText("Access denied", { exact: true }).waitFor({ timeout: 15000 });
@@ -408,8 +432,25 @@ await salesPage.getByRole("dialog").getByRole("button", { name: "Reschedule" }).
 await salesPage.screenshot({ path: "artifacts/marketing-connected-actions.png", fullPage: true });
 await salesPage.close();
 
+const dashboardQuickAction = await preparePage({ name: "dashboard-quick-action", width: 1280, height: 900, user: people.sales });
+await dashboardQuickAction.goto(baseUrl + "/app/dashboard", { waitUntil: "networkidle", timeout: 60000 });
+await dashboardQuickAction.getByRole("link", { name: "Report Activity" }).click();
+await dashboardQuickAction.getByRole("heading", { name: "Report Marketing Activity" }).waitFor({ timeout: 30000 });
+await dashboardQuickAction.close();
+
+const liveMarketing = await preparePage({ name: "marketing-live-polling", width: 1280, height: 900, user: people.salesManager });
+let marketingDashboardResponses = 0;
+liveMarketing.on("response", (response) => {
+  if (response.url().includes("/api/marketing/dashboard") && response.ok()) marketingDashboardResponses += 1;
+});
+await liveMarketing.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
+await liveMarketing.getByText(/refreshes every 12 seconds/i).waitFor({ timeout: 30000 });
+await liveMarketing.waitForTimeout(12_500);
+if (marketingDashboardResponses < 2) issues.push("Marketing dashboard did not auto-refresh within the promised 12-second prototype interval.");
+await liveMarketing.close();
+
 const headers = { "x-user-id": people.super.id, "x-role": people.super.role, "Content-Type": "application/json" };
-for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/marketing/dashboard", "/api/reports/marketing", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
+for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/marketing/dashboard", "/api/marketing/employees/sales1/snapshot?from=2026-08-01&to=2026-08-31", "/api/reports/marketing", "/api/settings/users", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
   const response = await fetch(apiBaseUrl + path, { headers });
   console.log("api " + path + ": " + response.status);
   if (!response.ok) issues.push(path + " returned " + response.status);

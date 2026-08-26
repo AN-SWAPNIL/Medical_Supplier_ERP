@@ -1,6 +1,6 @@
 # MIPRO Digital Platform
 
-A corporate MiproBD website and protected workflow-driven ERP, backed by a temporary Express mock API. `files/MIPRO_ERP_Simplified_Plan_update5.md` and `files/MIPRO_ERP_AccessRole_Analysis.md` are the latest ERP access-control source of truth. Update4 and the landing-page analysis remain authoritative for the public/private platform separation, while update3 remains the validated operational workflow foundation.
+A corporate MiproBD website and protected workflow-driven ERP, backed by a temporary Express mock API. `files/MIPRO_ERP_Simplified_Plan_update7.md` and `files/MIPRO_ERP_Employee_Management_Analysis.md` are the latest information-architecture and Employee Hub source of truth. Update6 remains the Marketing operations foundation, update5 defines access control, update4 defines public/private separation, and update3 remains the validated import/inventory/sales foundation.
 
 ## Current Scope
 
@@ -24,7 +24,7 @@ Settings -> Products & Aliases -> ERP Product
   internal code, unit, sale price, stock, landed cost and aliases
 ```
 
-The first Super Admin is provisioned once through the production identity/backend deployment process, not through a public registration page and not through routine manual database editing. That owner then creates employee accounts under `Settings -> Users & Capabilities`.
+The first Super Admin is provisioned once through the production identity/backend deployment process, not through a public registration page and not through routine manual database editing. That owner then creates employee/login records under `Employees -> Employee Directory` and controls access under `Employees -> Access & Roles`.
 
 The internal application connects:
 
@@ -35,11 +35,11 @@ Import case -> landed-cost snapshot -> warehouse batch stock
 
 Import cases begin at PO stage before PI/LC, statuses are action-derived, and authoritative item/cost math runs on the API. Legacy stock/customer balances can be migrated through Settings.
 
-Operating expenses and cash/bank transactions are tracked separately. The active application has a maximum of seven areas:
+Operating expenses and cash/bank transactions are tracked separately. A fully authorized owner has eight grouped destinations:
 
-`Dashboard`, `Imports`, `Inventory`, `Sales`, `Expenses & Accounts`, `Reports`, `Settings`.
+`Dashboard`, `Imports`, `Inventory`, `Sales & Marketing`, `Expenses & Accounts`, `Employees`, `Reports`, `Settings`.
 
-Contextual features stay inside those areas: protected PDF/image viewing, scalable salesperson reports, a role-scoped Field Team map inside Sales, Smart Insights, reviewed import-document extraction, and a floating role-safe MIPRO AI assistant. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
+Unauthorized destinations and Employee subtabs are hidden by effective access. Employees composes Directory, Login Account, Access & Roles, the shared Field Team map, and Activity & Performance. Sales staff still perform daily work in Sales & Marketing. Protected PDF/image viewing, Smart Insights, reviewed import-document extraction, and floating role-safe MIPRO AI remain contextual. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
 
 ## Stack
 
@@ -100,7 +100,7 @@ The seven roles are default templates rather than a growing collection of specia
 Role default -> explicit per-user ALLOW/DENY -> sensitive capability -> record/data scope
 ```
 
-An explicit `DENY` wins over `ALLOW`, and an inactive user has no effective access. Settings shows and fetches only subviews the user may open. Employee management (`manage_users` plus `users:*`) remains separate from the more sensitive `manage_user_access` authority.
+An explicit `DENY` wins over `ALLOW`, and an inactive user has no effective access. Employee lifecycle (`manage_users` plus `users:*`) remains separate from the more sensitive `manage_user_access` authority. Employee access alone does not expose generic Settings.
 
 The seed demonstrates this model: the Import Officer receives Reports view/export without a new role; the Sales Manager receives delegated lower-role employee administration but has Reports export explicitly denied. Direct API requests enforce the same result as the sidebar and route guards.
 
@@ -122,10 +122,14 @@ The seed demonstrates this model: the Import Officer receives Reports view/expor
 /app/inventory
 /app/sales
 /app/accounts
+/app/employees
+/app/employees?view=directory
+/app/employees?view=access
+/app/employees?view=field-team
+/app/employees?view=activity&employee=sales1
 /app/reports
 /app/settings
 /app/settings?view=website
-/app/settings?view=users
 /app/profile
 /app/print/:documentType/:id
 ```
@@ -139,9 +143,11 @@ src/domains/
   imports/       one case workspace and deterministic costing
   inventory/     stock, batch and movement views
   sales/         customer, quote/order, delivery and collection
+  marketing/     daily activity, leads, follow-ups, plans, targets and polling hub
   accounts/      expenses, accounts, transactions and dues
+  employees/     directory, login account, access, field team and activity/performance composition
   reports/       grouped operational reports
-  settings/      users, capabilities, master/setup records and Website Content
+  settings/      master/setup records and Website Content
   print/         business document previews
   erp.types.ts   shared DTO contracts
   schemas.ts     Zod API response schemas
@@ -196,7 +202,7 @@ Customs duty is entered as the final assessed amount per product. The applicatio
 - Reports apply API-side date filters and export actual detail rows.
 - Salesperson performance preserves the business owner through quotation, order, delivery and collection; Sales Executives can request only their own report.
 - Uploaded import/cost/expense files open through an authorized API endpoint; sensitive cost documents require the same cost capability as the record.
-- MIPRO AI receives route/entity/report-period context and only role-scoped records. It explains deterministic rules but cannot finalize, post or override them.
+- MIPRO AI receives route/entity/selected-employee/report-period context and only role-scoped records. It can summarize permitted employee activity or explain access read-only, but cannot grant access, finalize, post or override business records.
 - Digital/preprinted A4 prints use the supplied MIPRO/LED stationery and Order Receiving Sheet structure.
 
 ## Commands

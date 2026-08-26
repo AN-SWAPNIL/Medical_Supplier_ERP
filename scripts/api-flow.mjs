@@ -26,7 +26,7 @@ function rememberOutput(chunk) {
 }
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
     if (server && server.exitCode !== null) throw new Error("Mock API exited before startup.\n" + serverOutput);
     try {
       const response = await fetch(base + "/api/health");
@@ -595,6 +595,29 @@ async function run() {
   assert.match(reportAi.answer, /2026-08-01 to 2026-08-31/);
   assert.equal(reportAi.restricted, false);
   assert.doesNotMatch(JSON.stringify(reportAi), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
+  const employeeAi = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.salesManager,
+    body: { message: "Summarize Rafiq's activity today", context: { route: "/app/employees?view=activity&employee=" + identities.sales1.id, entityType: "employees", employeeId: identities.sales1.id } }
+  });
+  assert.equal(employeeAi.restricted, false);
+  assert.match(employeeAi.answer, /Rafiq/);
+  assert.ok(employeeAi.sources.every((source) => source.path.startsWith("/app/employees")));
+  const employeeAiDirectDenied = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.sales1,
+    body: { message: "Summarize another employee", context: { route: "/app/employees", entityType: "employees", employeeId: identities.sales2.id } }
+  });
+  assert.equal(employeeAiDirectDenied.restricted, true);
+  assert.equal(employeeAiDirectDenied.sources.length, 0);
+  const employeeAccessAi = await api("/api/ai/chat", {
+    method: "POST",
+    as: identities.super,
+    body: { message: "Explain this employee's access", context: { route: "/app/employees?view=access&employee=" + identities.sales1.id, entityType: "employees", employeeId: identities.sales1.id } }
+  });
+  assert.equal(employeeAccessAi.restricted, false);
+  assert.match(employeeAccessAi.answer, /read-only|cannot grant|cannot revoke/i);
+  assert.ok(employeeAccessAi.sources.some((source) => source.path.includes("view=access")));
 
   console.log("9. Marketing hub, scope, funnel, plans and practical reports");
   await api("/api/marketing/dashboard", { as: identities.accounts, expected: 403 });
@@ -634,6 +657,12 @@ async function run() {
     body: { date: today, customerId: convertedMarketingCustomer.id, leadId: marketingLead.id, validityDays: 15, paymentTerms: "30 days", remarks: "Created from the Marketing lead without re-entry", lines: [{ productId: "prd-d17h", quantity: "5", unitPrice: "700", discount: "0" }] }
   });
   assert.equal(linkedQuotation.leadId, marketingLead.id);
+  assert.match(linkedQuotation.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/);
+  const sentLinkedQuotation = await api("/api/quotations/" + linkedQuotation.id, { method: "PATCH", as: identities.sales1, body: { status: "Sent" } });
+  assert.match(sentLinkedQuotation.submittedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/);
+  const timestampedActivities = await api("/api/marketing/activities?from=" + monthStart + "&to=" + today, { as: identities.sales1 });
+  assert.equal(timestampedActivities.find((entry) => entry.referenceId === linkedQuotation.id)?.occurredAt, sentLinkedQuotation.submittedAt);
+  assert.equal(timestampedActivities.find((entry) => entry.referenceId === "quo-1")?.occurredAt, "2026-08-18", "Legacy date-only sales activity must not receive an invented time.");
   assert.equal((await api("/api/marketing/leads", { as: identities.sales1 })).find((entry) => entry.id === marketingLead.id).stage, "QUOTATION");
   const monthlyPlan = await api("/api/marketing/plans/monthly", { method: "POST", as: identities.sales1, body: { userId: identities.sales2.id, month: today.slice(0, 7), prioritySubjects: [convertedMarketingCustomer.name], productIds: ["prd-d17h"], plannedActivities: 35, notes: "Own plan identity test" } });
   assert.equal(monthlyPlan.userId, identities.sales1.id);
@@ -653,6 +682,11 @@ async function run() {
   assert.ok(marketingReport.tables.some((entry) => entry.id === "marketing-activity"));
   assert.ok(marketingReport.tables.some((entry) => entry.id === "lead-funnel"));
   assert.ok(marketingReport.performance.some((entry) => entry.employee.id === identities.sales1.id));
+  const employeeSnapshot = await api("/api/marketing/employees/" + identities.sales1.id + "/snapshot?from=" + monthStart + "&to=" + today, { as: identities.salesManager });
+  assert.deepEqual(employeeSnapshot.period, { from: monthStart, to: today });
+  assert.equal(employeeSnapshot.employee.id, identities.sales1.id);
+  assert.ok(employeeSnapshot.recentActivities.every((entry) => entry.userId === identities.sales1.id));
+  await api("/api/marketing/employees/" + identities.sales2.id + "/snapshot?from=" + monthStart + "&to=" + today, { as: identities.sales1, expected: 403 });
   await api("/api/reports/marketing/export-authorization", { as: identities.sales1, expected: 403 });
   await api("/api/reports/marketing/export-authorization", { as: identities.salesManager });
   const marketingAi = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who has overdue follow-ups today?", context: { route: "/app/sales?view=marketing", entityType: "marketing" } } });
@@ -711,7 +745,7 @@ async function run() {
   assert.equal(fieldAiRestricted.restricted, true);
   const fieldAiManager = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who is active in the field?", context: { route: "/app/sales?view=marketing&marketing=field-team", entityType: "field-team" } } });
   assert.equal(fieldAiManager.restricted, false);
-  assert.ok(fieldAiManager.sources.some((source) => source.path.includes("view=marketing") && source.path.includes("marketing=field-team")));
+  assert.ok(fieldAiManager.sources.some((source) => source.path.startsWith("/app/employees?view=field-team")));
   const managerInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.salesManager });
   assert.ok(managerInsights.some((entry) => entry.category === "Field Team"));
   assert.ok(managerInsights.every((entry) => entry.sourcePath && entry.recommendedAction));

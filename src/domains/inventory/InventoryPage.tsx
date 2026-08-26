@@ -68,7 +68,7 @@ export default function InventoryPage() {
       </div>
 
       {view === "stock" ? (
-        <Panel title="Available stock" subtitle="Images and canonical variant codes reduce product-selection mistakes.">
+        <Panel title="Available stock" subtitle="Product images and variant codes help prevent selection mistakes.">
           <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
             {stock.map((row) => (
               <article className="flex min-w-0 gap-3 rounded-md border border-slate-200 p-3" key={row.productId}>

@@ -2,9 +2,9 @@
 
 ## Client Presentation Guide
 
-**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 26 August 2026 Marketing Management update6
+**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 26 August 2026 Employee Hub and full-system UX update7
 
-**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update6.md` for the client-reviewed Marketing, reporting, and expense changes; update5 and `files/MIPRO_ERP_AccessRole_Analysis.md` for access control; update4 for the public/private platform; update3 for the validated import, inventory, and sales workflow
+**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update7.md` and `files/MIPRO_ERP_Employee_Management_Analysis.md` for the current navigation, Employees hub, Marketing correctness, and reporting UX; update6 for Marketing operations; update5 for access control; update4 for the public/private platform; update3 for validated import, inventory, and sales workflow
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -23,7 +23,8 @@ Home -> About -> Products -> Certificates -> News -> Contact
                               |
                               v
 PROTECTED MIPRO ERP
-Imports -> Inventory -> Sales -> Collections -> Accounts -> Reports
+Imports -> Inventory -> Sales & Marketing -> Expenses & Accounts
+                    Employees -> Reports -> Settings
 ```
 
 The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. Its visual homepage rotates approved product and distribution messages, calculates published catalogue/document counts, filters product families, and lets visitors inspect the supply process. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures.
@@ -40,7 +41,7 @@ Super Admin input
 
 The public product record is not the ERP product master. The public record contains approved images, descriptions, variants, specifications and document relationships. The ERP record contains internal code, unit, price, stock, landed cost and aliases. This separation is the control that prevents confidential operational data from leaking onto the website.
 
-Employee accounts are created internally by Super Admin; the public Request Access flow has been removed. The first Super Admin is provisioned once through the production identity/backend deployment process. After that, the owner creates employees and assigns roles under `Settings -> Users & Capabilities`; routine direct database editing and public owner registration are both avoided.
+Employee accounts are created internally by Super Admin; the public Request Access flow has been removed. The first Super Admin is provisioned once through the production identity/backend deployment process. After that, the owner creates employees under `Employees -> Employee Directory` and assigns access under `Employees -> Access & Roles`; routine direct database editing and public owner registration are both avoided.
 
 Inside the protected boundary, MIPRO ERP connects two real business flows through warehouse stock:
 
@@ -75,15 +76,15 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Registered MIPRO identity, product imagery, corporate About, curated resources, contact map and inquiry flow.
 - Authorized manufacturer certificate scans migrated from the previous MiproBD site, with holder, product scope, visible dates, current/historical status, preview and download; none are presented as MIPRO corporate certificates.
 - Employee Portal login that is production-safe by default; demo users require `VITE_DEMO_MODE=true`.
-- Public signup removed; employee provisioning remains in Settings -> Users & Capabilities.
+- Public signup removed; employee provisioning and access administration live in the protected Employees hub.
 - Seven stable role templates plus per-user Allow/Deny exceptions, without inventing a new role for every staff variation.
 - Delegated employee administration is separate from role, permission and sensitive-capability administration.
 - SEO metadata, sitemap, robots rules and old MiproBD product redirects.
-- Exactly seven possible main destinations.
+- Eight possible main destinations for Super Admin, grouped as Workspace, Operations, Management, and System; each role sees only relevant destinations.
 - Draft imports begin with supplier, PO and product lines; PI and LC/TT are added later to the same case.
 - One import workspace instead of separate PI, PO, LC, shipment, customs, costing, and GRN pages.
 - One sales workspace instead of disconnected quotation, order, challan, and collection pages.
-- One-click **Sales -> Marketing** hub for daily activity, leads, follow-ups, funnel, plans, targets, field verification, team performance, and practical report shortcuts.
+- One-click **Sales & Marketing -> Marketing** hub for daily activity, leads, follow-ups, funnel, plans, targets, field verification, team performance, and practical report shortcuts.
 - One unified marketing feed that combines employee-entered work with authoritative quotation, order, delivery, collection, visit, follow-up, and lead-conversion events.
 - Qualified website inquiry conversion into an assigned marketing lead, with no automatic conversion of unreviewed inquiries.
 - Server-derived milestones instead of manually selectable financial/warehouse statuses.
@@ -95,9 +96,11 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Employee/date-filtered salesperson performance with all-person comparison and individual print.
 - Protected PDF/image viewing for import, cost, and expense evidence.
 - Floating contextual MIPRO AI, reviewed document extraction, and smart operational recommendations.
-- A real coordinate-based Field Team workspace inside Marketing with clustering, timestamps, status rules, customer visits, route history, foreground start/stop, and GPS check-in/check-out.
+- A canonical coordinate-based **Employees -> Field Team** management workspace, with a Sales & Marketing shortcut and a self-only field/check-in experience for Sales Executives.
+- One Employees destination composing Employee Directory, Login Account, Access & Roles, Field Team, and Activity & Performance from existing user, RBAC, Marketing, sales, collection, and location records.
+- Marketing dashboard polling every 12 seconds, real timestamps for new quotation/order/delivery/collection events, and honest `Time unavailable` labels on legacy date-only records.
 - Searchable EmployeePicker, territory filtering, sortable/paginated team performance, and report-to-field-activity links.
-- A role-safe Smart Insights review queue linked from Dashboard, without adding an eighth main destination.
+- A role-safe Smart Insights review queue linked from Dashboard, without adding another main destination.
 
 ### Intentionally deferred
 
@@ -108,7 +111,7 @@ The latest client meetings and actual spreadsheets showed that the earlier proto
 - Full general ledger, trial balance, and balance sheet
 - Automatic customs, VAT, AIT, or HS-code duty formulas
 
-There is no GPS sidebar module or AI Command Center. Field Team stays inside Sales, Smart Insights is a secondary Dashboard route, and the floating assistant remains contextual. The web currently consumes a clearly labelled demo location feed through the same typed contracts intended for the future mobile client.
+There is no separate GPS sidebar module or AI Command Center. Field Team management stays under Employees, Marketing links to it, Smart Insights is a secondary Dashboard route, and the floating assistant remains contextual. The web currently consumes a clearly labelled demo location feed through the same typed contracts intended for the future mobile client.
 
 ---
 
@@ -119,10 +122,11 @@ There is no GPS sidebar module or AI Command Center. Field Team stays inside Sal
 | Dashboard | Role-safe KPIs and items requiring action |
 | Imports | One case from commercial setup through cost and receiving |
 | Inventory | Stock, batches, expiry awareness, and movement history |
-| Sales | Marketing, customers, quotations/orders, deliveries, and collections |
+| Sales & Marketing | Marketing work, customers, quotations/orders, deliveries, and collections |
 | Expenses & Accounts | Operating expenses, cash/bank, dues, and transaction ledger |
+| Employees | Employee profiles and login accounts, access and roles, field team, activity and performance |
 | Reports | Grouped operational reports and narrow audit history |
-| Settings | Users, capabilities, Website Content, master data, setup, print identity, and open client decisions |
+| Settings | Website Content, product/supplier master data, business setup, migration, print identity, and open client decisions |
 
 Workflow stages appear inside these areas as sections or segmented views. They are not extra navigation modules.
 
@@ -130,19 +134,19 @@ Workflow stages appear inside these areas as sections or segmented views. They a
 
 ## 4. Role Access
 
-The login page selects a seeded user identity for the demonstration. It does not temporarily impersonate a role, and there is no role switch after login. In production, authorized administrators create employee accounts in Settings.
+The login page selects a seeded user identity for the demonstration. It does not temporarily impersonate a role, and there is no role switch after login. In production, authorized administrators create employee accounts in Employees.
 
 The seven roles remain understandable default templates:
 
 | Role | Default main navigation | Contextual access |
 |---|---|---|
-| Super Admin / Owner | All seven areas | Full owner-authorized actions and access administration |
-| Managing Director | Dashboard, Imports, Inventory, Sales, Expenses & Accounts, Reports | Review, all-sales Marketing visibility, target approval, and export |
+| Super Admin / Owner | All eight areas | Full owner-authorized actions and access administration |
+| Managing Director | Dashboard, Imports, Inventory, Sales & Marketing, Expenses & Accounts, Employees, Reports | Review, all-sales Marketing visibility, Field Team, Activity & Performance, target approval, and export |
 | Import Officer | Dashboard, Imports, Settings | Commercial/import work plus permitted Product and Supplier setup |
 | Warehouse Manager | Dashboard, Imports, Inventory | Finalized import receiving reference and warehouse work |
-| Accounts | Dashboard, Sales, Expenses & Accounts, Reports | Customer dues, collections, expenses, cash/bank |
-| Sales Manager | Dashboard, Inventory, Sales, Reports | Team Marketing, targets, commercial records, available stock, and export |
-| Sales Executive | Dashboard, Sales, Reports | Own leads, visits, plans, customers, sales records, activity, and performance only |
+| Accounts | Dashboard, Sales & Marketing, Expenses & Accounts, Reports | Customer dues, collections, expenses, cash/bank |
+| Sales Manager | Dashboard, Inventory, Sales & Marketing, Employees, Reports | Team Marketing, Field Team, employee activity/performance, targets, commercial records, available stock, and export |
+| Sales Executive | Dashboard, Sales & Marketing, Reports | Own leads, visits, plans, customers, sales records, activity, and performance only; no team Employees hub |
 
 The final access calculation is:
 
@@ -154,7 +158,7 @@ Role default
   -> sidebar, route, action, API, document, report and AI result
 ```
 
-An explicit Deny wins. The current demo makes the behavior visible: Tanvir remains an Import Officer but receives Reports View/Export; Farhana remains a Sales Manager but receives delegated employee management and has Reports Export denied. Settings then shows Farhana only the Users tab, while Tanvir sees only his permitted setup tabs. No new hybrid role is required.
+An explicit Deny wins. The current demo makes the behavior visible: Tanvir remains an Import Officer but receives Reports View/Export; Farhana remains a Sales Manager but receives delegated employee lifecycle access and has Reports Export denied. Farhana sees Employees directly but no Access & Roles tab; generic Settings is not exposed solely because she can maintain employees. Tanvir sees only his permitted Product/Supplier setup. No hybrid role is required.
 
 Directly typing an unauthorized URL still shows **Access denied**, and a direct API attempt returns `403`. Menu hiding is only the first visible layer.
 
@@ -204,17 +208,17 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | Public product | Super Admin | Super Admin | Independent public record may be unpublished or deleted without touching ERP stock | Super Admin chooses Draft, Published and Featured | Approved image/copy/specifications appear publicly; no price, cost, stock or supplier data is exposed |
 | Public certificate / resource | Super Admin | Super Admin | Delete removes only the public projection and cleans public relationships | Super Admin verifies ownership/scope and publication state | Approved document or guidance appears on Certificates/Resources |
 | Website business inquiry | Public visitor submits validated form | Super Admin records status and internal follow-up note | Unconverted prototype inquiry may be removed; a converted inquiry is retained | Super Admin qualifies, then explicitly assigns and converts | Qualified inquiry becomes one Marketing lead; never creates an ERP login |
-| ERP canonical product | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced; otherwise deactivate | No separate approval | Internal item used by import, stock, and sales |
-| Product alias | Super Admin | Super Admin | Remove mapping without deleting the canonical product | Super Admin | Legacy spreadsheet spelling maps to one product |
+| ERP product | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced; otherwise deactivate | No separate approval | Approved internal item used by import, stock, and sales |
+| Product alias | Super Admin | Super Admin | Remove mapping without deleting the product | Super Admin | Legacy spreadsheet spelling maps to one product |
 | Supplier | Super Admin or Import Officer | Same permitted roles | Super Admin deletes only when unreferenced | No separate approval | Reused by import cases |
 | Import commercial data | Import Officer or Super Admin | Same roles before finalization | Draft/unposted case only | No separate approval | One connected import case |
 | Import product line | Import Officer or Super Admin | Same roles before finalization | Before cost finalization | No separate approval | Quantity, FOB, CBM, and HS reference |
 | Import document/file | Import users | Import users | Protected after transaction use | Human reviews any extracted fields | PI, LC, BL, customs, and other evidence opens through an authorized viewer |
 | Import cost line/file | User with `edit_sensitive_cost` | Same capability before finalization | Before finalization | Owner reviews through preview | Named cost, allocation rule, and protected supporting evidence |
-| Landed-cost snapshot | System calculates | Immutable after finalization | Never physically deleted | `finalize_landed_cost` | Historical per-product/per-unit cost |
+| Finalized landed cost | System calculates | Locked after finalization | Never physically deleted | `finalize_landed_cost` | Historical per-product/per-unit cost; immutable snapshot retained in audit data |
 | Reopen landed cost | Not applicable | Authorized owner with reason, before first receipt only | Old snapshot remains in history | `reopen_landed_cost` | Audited correction cycle; post-receipt reopen is blocked |
 | Warehouse receipt | Warehouse Manager or Super Admin | Posted as a receipt transaction | No silent delete | Receiving user posts | Batch/lot stock and stock-in movement |
-| Customer | Sales Manager, Sales Executive, Super Admin | Owner-scoped for Sales Executive | Only when no protected transactions | No approval in current scope | One normalized customer ledger |
+| Customer | Sales Manager, Sales Executive, Super Admin | Own-record scope for Sales Executive | Only when no protected transactions | No approval in current scope | One customer profile and running ledger |
 | Marketing lead | Sales Executive creates own; Sales Manager/Super Admin assign within scope | Assigned employee or authorized manager | Mark Lost with a reason; keep history | No separate approval | Follow-up, visit, conversion, and quotation retain one lead reference |
 | Daily activity | Signed-in Sales Executive only | Own scoped record | No transaction event may be manually imitated | Session identity and API validation | Live feed updates; meaningful activity may advance the lead monotonically |
 | Follow-up / plan | Sales Executive for self; manager within team scope | Same permitted scope | Complete, reschedule, or cancel instead of deleting history | Monthly plan may be approved by management | Today/overdue queues and plan-versus-actual remain connected |
@@ -230,6 +234,7 @@ Use Super Admin for the complete presentation. Sign out and use one other role n
 | Customer opening balance | Super Admin | Posted migration transaction | One opening per customer | Super Admin posts | First running-ledger due at cutover |
 | Employee/user profile | Super Admin or delegated lower-role employee manager | Only lower-ranked employees; never self, peers, higher roles or Super Admin | Deactivate rather than erase history; final active Super Admin is protected | `manage_users` plus matching `users:*` action | Employment/status update with audit history |
 | Role/permission/capability/password | Super Admin or explicit access manager | Protected by hierarchy and grant-authority checks | No hard-delete; every access change is audited | `manage_user_access`; only Super Admin can delegate that authority | Effective route, action, document and sensitive-field access |
+| Employee activity/performance | Sales Executive enters manual work; field/sales/collection flows add system events | Employee owns submitted work; managers review permitted team | Business history is retained; corrections follow source workflow | No manual actual approval | Employees view combines visits, leads, follow-ups, quotes, orders, delivery, collection, score and target progress |
 | AI extraction | Import user requests it | User selects fields to apply through normal forms | Extraction itself changes nothing | Human review is mandatory | Suggested values pass through existing validation and audit |
 | AI recommendation/chat | System reads role-scoped records | User may dismiss locally or open its source | No operational record is deleted | AI cannot approve/post/finalize | Explanation and next-step guidance only |
 | Current field location | Signed-in salesperson foreground web client now; mobile client later | The same salesperson supplies newer points | Coordinates stay as history; no ordinary delete | Tracking session and API scope validate the write | Role-scoped live/last marker with timestamp and accuracy |
@@ -254,7 +259,7 @@ Settings
   Print Configuration +--> Printed documents
 ```
 
-Users select existing records instead of repeatedly typing names. Product variants such as Dialyzer 1.7H and 1.7L remain distinct canonical products.
+Users select existing records instead of repeatedly typing names. Product variants such as Dialyzer 1.7H and 1.7L remain distinct approved products.
 
 ### 7.2 Import creates stock
 
@@ -317,7 +322,7 @@ Rent, salaries, utilities, office transport, entertainment, and TA/DA never chan
 
 ### Start before PI or LC
 
-Click **New Import** to create the case with supplier, PO number/date, at least one canonical product line, optional target shipment date, and notes. The system generates `IMP-YYYY-NNN`. PI and payment mode are intentionally optional at this point.
+Click **New Import** to create the case with supplier, PO number/date, at least one approved product line, optional target shipment date, and notes. The system generates `IMP-YYYY-NNN`. PI and payment mode are intentionally optional at this point.
 
 When the supplier PI is added, the API derives **PI Received**. When an LC number or TT reference is recorded, that value becomes the main visible reference for the same record. No record is copied or recreated.
 
@@ -381,7 +386,7 @@ Local covered-van transport defaults to CBM because the latest meeting confirmed
 
 Inventory has only three internal views:
 
-- **Stock:** available quantity by canonical product, with image, sale price, FIFO lot, and nearest expiry.
+- **Stock:** available quantity by approved product, with image, sale price, FIFO lot, and nearest expiry.
 - **Batches:** lot, batch, import reference, receipt date, manufacturing/expiry, warehouse location, and available quantity.
 - **Movements:** stock-in and stock-out transaction history.
 
@@ -405,9 +410,9 @@ Expiry categories (`Expired`, `1 Month Alert`, `3 Month Alert`, `6 Month Alert`,
 
 ---
 
-## 10. Sales Walkthrough
+## 10. Sales & Marketing Walkthrough
 
-Sales has five internal views:
+Sales & Marketing has five internal views:
 
 1. **Customers**
 2. **Marketing**
@@ -417,19 +422,19 @@ Sales has five internal views:
 
 ### One-click Marketing hub
 
-**Sales -> Marketing** opens the daily operating screen itself, not another menu. Management sees team-safe KPIs, live activity, follow-up attention, funnel, Field Team status, and target performance. A Sales Executive sees only **My Marketing Day**, own plan, own follow-ups, own leads, own visits, and own performance.
+**Sales & Marketing -> Marketing** opens the daily operating screen itself, not another menu. Management sees team-safe KPIs, activity, follow-up attention, funnel, Field Team status, and target performance. A Sales Executive sees only **My Marketing Day**, own plan, own follow-ups, own leads, own visits, and own performance. The prototype refreshes the Marketing dashboard every 12 seconds, including when management leaves the browser tab in the background.
 
-The quick actions open in-place forms for Activity, Lead, Follow-up, Daily Plan, Monthly Plan, Target, Field Check In/Out, and Generate Report. Employee names in the feed and performance grid open one snapshot with links to field activity and the full performance report.
+The action bar prioritizes Report Activity, New Lead, Follow-up, Check In/Out, and Generate Report. Less frequent Daily Plan, Monthly Plan, and Target actions stay in the compact More menu. Manager employee links open **Employees -> Activity & Performance**, with one-click Field Map and Full Report links.
 
-The Lead Pipeline has contextual **Follow-up**, **Report Visit**, **Convert**, and **Quotation** actions. Each carries the selected lead into the next form. Daily-plan rows select a canonical permitted customer or lead; a user cannot self-certify a row as completed. A matching verified field check-out marks it complete. The follow-up queue supports both a documented completion outcome and a validated reschedule time.
+The Lead Pipeline has contextual **Follow-up**, **Report Visit**, **Convert**, and **Quotation** actions. Each carries the selected lead into the next form. Clicking a funnel stage opens exactly that stage instead of an unfiltered lead list. Daily-plan rows select a permitted customer or lead; a user cannot self-certify a row as completed. A matching verified field check-out marks it complete. The follow-up queue supports both a documented completion outcome and a validated reschedule time.
 
 ```text
 Signed-in employee
   -> Lead / customer contact / presentation / sample / negotiation
   -> next follow-up and optional evidence
-  -> one role-scoped Live Activity feed
+  -> one access-controlled Activity feed
 
-Authoritative ERP events
+Saved ERP events
   -> Field visit check-in/check-out
   -> Quotation
   -> Order
@@ -453,7 +458,7 @@ Marketing scope is independent of permission: Sales Executive = self; Sales Mana
 
 The customer's historical spreadsheet tab becomes one customer row plus connected transactions. Opening legacy balances can be posted at a cutover date. The detail ledger shows delivered sales, collections, current due, credit terms, transaction references, discounts/remarks, and a running balance.
 
-Product aliases from the legacy `Item Mapping` sheet map spelling variants to a canonical product, preventing duplicate inventory identities.
+Product aliases from the legacy `Item Mapping` sheet map spelling variants to one approved product, preventing duplicate inventory identities.
 
 Every customer row provides role-safe shortcuts to Marketing History, a preselected Quotation, and a preselected Collection. Direct report URLs repeat the same subject-scope check on the API, so changing a query string cannot expose another salesperson's customer history.
 
@@ -511,7 +516,70 @@ Posting creates a debit against the selected cash/bank account. Collections crea
 
 ---
 
-## 12. Reports And Audit
+## 12. Employees Walkthrough
+
+Employees is the management home for people, login accounts, access, location, activity, and performance. It does not create a second employee database and it is not an HR/payroll module.
+
+The four permission-aware internal views are:
+
+1. **Employee Directory**
+2. **Access & Roles**
+3. **Field Team**
+4. **Activity & Performance**
+
+The tabs themselves follow authority. Super Admin sees all four. Sales Manager sees Directory when delegated plus Field Team and Activity & Performance from team scope, but does not see Access & Roles. Managing Director sees team monitoring views. Sales Executive continues daily work in Sales & Marketing and has no team-wide Employees destination.
+
+### Employee Directory and login account
+
+```text
+Employee Directory
+  -> profile image, name, phone
+  -> employee ID, designation, department, territory
+  -> login email, assigned role, account status
+  -> compact permitted actions: Open, Activity, Field Map, Report, Access
+```
+
+Search covers name, employee ID, department, territory, and login. Filters cover department, role, status, and territory. **New Employee** creates the employee profile and login account in one record. The profile editor supports an image URL or a temporary image upload for the running demo.
+
+### Lifecycle authority versus access authority
+
+Employee lifecycle and security administration are intentionally separate:
+
+```text
+users:view/create/edit + manage_users
+  -> create employee
+  -> edit profile/employment/territory
+  -> activate, mark pending, or deactivate
+
+manage_user_access
+  -> assign role
+  -> add employee-specific ALLOW
+  -> add explicit DENY
+  -> grant controlled sensitive capabilities
+  -> reset login password
+```
+
+A lifecycle manager cannot change role or permissions. A normal team manager cannot automatically see security details. Super Admin cannot deactivate the final active owner. The access editor shows role defaults, additional allowance, explicit denial, and sensitive capabilities without exposing them through the safe employee directory API.
+
+### Field Team and Activity & Performance
+
+**Employees -> Field Team** reuses the same map, route, location, visit, and GPS services previously reached through Marketing. It is the single management home; the Marketing shortcut routes here instead of duplicating the map.
+
+Activity & Performance answers two questions quickly: what did this employee do, and how are they performing? Select an employee and Today, Yesterday, This Week, Last Week, This Month, Last Month, or Custom. The view combines:
+
+- check-in/check-out, visits, and verified visits;
+- new and qualified leads, follow-ups, presentations, and samples;
+- quotations, orders, delivered sales, and collections;
+- activity score and sales/visit/customer/collection target progress;
+- one mixed timeline from manual Marketing, FieldVisit, Quotation, Order, Delivery, and Collection records;
+- Today, Overdue, and Upcoming follow-up attention;
+- the selected employee's daily plan when the period includes today.
+
+New transactions store exact `createdAt`, `submittedAt`, or `postedAt` values. A legacy record that has only a date displays **Time unavailable** instead of an invented hour. **Field Map** focuses the employee in the canonical map. **Full Report** opens Reports with employee and period already selected.
+
+---
+
+## 13. Reports And Audit
 
 Reports remain one destination grouped into:
 
@@ -526,7 +594,7 @@ The From/To dates are sent to the API and applied before period totals/tables ar
 
 Detailed tables include import register, cost breakdown, landed cost by product/batch, current batch stock, expiry attention, movements, sales by customer/product/month, collections, receivables, running customer ledger, daily expenditure, category summary, TA/DA sheet data, and cash/bank transactions. Realized delivered profit uses the actual dispatched batch landed cost and is owner/capability-only.
 
-The Marketing report builder offers Today, Yesterday, This/Last Week, This/Last Month, and Custom periods; employee, territory, activity, customer/lead, verification, and status filters; Summary/Detail mode; and grouping by Employee, Date, Territory, Customer, Activity Type, or Lead Stage. Practical presets cover daily activity, weekly summary, employee performance, funnel, overdue follow-ups, target versus actual, and verified visits. Print uses the current filtered report, and Marketing CSV requires `marketing:export` in addition to report access.
+The Marketing report builder offers Today, Yesterday, This/Last Week, This/Last Month, and Custom periods. Employee and Summary/Detail mode stay visible. **More Filters** progressively reveals territory, activity, searchable customer/lead, verification, status, and grouping by Employee, Date, Territory, Customer, Activity Type, or Lead Stage. A filter count keeps hidden criteria visible. Practical presets cover daily activity, weekly summary, employee performance, funnel, overdue follow-ups, target versus actual, and verified visits. Print uses the current filtered report, and Marketing CSV requires `marketing:export` in addition to report access.
 
 ### Salesperson Performance
 
@@ -558,7 +626,7 @@ The narrow audit captures high-risk actions such as:
 
 ---
 
-## 13. Documents And Contextual AI
+## 14. Documents And Contextual AI
 
 ### Protected document flow
 
@@ -581,12 +649,15 @@ The assistant is fixed at the bottom-right on desktop and becomes a near-full-sc
 - Inventory: FIFO lot and expiry attention matching the deterministic engine.
 - Sales: own/team-visible dues, open quotations, and follow-up suggestions.
 - Marketing: role-scoped overdue follow-ups, untouched leads, negotiation attention, target progress, and employee activity summaries.
+- Employees: selected-employee activity, overdue team follow-ups, below-target staff, tracking attention, and read-only access explanations for authorized access managers.
 - Reports: current-period sales/collection and employee summaries.
 - Dashboard: role-safe management priorities.
 - Field Team: current/last status, visit context, stale feeds, and own/team scope.
 - Smart Insights: explanation and source navigation for the current review queue.
 
 The assistant cannot call finalization, dispatch, collection, or update endpoints. Document extraction returns proposed fields with confidence and warnings; all checkboxes begin unselected, and the user explicitly applies verified fields through the same validation used by manual editing. In this release answers are deterministic mock intelligence behind replaceable typed endpoints, not a production model claim.
+
+Employee answers use the same effective-access resolver as the Employees tabs. A team manager may summarize only permitted sales employees; a directory-only manager cannot read team performance; only an access manager may request role/override/capability explanations. Even then, the assistant is read-only and directs the user to **Employees -> Access & Roles** for an authorized human change.
 
 ### Field Team management flow
 
@@ -597,7 +668,8 @@ Future Web/Mobile Sales Client
   -> optional customer visit check-in/check-out
   -> shared field-team API
   -> current-location feed + historical points + visits
-  -> Sales > Marketing > Field Team map and employee performance report
+  -> Employees > Field Team map and Activity & Performance
+  -> Reports for historical/exportable analysis
 ```
 
 The current release supplies realistic mock records through that boundary and labels them **Demo location feed**. Leaflet renders actual latitude/longitude markers, clustering, pan/zoom, customer points and stored-coordinate route polylines. It never calls an old coordinate "live" and never estimates distance from the number of stops.
@@ -608,33 +680,33 @@ Access is enforced by the API: Super Admin and Managing Director see the full op
 
 ---
 
-## 14. Settings, Delegation And Client Confirmation Queue
+## 15. Settings And Client Confirmation Queue
 
 Settings is one permission-filtered workspace, not one all-or-nothing owner page. It appears when the signed-in user can view at least one permitted subview, and it fetches data only for the active permitted tab.
 
 | Settings subview | Required access |
 |---|---|
 | Client Confirmation Queue | `settings:view` |
-| Users & Capabilities | `users:view` plus `manage_users` |
 | Products & Aliases | `products:view` |
 | Suppliers | `suppliers:view` |
 | Business Setup | `settings:view` |
 | Data Migration | `settings:view` |
 | Website Content | Super Admin in the current release |
 
-Super Admin sees all setup data: users, ERP products/images/aliases, suppliers, public website content, website inquiries, cash/bank accounts, main warehouse, expense categories, import cost presets, print configuration, opening-data migration and client decisions.
+Super Admin sees all setup data: ERP products/images/aliases, suppliers, public website content, website inquiries, cash/bank accounts, main warehouse, expense categories, import cost presets, print configuration, opening-data migration and client decisions. Employee and access administration stays in Employees.
 
-The existing role editor now includes the normal `marketing` permission with View/Create/Edit/Approve/Export actions. Scope remains server-enforced after permission is granted. Business Setup also contains the seven configurable Marketing Score Rules; changing a weight affects future/current deterministic score calculation but does not turn manual notes into transaction points.
+The Access & Roles editor in Employees includes the normal `marketing` permission with View/Create/Edit/Approve/Export actions. Scope remains server-enforced after permission is granted. Business Setup contains the seven configurable Marketing Score Rules; changing a weight affects score calculation but does not turn manual notes into transaction points.
 
 Use these direct presentation paths:
 
 ```text
 /app/settings?view=website  -> public content, publication and inquiry queue
-/app/settings?view=products -> ERP canonical products and aliases
-/app/settings?view=users    -> employee roles, exceptions and capabilities
+/app/settings?view=products -> ERP products and legacy aliases
+/app/employees?view=directory -> employee profiles and login accounts
+/app/employees?view=access    -> roles, exceptions and sensitive capabilities
 ```
 
-The same user modal deliberately separates two jobs:
+The Employees workspace deliberately separates two jobs:
 
 - **Employee manager:** profile, employment, territory and account status for lower-ranked staff only.
 - **Access manager:** assigned role, read-only Role Access Summary, per-action Default/Allow/Deny exceptions, sensitive capabilities and password changes.
@@ -655,7 +727,7 @@ Each decision stores the question, current behavior, status, actual resolution v
 
 ---
 
-## 15. What An API Call Means
+## 16. What An API Call Means
 
 For a non-technical audience, describe the API as the system's controlled messenger.
 
@@ -694,7 +766,7 @@ You are not showing code for its own sake. You are proving:
 
 ---
 
-## 16. API Map
+## 17. API Map
 
 ### Session and dashboard
 
@@ -744,11 +816,20 @@ You are not showing code for its own sake. You are proving:
 | `GET/POST /api/deliveries` | Post actual batch delivery and stock-out |
 | `GET/POST /api/collections` | Validate real payment account, post receipt, and reduce due |
 
+### Employees
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/employees/directory?scope=marketing` | Safe employee identity projection for selectors, expenses, Field Team, and team scope |
+| `GET /api/settings/users` | Authorized employee lifecycle list; security details are returned only to an access manager |
+| `POST/PATCH /api/settings/users/*` | Create or update the same employee/login record with hierarchy and escalation protection |
+| `GET /api/marketing/employees/:id/snapshot?from=&to=` | Period-aware Activity & Performance data for one permitted employee |
+| `GET /api/field-team/*` | Canonical location, route, visit, and tracking services reused inside Employees |
+
 ### Marketing
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/employees/directory?scope=marketing` | Return only safe, role-scoped employee selector fields |
 | `GET /api/marketing/dashboard` | One-click self/team/all Marketing hub projection |
 | `GET/POST /api/marketing/activities` | Unified feed query and signed-in employee manual activity |
 | `GET/POST/PATCH /api/marketing/leads/*` | Role-scoped lead, assignment, Lost reason, and Lead-to-Customer conversion |
@@ -757,7 +838,7 @@ You are not showing code for its own sake. You are proving:
 | `GET/POST /api/marketing/plans/monthly` | Lightweight monthly focus and planned-activity record |
 | `GET/POST/PATCH /api/marketing/targets/*` | Management target assignment and update |
 | `GET /api/marketing/performance` | Official transaction-backed actuals, progress, and score |
-| `GET /api/marketing/employees/:id/snapshot` | Cross-linked employee day, funnel, follow-up, target, and activity context |
+| `GET /api/marketing/employees/:id/snapshot` | Cross-linked employee period, funnel, follow-up, target, and activity context |
 | `GET/PATCH /api/marketing/score-rules/*` | Read weights; Super Admin-only score configuration |
 | `GET /api/reports/marketing?...` | Practical filtered/grouped Summary or Detail report |
 | `GET /api/reports/marketing/export-authorization` | Require `marketing:export` before CSV |
@@ -783,7 +864,7 @@ You are not showing code for its own sake. You are proving:
 | `GET/POST /api/expenses` | Read/post operating expense |
 | `POST /api/expenses/:id/reverse` | Reverse with reason |
 | `GET /api/accounts` | Cash/bank positions |
-| `GET /api/account-transactions` | Simple transaction ledger |
+| `GET /api/account-transactions` | Account ledger |
 | `GET /api/reports?from=...&to=...` | Date-filtered role-safe totals and detailed report tables |
 | `GET /api/reports/salespeople?from=...&to=...&employeeId=...` | All-person comparison or one authorized employee report |
 | `GET /api/reports/marketing?from=...&to=...` | Scoped activity, funnel, follow-up, target, score, and verification reports |
@@ -796,15 +877,14 @@ You are not showing code for its own sake. You are proving:
 | `GET/POST/PATCH/DELETE /api/suppliers/*` | Supplier master |
 | `/api/settings/opening-stock` | Post a historical stock batch and receive movement |
 | `/api/settings/customer-opening-balances` | Post a reconciled legacy customer due |
-| `/api/settings/product-aliases` | Map legacy names to canonical products |
+| `/api/settings/product-aliases` | Map legacy names to approved products |
 | `POST /api/settings/website/inquiries/:id/convert-to-lead` | Convert only a Qualified inquiry and assign an active Sales Executive |
-| `GET/POST/PATCH /api/settings/users/*` | List, create or update users with effective-permission, hierarchy and escalation checks |
-| `/api/settings/*` | Users, decisions, accounts, warehouse, presets, and print calibration |
+| `/api/settings/*` | Decisions, accounts, warehouse, presets, website content, and print calibration |
 | `GET /api/audit` | Narrow high-risk audit trail |
 
 ---
 
-## 17. Temporary Data Behavior
+## 18. Temporary Data Behavior
 
 This release is a complete functional frontend backed by an in-memory Express API.
 
@@ -820,7 +900,7 @@ This is correct for frontend workflow approval. Production requires persistent a
 
 ---
 
-## 18. Ten Acceptance Scenarios
+## 19. Acceptance Scenarios
 
 ### A. Multi-product import costing
 
@@ -861,9 +941,12 @@ This is correct for frontend workflow approval. Production requires persistent a
 
 ### E. Employee performance
 
-- Sales Manager compares all executives for a selected From/To period.
+- Super Admin opens Employees, searches the directory, and edits one employee's profile/login account with image.
+- Sales Manager sees Employee Directory, Field Team, and Activity & Performance but not Access & Roles.
+- Super Admin opens Access & Roles and sees role defaults, additional ALLOW, explicit DENY, and sensitive capabilities.
+- Sales Manager selects an executive and period in Activity & Performance, then opens the preselected Field Map and Full Report.
 - One employee report shows owned quotes, inherited deliveries, collections, customers, and products.
-- Individual A4 print uses the same report data.
+- Legacy date-only activity displays Time unavailable; newly posted transactions display actual timestamps.
 - Sales Executive cannot request another employee or receive cost/profit fields.
 
 ### F. Protected documents
@@ -878,38 +961,41 @@ This is correct for frontend workflow approval. Production requires persistent a
 - Import questions use the current `LC-77612` context and link back to the record.
 - FIFO/expiry recommendation agrees with deterministic inventory data.
 - Sales follow-up is scoped to the signed-in role.
+- Sales Manager asks `Summarize Rafiq's activity today` from Employees and receives only team-scoped activity plus an Employees source link.
+- Super Admin asks for an access explanation and is directed to Access & Roles; the assistant cannot grant or revoke anything.
 - Sales Executive landed-cost/profit question returns a restriction without a secret value.
 
-### H. Field Team and scalable employee reporting
+### H. Field Team and employee reporting
 
-- Sales Manager sees the permitted team on real latitude/longitude markers and can filter by employee, territory, and derived status.
+- Sales Manager opens Employees -> Field Team and sees the permitted team on real latitude/longitude markers, filtered by employee, territory, and status.
 - Marker detail always shows last-updated time and GPS accuracy; stale data is never labelled live.
 - Route History draws the stored coordinate sequence and lists visit check-in/out events without inventing route distance.
 - Sales Executive current/history endpoints contain only self; Accounts/Import/Warehouse receive `403`.
-- EmployeePicker searches name, employee ID, and territory; team comparison supports territory, search, sorting, and pagination.
-- Employee performance links to Field Activity and the field card links back to the same employee report.
+- EmployeePicker searches name, employee ID, and territory.
+- Activity & Performance links to the focused Field Map and to Reports with employee/period already selected.
 
 ### I. Smart Insights
 
-- Dashboard links to the secondary `/app/insights` review queue without changing the seven-item sidebar.
+- Dashboard links to the secondary `/app/insights` review queue without adding another sidebar destination.
 - Category/severity filters use the same role-safe recommendation API as the floating assistant.
 - Dismiss removes only the local alert card and never posts or mutates an operational transaction.
 - Field Team AI cannot reveal another salesperson to a Sales Executive.
 
 ### J. One-click Marketing workflow
 
-- Sales Executive opens Sales -> Marketing and immediately sees only My Day, plan, follow-ups, activity, leads, visits, target, and score.
+- Sales Executive opens Sales & Marketing -> Marketing and immediately sees only My Day, plan, follow-ups, activity, leads, visits, target, and score.
 - New lead, contact, next follow-up, conversion to customer, and quotation carry one reference chain without re-entry.
 - Quotation/order/delivery/collection events appear automatically and advance the funnel; the employee cannot manually claim them.
 - GPS check-out stores products, outcome, evidence, and follow-up, then completes the matching daily-plan item.
-- Sales Manager sees team scope, employee snapshot, field map, targets, practical reports, and CSV; Accounts receives `403` for Marketing.
+- Sales Manager sees team scope, needs-attention summary, employee Activity & Performance, Field Team, targets, practical reports, and CSV; Accounts receives `403` for Marketing.
+- The manager page polls every 12 seconds. Funnel clicks filter the chosen stage, and old date-only transactions never receive invented times.
 - A Qualified website inquiry converts once into an assigned lead and cannot then be deleted from history.
 
 These scenarios are covered by automated unit, API-flow, role, and browser smoke tests.
 
 ---
 
-## 19. Recommended Live Presentation Order
+## 20. Recommended Live Presentation Order
 
 1. Landing page: explain the two flows and shared warehouse bridge.
 2. Login: choose Super Admin and explain fixed role identity.
@@ -918,28 +1004,31 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 5. Import sections: show progressive PI/LC entry, then open the PI PDF and Extract Fields review.
 6. Cost preview: open the freight evidence, expand an allocation explanation, and explain exact reconciliation.
 7. Inventory: show product images, smart FIFO/expiry alert, opening/import batches, and multi-batch FIFO.
-8. Sales -> Marketing: show one-click KPIs, live feed, follow-ups, funnel, employee snapshot, quick report presets, and transaction-derived events.
-9. Marketing -> Field Team: show the demo-feed label, clustered map, status/territory filters, marker detail, Route History, and Sales Executive check-in/out controls.
-10. Reports -> Marketing: apply period/employee/activity/subject filters, switch Summary/Detail, group the data, print, and authorize CSV.
-11. Smart Insights: open from Dashboard, filter Inventory/Field Team, open a source, and dismiss one card.
-12. Deliveries: explain the automatic batch split and stock-out.
-13. Collections: explain due and account update.
-14. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
-15. MIPRO AI: ask about the current import and Field Team, then show role-safe source links.
-16. Settings: edit a user, show Role Access Summary, Additional Access Default/Allow/Deny, sensitive capabilities, aliases, opening data, print identities, and decisions.
-17. Sign in as Import Officer: show Reports added by a personal Allow while confidential cost remains protected.
-18. Sign in as Sales Manager: show Settings with only Users, create/edit a lower-role employee, and show the missing Report Export action.
-19. Sign in as Sales Executive: prove own Sales/Reports/My Activity, direct employee denial, and AI cost/location refusal.
+8. Sales & Marketing -> Marketing: show one-click KPIs, 12-second refresh, follow-ups, stage-filtered funnel, needs-attention summary, and transaction-derived events.
+9. Employees -> Directory: show search/filter, profile image, employment/login fields, and compact actions.
+10. Employees -> Access & Roles: show role defaults, employee-specific Allow/Deny, sensitive capabilities, and hierarchy protection.
+11. Employees -> Activity & Performance: select Rafiq and This Month, show timeline, targets/follow-ups, Time unavailable, then open Field Map.
+12. Reports -> Marketing: show the carried employee/period, open More Filters, search a customer/lead, switch Summary/Detail, print, and authorize CSV.
+13. Smart Insights: open from Dashboard, filter Inventory/Field Team, open a source, and dismiss one card.
+14. Deliveries: explain the automatic batch split and stock-out.
+15. Collections: explain due and account update.
+16. Expenses & Accounts: prove operating costs stay separate and open the utility receipt image.
+17. MIPRO AI: ask about the current employee/import context, then show role-safe source links.
+18. Settings: show aliases, opening data, business setup, website content, print identities, and decisions; explain why users are no longer hidden here.
+19. Sign in as Import Officer: show Reports added by a personal Allow while confidential cost remains protected.
+20. Sign in as Sales Manager: show Employees without Access & Roles, create/edit a lower-role employee, and show the missing Report Export action.
+21. Sign in as Sales Executive: prove own Sales & Marketing/Reports, direct Employees denial, and AI cost/location refusal.
 
 ---
 
-## 20. Honest Production Position
+## 21. Honest Production Position
 
 ### Complete in this release
 
 - Simplified route and navigation architecture
 - Canonical role-default, per-user Allow/Deny, sensitive-capability and data-scope enforcement across frontend and server
 - Delegated employee administration with hierarchy, final-owner and privilege-escalation protection
+- Direct Employees hub with Directory, Login Account, Access & Roles, canonical Field Team, and Activity & Performance
 - Connected import, costing, receipt, stock, Marketing, lead, follow-up, sales, collection, expense, report, and settings flows
 - PO-first drafts, server-derived milestones, terminal case controls, and authoritative Decimal item bases
 - Deterministic Decimal.js allocation engine
@@ -953,6 +1042,7 @@ These scenarios are covered by automated unit, API-flow, role, and browser smoke
 - Contextual role-safe MIPRO AI, smart alerts, source links, and reviewed extraction
 - Leaflet/OSM field-team map with marker clustering, derived status, role-scoped history, foreground tracking, and functional GPS visit check-in/check-out
 - One-click Marketing hub, self/team/all scope, unified activity feed, lead conversion, plans, targets, configurable scores, and practical reports
+- Twelve-second Marketing polling, real transaction timestamps, honest legacy time labels, funnel-stage filtering, and progressively disclosed report filters
 - Qualified public-inquiry-to-lead conversion with assignment and audit history
 - Structured Employee/Office/Warehouse/Company expense attribution and expanded expense reports
 - Searchable EmployeePicker, territory/search/sort/pagination, and performance-to-field navigation
@@ -975,7 +1065,7 @@ The frontend is ready for client workflow approval and backend integration. It m
 
 ---
 
-## 21. Likely Client Questions
+## 22. Likely Client Questions
 
 **Why are there fewer tabs now?**
 
@@ -1027,7 +1117,7 @@ The latest client flow is quotation -> order -> challan -> collection. Invoice i
 
 **Where are AI, GPS, HR, and fleet?**
 
-Contextual MIPRO AI and the web field workflow are active. Sales -> Marketing -> Field Team displays a clearly labelled demo feed with real coordinates, clustering, current/stale/offline rules, visit history, strict own/team access, foreground tracking, and functional GPS visit check-in/check-out. The future native mobile app, reliable tracking after browser closure, Supabase realtime persistence, HR/payroll, and fleet remain later phases. A production AI model and persistent document intelligence also belong to the backend phase.
+Contextual MIPRO AI and the web field workflow are active. Employees -> Field Team is the shared management view and displays a clearly labelled demo feed with real coordinates, clustering, current/stale/offline rules, visit history, and strict team access. Sales Executives retain the self-only foreground tracking and GPS visit check-in/check-out experience inside Sales & Marketing. The future native mobile app, reliable tracking after browser closure, Supabase realtime persistence, HR/payroll, and fleet remain later phases. A production AI model and persistent document intelligence also belong to the backend phase.
 
 **Will demo changes remain forever?**
 

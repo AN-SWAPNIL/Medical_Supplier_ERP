@@ -203,7 +203,10 @@ export const salesService = {
 };
 
 export const employeeService = {
-  directory: (scope: "all" | "marketing" = "all") => get<EmployeeDirectoryEntry[]>(`/api/employees/directory?scope=${scope}`, z.array(EmployeeDirectoryEntrySchema))
+  directory: (scope: "all" | "marketing" = "all") => get<EmployeeDirectoryEntry[]>(`/api/employees/directory?scope=${scope}`, z.array(EmployeeDirectoryEntrySchema)),
+  managedUsers: () => get<User[]>("/api/settings/users", z.array(UserSchema)),
+  createUser: (payload: Partial<User> & { password?: string }) => post<User>("/api/settings/users", payload, UserSchema),
+  updateUser: (id: string, payload: Partial<User> & { password?: string }) => patch<User>("/api/settings/users/" + id, payload, UserSchema)
 };
 
 export const marketingService = {
@@ -230,7 +233,12 @@ export const marketingService = {
   saveTarget: (payload: Partial<EmployeeMarketingTarget>) => post<EmployeeMarketingTarget>("/api/marketing/targets", payload, EmployeeMarketingTargetSchema),
   updateTarget: (id: string, payload: Partial<EmployeeMarketingTarget>) => patch<EmployeeMarketingTarget>(`/api/marketing/targets/${id}`, payload, EmployeeMarketingTargetSchema),
   performance: (from: string, to: string, employeeId = "all") => get<MarketingPerformanceRow[]>(`/api/marketing/performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, z.array(MarketingPerformanceRowSchema)),
-  employeeSnapshot: (employeeId: string) => get<EmployeeMarketingSnapshot>(`/api/marketing/employees/${encodeURIComponent(employeeId)}/snapshot`, EmployeeMarketingSnapshotSchema),
+  employeeSnapshot: (employeeId: string, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    return get<EmployeeMarketingSnapshot>(`/api/marketing/employees/${encodeURIComponent(employeeId)}/snapshot${params.size ? `?${params}` : ""}`, EmployeeMarketingSnapshotSchema);
+  },
   scoreRules: () => get<MarketingScoreRule[]>("/api/marketing/score-rules", z.array(MarketingScoreRuleSchema)),
   updateScoreRule: (id: string, payload: Partial<MarketingScoreRule>) => patch<MarketingScoreRule>(`/api/marketing/score-rules/${id}`, payload, MarketingScoreRuleSchema)
 };

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CreditCard, Eye, Landmark, Plus, RotateCcw, WalletCards } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import DocumentViewer from "../../components/documents/DocumentViewer";
 import ExpenseEntryForm from "./ExpenseEntryForm";
@@ -19,7 +19,10 @@ type View = "expenses" | "accounts" | "transactions" | "dues";
 type Task = { run: () => Promise<unknown>; success: string };
 
 export default function AccountsPage() {
-  const [view, setView] = useState<View>("expenses");
+  const [params, setParams] = useSearchParams();
+  const requestedView = params.get("view");
+  const initialView = (["expenses", "accounts", "transactions", "dues"] as View[]).includes(requestedView as View) ? requestedView as View : "expenses";
+  const [view, setViewState] = useState<View>(initialView);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [reverseExpense, setReverseExpense] = useState<Expense | null>(null);
@@ -32,6 +35,27 @@ export default function AccountsPage() {
   const canPost = hasEffectivePermission(user, "accounts", "post");
   const canCreateCategory = hasEffectivePermission(user, "settings", "create");
   const canPostCollection = hasEffectivePermission(user, "sales", "post");
+
+  const setView = (next: View) => {
+    setViewState(next);
+    setParams({ view: next }, { replace: true });
+  };
+
+  useEffect(() => {
+    if ((["expenses", "accounts", "transactions", "dues"] as View[]).includes(requestedView as View) && requestedView !== view) setViewState(requestedView as View);
+  }, [requestedView, view]);
+
+  useEffect(() => {
+    if (params.get("action") !== "expense") return;
+    if (canPost) {
+      setViewState("expenses");
+      setExpenseOpen(true);
+    }
+    const next = new URLSearchParams(params);
+    next.delete("action");
+    next.set("view", "expenses");
+    setParams(next, { replace: true });
+  }, [canPost, params, setParams]);
 
   const expenseQuery = useQuery({ queryKey: ["accounts", "expenses"], queryFn: accountsService.expenses });
   const categoriesQuery = useQuery({ queryKey: ["accounts", "categories"], queryFn: accountsService.categories });
@@ -98,8 +122,8 @@ export default function AccountsPage() {
         options={[
           { value: "expenses", label: "Daily Expenses", count: expenses.length },
           { value: "accounts", label: "Cash & Bank", count: accounts.length },
-          { value: "transactions", label: "Transactions", count: transactions.length },
-          { value: "dues", label: "Collections & Dues", count: customers.filter((customer) => Number(customer.currentDue) > 0).length }
+          { value: "transactions", label: "Account Ledger", count: transactions.length },
+          { value: "dues", label: "Customer Dues & Collections", count: customers.filter((customer) => Number(customer.currentDue) > 0).length }
         ]}
       />
 
@@ -123,7 +147,7 @@ export default function AccountsPage() {
       ) : null}
 
       {view === "transactions" ? (
-        <Panel title="Simple transaction ledger" subtitle="Every collection, expense and reversal identifies its source record.">
+        <Panel title="Account ledger" subtitle="Every collection, expense and reversal identifies its source record.">
           <TableFrame>
             <table className="min-w-[950px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">In</th><th className="px-4 py-3 text-right">Out</th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.map((transaction) => <tr key={transaction.id}><td className="px-4 py-3 text-slate-600">{transaction.date}</td><td className="px-4 py-3 font-semibold">{transaction.accountName}</td><td className="px-4 py-3"><span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{transaction.sourceType}</span></td><td className="px-4 py-3 text-slate-600">{transaction.description}</td><td className="px-4 py-3 text-right font-bold text-emerald-700">{transaction.direction === "In" ? formatCurrency(transaction.amount) : "-"}</td><td className="px-4 py-3 text-right font-bold text-red-700">{transaction.direction === "Out" ? formatCurrency(transaction.amount) : "-"}</td></tr>)}</tbody></table>
           </TableFrame>
@@ -132,7 +156,7 @@ export default function AccountsPage() {
 
       {view === "dues" ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          <Panel title="Customer dues" subtitle="One balance per normalized customer ledger.">
+          <Panel title="Customer dues" subtitle="One current balance from each customer ledger.">
             <div className="divide-y divide-slate-100">{[...customers].sort((a, b) => Number(b.currentDue) - Number(a.currentDue)).map((customer) => <div className="flex items-center gap-3 px-4 py-3" key={customer.id}><span className="grid h-9 w-9 place-items-center rounded bg-red-50 text-xs font-bold text-red-700">{customer.name.slice(0, 2).toUpperCase()}</span><div className="min-w-0 flex-1"><strong className="block truncate text-sm">{customer.name}</strong><span className="text-xs text-slate-500">{customer.paymentTerms} · limit {formatCurrency(customer.creditLimit)}</span></div><strong className="text-sm text-red-700">{formatCurrency(customer.currentDue)}</strong></div>)}</div>
           </Panel>
           <Panel title="Recent collections" subtitle="Receipts post into the selected account ledger.">

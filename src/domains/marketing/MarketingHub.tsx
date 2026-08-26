@@ -12,6 +12,7 @@ import {
   Flag,
   MapPinned,
   MessageSquareText,
+  MoreHorizontal,
   PackageCheck,
   Plus,
   Route,
@@ -21,14 +22,14 @@ import {
   UserPlus
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import DocumentViewer, { readDocumentUpload } from "../../components/documents/DocumentViewer";
 import EmployeePicker from "../../components/employees/EmployeePicker";
 import Button from "../../components/ui/Button";
 import StatusBadge from "../../components/ui/StatusBadge";
-import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
+import { useAuthStore } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
-import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import { canViewManagedEmployeeActivity, getMarketingEmployeeScope, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency, formatNumber } from "../../utils/format";
 import { EmptyState, ErrorBlock, LoadingBlock, Modal, Panel, ProductThumb, Segmented, TableFrame, inputClass, labelClass, textareaClass } from "../components";
@@ -67,6 +68,7 @@ const manualActivities: Array<{ value: MarketingActivityType; label: string }> =
 const funnelStages: MarketingLead["stage"][] = ["NEW", "CONTACTED", "INTERESTED", "PRESENTATION", "SAMPLE", "QUOTATION", "NEGOTIATION", "ORDER", "DELIVERED", "PAYMENT", "LOST"];
 
 function dateTimeLabel(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value} | Time unavailable`;
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
@@ -76,6 +78,7 @@ function localDateTime(value = new Date()) {
 }
 
 function lateSubmission(activity: MarketingActivity) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(activity.occurredAt) || /^\d{4}-\d{2}-\d{2}$/.test(activity.submittedAt)) return "";
   const minutes = Math.max(0, Math.round((new Date(activity.submittedAt).getTime() - new Date(activity.occurredAt).getTime()) / 60_000));
   if (minutes < 60) return "";
   const hours = Math.floor(minutes / 60);
@@ -105,7 +108,6 @@ function progressTone(value: string) {
 
 export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?: (customerId: string, leadId: string) => void }) {
   const session = useAuthStore((state) => state.session);
-  const role = useEffectiveRole();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -115,17 +117,21 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
   const [snapshotEmployeeId, setSnapshotEmployeeId] = useState("");
   const [convertLead, setConvertLead] = useState<MarketingLead>();
   const [contextLead, setContextLead] = useState<MarketingLead>();
+  const [leadStageFilter, setLeadStageFilter] = useState<MarketingLead["stage"]>();
   const [viewingDocument, setViewingDocument] = useState<DocumentRecord | null>(null);
+  const employeeScope = getMarketingEmployeeScope(session?.user);
+  const selfScope = employeeScope === "SELF";
+  const managedScope = canViewManagedEmployeeActivity(session?.user);
   const canCreate = hasEffectivePermission(session?.user, "marketing", "create");
-  const canReportActivity = canCreate && role === "Sales Executive";
+  const canReportActivity = canCreate && selfScope;
   const canEdit = hasEffectivePermission(session?.user, "marketing", "edit");
   const canApprove = hasEffectivePermission(session?.user, "marketing", "approve");
   const canCreateQuote = hasEffectivePermission(session?.user, "sales", "create");
   const canViewCustomers = hasEffectivePermission(session?.user, "customers", "view");
-  const canViewMap = ["Super Admin", "Managing Director", "Sales Manager", "Sales Executive"].includes(role);
+  const canViewMap = employeeScope !== "NONE";
   const mapOpen = params.get("marketing") === "field-team" || params.get("view") === "field-team";
 
-  const dashboardQuery = useQuery({ queryKey: ["marketing", "dashboard", session?.user.id], queryFn: marketingService.dashboard });
+  const dashboardQuery = useQuery({ queryKey: ["marketing", "dashboard", session?.user.id], queryFn: marketingService.dashboard, refetchInterval: 12_000, refetchIntervalInBackground: true });
   const directoryQuery = useQuery({ queryKey: ["employees", "directory", "marketing", session?.user.id], queryFn: () => employeeService.directory("marketing") });
   const monthlyPlansQuery = useQuery({ queryKey: ["marketing", "monthly-plans", businessDate().slice(0, 7), session?.user.id], queryFn: () => marketingService.monthlyPlans(businessDate().slice(0, 7)) });
   const productsQuery = useQuery({ queryKey: ["products"], queryFn: settingsService.products });
@@ -173,6 +179,25 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
     }
   }, [directoryQuery.isSuccess, employees, mapOpen, params, setParams, snapshotEmployeeId]);
 
+  useEffect(() => {
+    const requestedAction = params.get("action");
+    const permittedModal: ModalType = requestedAction === "activity" && canReportActivity
+      ? "activity"
+      : requestedAction === "lead" && canCreate
+        ? "lead"
+        : requestedAction === "follow-up" && canCreate
+          ? "follow-up"
+          : requestedAction === "daily-plan" && canCreate && selfScope
+            ? "daily-plan"
+            : null;
+    if (!requestedAction) return;
+    if (permittedModal) setModal(permittedModal);
+    const next = new URLSearchParams(params);
+    next.delete("action");
+    setParams(next, { replace: true });
+  }, [canCreate, canReportActivity, params, selfScope, setParams]);
+
+  if (mapOpen && managedScope) return <Navigate to={`/app/employees?view=field-team${params.get("employee") ? `&employee=${encodeURIComponent(params.get("employee")!)}` : ""}`} replace />;
   if (mapOpen && canViewMap) {
     return <Suspense fallback={<LoadingBlock label="Loading field team map" />}><div className="grid gap-3"><Button className="w-fit" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => setParams({ view: "marketing" }, { replace: true })}>Back to Marketing</Button><FieldTeamPage marketingEmbedded /></div></Suspense>;
   }
@@ -192,21 +217,34 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
     setSnapshotEmployeeId(employeeId);
     setModal("snapshot");
   };
+  const openEmployee = (employeeId: string) => managedScope ? navigate(`/app/employees?view=activity&employee=${employeeId}`) : openSnapshot(employeeId);
+  const openLeads = (stage?: MarketingLead["stage"]) => {
+    setLeadStageFilter(stage);
+    setModal("leads");
+  };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-blue-950 text-cyan-300"><Activity className="h-5 w-5" /></span>
-          <div className="min-w-0"><h2 className="text-lg font-bold text-slate-950">{role === "Sales Executive" ? "My Marketing Day" : "Live Marketing Operations"}</h2><p className="truncate text-xs text-slate-500">{today} | {data.scope === "NONE" ? "No employee data assigned" : data.scope === "SELF" ? "Own records" : data.scope === "TEAM" ? "Sales team" : "All sales employees"}</p></div>
+          <div className="min-w-0"><h2 className="text-lg font-bold text-slate-950">{selfScope ? "My Marketing Day" : "Marketing Operations"}</h2><p className="truncate text-xs text-slate-500">Employee updates and sales activity for today | refreshes every 12 seconds</p></div>
         </div>
         <div className="flex flex-wrap gap-2">
           {canReportActivity ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setContextLead(undefined); setModal("activity"); }}>Report Activity</Button> : null}
-          {canCreate ? <Button icon={<UserPlus className="h-4 w-4" />} onClick={() => setModal("lead")}>Add Lead</Button> : null}
+          {canCreate ? <Button icon={<UserPlus className="h-4 w-4" />} onClick={() => setModal("lead")}>New Lead</Button> : null}
           {canCreate ? <Button icon={<CalendarCheck className="h-4 w-4" />} onClick={() => { setContextLead(undefined); setModal("follow-up"); }}>Follow-up</Button> : null}
-          {canCreate ? <Button icon={<Flag className="h-4 w-4" />} onClick={() => setModal("monthly-plan")}>Monthly Plan</Button> : null}
-          {role === "Sales Executive" ? <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => setParams({ view: "marketing", marketing: "field-team" }, { replace: true })}>Check In / Out</Button> : null}
-          <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => setModal("report")}>Generate Report</Button>
+          {selfScope ? <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => setParams({ view: "marketing", marketing: "field-team" }, { replace: true })}>Check In / Out</Button> : null}
+          {!selfScope ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => setModal("report")}>Generate Report</Button> : null}
+          <details className="relative">
+            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><MoreHorizontal className="h-4 w-4" />More</summary>
+            <div className="absolute right-0 z-20 mt-1 grid w-48 gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-xl">
+              {selfScope && canCreate ? <button className="rounded px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50" type="button" onClick={() => setModal("daily-plan")}>Daily Plan</button> : null}
+              {canCreate ? <button className="rounded px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50" type="button" onClick={() => setModal("monthly-plan")}>Monthly Plan</button> : null}
+              {selfScope ? <button className="rounded px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50" type="button" onClick={() => setModal("report")}>Generate Report</button> : null}
+              {canApprove ? <button className="rounded px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50" type="button" onClick={() => setModal("target")}>Set Target</button> : null}
+            </div>
+          </details>
         </div>
       </div>
 
@@ -220,24 +258,24 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
         ))}
       </section>
 
-      {role === "Sales Executive" && data.dailyPlan ? <Panel title="Today's Plan" subtitle={`${data.dailyPlan.plannedVisits.filter((item) => item.completed).length} completed | ${data.dailyPlan.plannedVisits.filter((item) => !item.completed).length} remaining`} actions={canCreate ? <Button variant="ghost" icon={<CalendarCheck className="h-4 w-4" />} onClick={() => setModal("daily-plan")}>Update Plan</Button> : undefined}>
+      {selfScope && data.dailyPlan ? <Panel title="Today's Plan" subtitle={`${data.dailyPlan.plannedVisits.filter((item) => item.completed).length} completed | ${data.dailyPlan.plannedVisits.filter((item) => !item.completed).length} remaining`} actions={canCreate ? <Button variant="ghost" icon={<CalendarCheck className="h-4 w-4" />} onClick={() => setModal("daily-plan")}>Update Plan</Button> : undefined}>
         <div className="grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">{data.dailyPlan.plannedVisits.map((visit) => <div className="flex gap-3 p-4" key={visit.id}>{visit.completed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <Clock3 className="h-5 w-5 shrink-0 text-amber-600" />}<div className="min-w-0"><strong className="block truncate text-sm">{visit.subjectName}</strong><span className="block text-xs text-slate-500">{visit.plannedTime ?? "Open time"} | {visit.purpose}</span></div></div>)}</div>
       </Panel> : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,.75fr)]">
-        <Panel title="Live Activity" subtitle="Manual reports and authoritative ERP events in one role-scoped feed" actions={<Button variant="ghost" icon={<Route className="h-4 w-4" />} onClick={() => setModal("leads")}>Open Leads</Button>}>
+        <Panel title="Live Activity" subtitle="Employee updates and sales activity for today" actions={<Button variant="ghost" icon={<Route className="h-4 w-4" />} onClick={() => openLeads()}>Open Leads</Button>}>
           <div className="divide-y divide-slate-100">
             {data.activities.slice(0, 12).map((activity) => {
               const Icon = activityIcon(activity.activityType);
               const product = activity.productIds?.[0] ? subjectProducts.get(activity.productIds[0]) : undefined;
               const late = lateSubmission(activity);
-              return <div className="flex gap-3 px-4 py-3" key={activity.id}><span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded bg-cyan-50 text-cyan-800"><Icon className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><strong className="text-sm text-slate-950">{activityName(activity.activityType)}</strong><StatusBadge status={activity.verification.replaceAll("_", " ")} />{activity.source !== "MANUAL" ? <span className="text-[10px] font-bold uppercase text-blue-700">ERP</span> : null}</div><p className="mt-0.5 text-sm text-slate-700">{activity.subjectName ?? activity.purpose ?? "Marketing update"}</p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500"><button className="font-semibold text-cyan-800 hover:underline" type="button" onClick={() => openSnapshot(activity.userId)}>{activity.employeeName}</button><span>| {activity.territory ?? "No territory"}</span><time>{dateTimeLabel(activity.occurredAt)}</time>{activity.referenceNumber ? <span className="font-semibold text-cyan-800">{activity.referenceNumber}</span> : null}{late ? <span className="text-amber-700">{late}</span> : null}</div>{activity.remarks ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{activity.remarks}</p> : null}{activity.attachments?.map((document) => <button className="mt-1 text-xs font-semibold text-cyan-800 hover:underline" type="button" key={document.id} onClick={() => setViewingDocument(document)}>{document.fileName}</button>)}</div>{product ? <ProductThumb src={product.imageUrl} name={product.name} size="sm" /> : null}</div>;
+              return <div className="flex gap-3 px-4 py-3" key={activity.id}><span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded bg-cyan-50 text-cyan-800"><Icon className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><strong className="text-sm text-slate-950">{activityName(activity.activityType)}</strong><StatusBadge status={activity.verification.replaceAll("_", " ")} />{activity.source !== "MANUAL" ? <span className="text-[10px] font-bold uppercase text-blue-700">ERP</span> : null}</div><p className="mt-0.5 text-sm text-slate-700">{activity.subjectName ?? activity.purpose ?? "Marketing update"}</p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500"><button className="font-semibold text-cyan-800 hover:underline" type="button" onClick={() => openEmployee(activity.userId)}>{activity.employeeName}</button><span>| {activity.territory ?? "No territory"}</span><time>{dateTimeLabel(activity.occurredAt)}</time>{activity.referenceNumber ? <span className="font-semibold text-cyan-800">{activity.referenceNumber}</span> : null}{late ? <span className="text-amber-700">{late}</span> : null}</div>{activity.remarks ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{activity.remarks}</p> : null}{activity.attachments?.map((document) => <button className="mt-1 text-xs font-semibold text-cyan-800 hover:underline" type="button" key={document.id} onClick={() => setViewingDocument(document)}>{document.fileName}</button>)}</div>{product ? <ProductThumb src={product.imageUrl} name={product.name} size="sm" /> : null}</div>;
             })}
             {!data.activities.length ? <EmptyState title="No marketing activity" message="The first submitted activity or connected ERP transaction will appear here." /> : null}
           </div>
         </Panel>
 
-        <Panel title="Follow-up Attention" subtitle="Deterministic due status from saved date and time" actions={<Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => setModal("follow-ups")}>Open Queue</Button>}>
+        <Panel title="Follow-up Attention" subtitle="Follow-ups that need action" actions={<Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => setModal("follow-ups")}>Open Queue</Button>}>
           <div className="grid grid-cols-2 border-b border-slate-200 sm:grid-cols-4 xl:grid-cols-2">
             {[{ label: "Today", value: todayFollowUps.length, tone: "text-blue-800" }, { label: "Overdue", value: overdueFollowUps.length, tone: "text-rose-700" }, { label: "Upcoming", value: upcomingFollowUps.length, tone: "text-amber-700" }, { label: "Completed", value: completedFollowUps.length, tone: "text-emerald-700" }].map((entry) => <button className="border-b border-r border-slate-100 p-3 text-left hover:bg-slate-50" type="button" key={entry.label} onClick={() => { setFollowUpView(entry.label as typeof followUpView); setModal("follow-ups"); }}><span className="block text-[10px] font-bold uppercase text-slate-400">{entry.label}</span><strong className={`mt-1 block text-xl ${entry.tone}`}>{entry.value}</strong></button>)}
           </div>
@@ -248,7 +286,7 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
       <Panel title="Marketing Funnel" subtitle="Activity and ERP transactions advance stages without duplicate reporting">
         <div className="overflow-x-auto p-4"><div className="grid min-w-[1188px] grid-cols-11 gap-2">{funnelStages.map((stage, index) => {
           const count = data.funnel.find((entry) => entry.stage === stage)?.count ?? 0;
-          return <button className={`min-h-24 border-l-2 p-3 text-left ${stage === "LOST" ? "border-rose-400 bg-rose-50" : "border-cyan-500 bg-slate-50"}`} type="button" key={stage} onClick={() => setModal("leads")}><span className="block text-[10px] font-bold text-slate-500">{String(index + 1).padStart(2, "0")}</span><strong className="mt-1 block whitespace-nowrap text-[10px] leading-4 text-slate-800">{stage}</strong><span className="mt-2 block text-xl font-bold text-slate-950">{count}</span><span className="mt-1 block h-1 bg-slate-200"><span className={`block h-full ${stage === "LOST" ? "bg-rose-500" : "bg-cyan-600"}`} style={{ width: `${count / maxFunnel * 100}%` }} /></span></button>;
+          return <button className={`min-h-24 border-l-2 p-3 text-left ${stage === "LOST" ? "border-rose-400 bg-rose-50" : "border-cyan-500 bg-slate-50"}`} type="button" key={stage} onClick={() => openLeads(stage)}><span className="block text-[10px] font-bold text-slate-500">{String(index + 1).padStart(2, "0")}</span><strong className="mt-1 block whitespace-nowrap text-[10px] leading-4 text-slate-800">{stage}</strong><span className="mt-2 block text-xl font-bold text-slate-950">{count}</span><span className="mt-1 block h-1 bg-slate-200"><span className={`block h-full ${stage === "LOST" ? "bg-rose-500" : "bg-cyan-600"}`} style={{ width: `${count / maxFunnel * 100}%` }} /></span></button>;
         })}</div></div>
       </Panel>
 
@@ -257,26 +295,31 @@ export default function MarketingHub({ onCreateQuotation }: { onCreateQuotation?
           <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 p-1">{[
             ["Active", data.fieldTeam.activeNow, "text-emerald-700"], ["Recent", data.fieldTeam.recent, "text-cyan-700"], ["Offline", data.fieldTeam.offline, "text-slate-700"], ["Visits Today", data.fieldTeam.visitsToday, "text-blue-800"]
           ].map(([label, value, tone]) => <div className="p-3" key={String(label)}><span className="text-[10px] font-bold uppercase text-slate-400">{label}</span><strong className={`mt-1 block text-2xl ${tone}`}>{value}</strong></div>)}</div>
-          {canViewMap ? <div className="border-t border-slate-200 p-3"><Button className="w-full" variant="primary" icon={<MapPinned className="h-4 w-4" />} onClick={() => setParams({ view: "marketing", marketing: "field-team" }, { replace: true })}>Open Live Map</Button></div> : null}
+          {canViewMap ? <div className="border-t border-slate-200 p-3"><Button className="w-full" variant="primary" icon={<MapPinned className="h-4 w-4" />} onClick={() => managedScope ? navigate("/app/employees?view=field-team") : setParams({ view: "marketing", marketing: "field-team" }, { replace: true })}>Open Field Team</Button></div> : null}
         </Panel>
 
-        <Panel title={role === "Sales Executive" ? "My Performance" : "Team Performance"} subtitle="Delivered sales, posted collections, verified visits and official score events" actions={<>{canCreate && role === "Sales Executive" ? <Button variant="ghost" icon={<Flag className="h-4 w-4" />} onClick={() => setModal("daily-plan")}>Daily Plan</Button> : null}{canApprove ? <Button variant="ghost" icon={<Target className="h-4 w-4" />} onClick={() => setModal("target")}>Set Target</Button> : null}</>}>
-          <div className="grid gap-px border-b border-slate-200 bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">{data.performance.map((row) => { const plan = monthlyPlans.find((entry) => entry.userId === row.employee.id); const planned = plan?.plannedActivities ?? 0; const percent = planned ? Math.min(100, row.activityCount / planned * 100) : 0; return <button className="bg-white p-3 text-left hover:bg-cyan-50" type="button" key={row.employee.id} onClick={() => openSnapshot(row.employee.id)}><span className="block truncate text-xs font-semibold text-slate-700">{row.employee.name}</span><div className="mt-1 flex items-center justify-between text-[11px] text-slate-500"><span>Plan vs actual</span><b>{row.activityCount} / {planned || "Not set"}</b></div><span className="mt-1 block h-1.5 overflow-hidden rounded bg-slate-100"><span className="block h-full bg-cyan-600" style={{ width: `${percent}%` }} /></span></button>; })}</div>
-          <TableFrame><table className="min-w-[920px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3 text-right">Visits</th><th className="px-4 py-3 text-right">Leads</th><th className="px-4 py-3 text-right">Quotes</th><th className="px-4 py-3 text-right">Orders</th><th className="px-4 py-3 text-right">Collection</th><th className="px-4 py-3 text-right">Score</th><th className="px-4 py-3">Target</th></tr></thead><tbody className="divide-y divide-slate-100">{data.performance.map((row) => <tr className="cursor-pointer hover:bg-slate-50" key={row.employee.id} onClick={() => openSnapshot(row.employee.id)}><td className="px-4 py-3"><strong className="block">{row.employee.name}</strong><span className="text-xs text-slate-500">{row.employee.employeeCode} | {row.employee.territory ?? "Unassigned"}</span></td><td className="px-4 py-3 text-right"><b>{row.verifiedVisits}</b><span className="block text-[10px] text-slate-400">{row.completedVisits} completed</span></td><td className="px-4 py-3 text-right">{row.qualifiedLeads}<span className="block text-[10px] text-slate-400">{row.newLeads} new</span></td><td className="px-4 py-3 text-right">{row.quotations}</td><td className="px-4 py-3 text-right">{row.orders}</td><td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatCurrency(row.collectionsBdt, true)}</td><td className="px-4 py-3 text-right font-bold text-blue-900">{row.activityScore}</td><td className="w-40 px-4 py-3"><div className="flex justify-between text-xs"><span>Overall</span><b>{Number(row.progress.overall).toFixed(0)}%</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><span className={`block h-full rounded ${progressTone(row.progress.overall)}`} style={{ width: `${Math.min(100, Number(row.progress.overall))}%` }} /></div></td></tr>)}</tbody></table></TableFrame>
+        <Panel title={selfScope ? "My Performance" : "Team Performance"} subtitle="Sales, collection, visits and target progress" actions={<>{selfScope && canCreate ? <Button variant="ghost" icon={<Flag className="h-4 w-4" />} onClick={() => setModal("daily-plan")}>Daily Plan</Button> : null}{canApprove ? <Button variant="ghost" icon={<Target className="h-4 w-4" />} onClick={() => setModal("target")}>Set Target</Button> : null}</>}>
+          {!selfScope ? <div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-100 sm:grid-cols-4">{[
+            ["Below Target", data.performance.filter((row) => Number(row.progress.overall) < 60).length, "text-amber-700"],
+            ["Overdue Follow-ups", data.performance.filter((row) => row.overdueFollowUps > 0).length, "text-rose-700"],
+            ["No Activity", data.performance.filter((row) => row.activityCount === 0).length, "text-slate-700"],
+            ["Unverified Visits", data.performance.filter((row) => row.completedVisits > row.verifiedVisits).length, "text-blue-800"]
+          ].map(([label, value, tone]) => <div className="bg-white p-3" key={String(label)}><span className="text-[10px] font-bold uppercase text-slate-400">{label}</span><strong className={`mt-1 block text-xl ${tone}`}>{value}</strong></div>)}</div> : null}
+          <TableFrame><table className="min-w-[920px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3 text-right">Visits</th><th className="px-4 py-3 text-right">Leads</th><th className="px-4 py-3 text-right">Quotes</th><th className="px-4 py-3 text-right">Orders</th><th className="px-4 py-3 text-right">Collection</th><th className="px-4 py-3 text-right">Score</th><th className="px-4 py-3">Target</th></tr></thead><tbody className="divide-y divide-slate-100">{data.performance.map((row) => <tr className="cursor-pointer hover:bg-slate-50" key={row.employee.id} onClick={() => openEmployee(row.employee.id)}><td className="px-4 py-3"><strong className="block">{row.employee.name}</strong><span className="text-xs text-slate-500">{row.employee.employeeCode} | {row.employee.territory ?? "Unassigned"}</span></td><td className="px-4 py-3 text-right"><b>{row.verifiedVisits}</b><span className="block text-[10px] text-slate-400">{row.completedVisits} completed</span></td><td className="px-4 py-3 text-right">{row.qualifiedLeads}<span className="block text-[10px] text-slate-400">{row.newLeads} new</span></td><td className="px-4 py-3 text-right">{row.quotations}</td><td className="px-4 py-3 text-right">{row.orders}</td><td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatCurrency(row.collectionsBdt, true)}</td><td className="px-4 py-3 text-right font-bold text-blue-900">{row.activityScore}</td><td className="w-40 px-4 py-3"><div className="flex justify-between text-xs"><span>Overall</span><b>{Number(row.progress.overall).toFixed(0)}%</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><span className={`block h-full rounded ${progressTone(row.progress.overall)}`} style={{ width: `${Math.min(100, Number(row.progress.overall))}%` }} /></div></td></tr>)}</tbody></table></TableFrame>
         </Panel>
       </div>
 
       <Modal open={modal === "activity" && canReportActivity} title="Report Marketing Activity" subtitle="Your employee identity is taken from the signed-in account." onClose={() => { setModal(null); setContextLead(undefined); }} width="max-w-4xl"><ActivityForm initialSubject={contextLead ? `lead:${contextLead.id}` : undefined} initialActivityType={contextLead ? "CUSTOMER_VISIT" : undefined} leads={data.leads} customers={customers} products={products} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.createActivity(payload), success: "Marketing activity reported" })} /></Modal>
-      <Modal open={modal === "lead"} title="Add Marketing Lead" subtitle="Prospects stay separate from financial customers until qualification." onClose={() => setModal(null)} width="max-w-4xl"><LeadForm employees={employees} products={products} ownUserId={session?.user.id ?? ""} lockEmployee={role === "Sales Executive"} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.createLead(payload), success: "Marketing lead created" })} /></Modal>
-      <Modal open={modal === "follow-up"} title="Schedule Follow-up" subtitle="Due status is calculated from the saved time; it cannot be manually labelled overdue." onClose={() => { setModal(null); setContextLead(undefined); }}><FollowUpForm initialLead={contextLead} employees={employees} leads={data.leads} customers={customers} ownUserId={session?.user.id ?? ""} lockEmployee={role === "Sales Executive"} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.createFollowUp(payload), success: "Follow-up scheduled" })} /></Modal>
-      <Modal open={modal === "daily-plan"} title="Daily Marketing Plan" subtitle="Choose canonical customers or leads; field check-out marks planned visits complete." onClose={() => setModal(null)} width="max-w-3xl"><DailyPlanForm plan={data.dailyPlan} userId={session?.user.id ?? ""} leads={data.leads} customers={customers} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.saveDailyPlan(payload), success: "Daily marketing plan saved" })} /></Modal>
-      <Modal open={modal === "monthly-plan"} title="Monthly Marketing Plan" subtitle="Plan priority organizations, products and activity volume; actuals remain transaction-backed." onClose={() => setModal(null)} width="max-w-3xl"><MonthlyPlanForm employees={employees} products={products} plans={monthlyPlans} ownUserId={session?.user.id ?? ""} lockEmployee={role === "Sales Executive"} canApprove={canApprove} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.saveMonthlyPlan(payload), success: "Monthly marketing plan saved" })} /></Modal>
+      <Modal open={modal === "lead"} title="Add Marketing Lead" subtitle="Prospects stay separate from financial customers until qualification." onClose={() => setModal(null)} width="max-w-4xl"><LeadForm employees={employees} products={products} ownUserId={session?.user.id ?? ""} lockEmployee={selfScope} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.createLead(payload), success: "Marketing lead created" })} /></Modal>
+      <Modal open={modal === "follow-up"} title="Schedule Follow-up" subtitle="The saved due date places this follow-up in Today, Overdue or Upcoming automatically." onClose={() => { setModal(null); setContextLead(undefined); }}><FollowUpForm initialLead={contextLead} employees={employees} leads={data.leads} customers={customers} ownUserId={session?.user.id ?? ""} lockEmployee={selfScope} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.createFollowUp(payload), success: "Follow-up scheduled" })} /></Modal>
+      <Modal open={modal === "daily-plan"} title="Daily Marketing Plan" subtitle="Choose customers or leads; field check-out marks planned visits complete." onClose={() => setModal(null)} width="max-w-3xl"><DailyPlanForm plan={data.dailyPlan} userId={session?.user.id ?? ""} leads={data.leads} customers={customers} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.saveDailyPlan(payload), success: "Daily marketing plan saved" })} /></Modal>
+      <Modal open={modal === "monthly-plan"} title="Monthly Marketing Plan" subtitle="Plan priority organizations, products and activity volume; actuals come from completed work." onClose={() => setModal(null)} width="max-w-3xl"><MonthlyPlanForm employees={employees} products={products} plans={monthlyPlans} ownUserId={session?.user.id ?? ""} lockEmployee={selfScope} canApprove={canApprove} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.saveMonthlyPlan(payload), success: "Monthly marketing plan saved" })} /></Modal>
       <Modal open={modal === "target"} title="Monthly Marketing Target" subtitle="Actual values come from delivered sales, posted collections, verified visits and converted customers." onClose={() => setModal(null)}><TargetForm employees={employees} rows={data.performance} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.saveTarget(payload), success: "Monthly target saved" })} /></Modal>
-      <Modal open={modal === "follow-ups"} title="Follow-up Queue" subtitle="Today, overdue, upcoming and completed are deterministic views of one queue." onClose={() => setModal(null)} width="max-w-6xl"><FollowUpQueue view={followUpView} onView={setFollowUpView} rows={followUpRows} canEdit={canEdit} busy={action.isPending} onComplete={(followUp, outcome) => action.mutate({ run: () => marketingService.updateFollowUp(followUp.id, { status: "COMPLETED", outcome }), success: "Follow-up completed", keepOpen: true })} onReschedule={(followUp, dueAt) => action.mutate({ run: () => marketingService.updateFollowUp(followUp.id, { dueAt: new Date(dueAt).toISOString() }), success: "Follow-up rescheduled", keepOpen: true })} /></Modal>
-      <Modal open={modal === "leads"} title="Lead Pipeline" subtitle="Conversion preserves assignment and carries the customer into quotation without re-entry." onClose={() => setModal(null)} width="max-w-6xl"><LeadQueue leads={data.leads} employees={employees} products={products} canCreate={canCreate} canReportActivity={canReportActivity} canCreateCustomer={hasEffectivePermission(session?.user, "customers", "create")} canCreateQuote={canCreateQuote} onFollowUp={(lead) => { setContextLead(lead); setModal("follow-up"); }} onVisit={(lead) => { setContextLead(lead); setModal("activity"); }} onConvert={(lead) => { setConvertLead(lead); setModal("convert"); }} onQuote={(lead) => lead.customerId && onCreateQuotation?.(lead.customerId, lead.id)} /></Modal>
+      <Modal open={modal === "follow-ups"} title="Follow-up Queue" subtitle="Follow-ups that need action, arranged by due date and completion status." onClose={() => setModal(null)} width="max-w-6xl"><FollowUpQueue view={followUpView} onView={setFollowUpView} rows={followUpRows} canEdit={canEdit} busy={action.isPending} onComplete={(followUp, outcome) => action.mutate({ run: () => marketingService.updateFollowUp(followUp.id, { status: "COMPLETED", outcome }), success: "Follow-up completed", keepOpen: true })} onReschedule={(followUp, dueAt) => action.mutate({ run: () => marketingService.updateFollowUp(followUp.id, { dueAt: new Date(dueAt).toISOString() }), success: "Follow-up rescheduled", keepOpen: true })} /></Modal>
+      <Modal open={modal === "leads"} title={leadStageFilter ? `${leadStageFilter.replaceAll("_", " ")} Leads` : "Lead Pipeline"} subtitle={leadStageFilter ? `Showing only leads in the ${leadStageFilter.replaceAll("_", " ").toLowerCase()} stage.` : "Conversion preserves assignment and carries the customer into quotation without re-entry."} onClose={() => { setModal(null); setLeadStageFilter(undefined); }} width="max-w-6xl"><LeadQueue leads={leadStageFilter ? data.leads.filter((lead) => lead.stage === leadStageFilter) : data.leads} stageFilter={leadStageFilter} onClearStage={() => setLeadStageFilter(undefined)} employees={employees} products={products} canCreate={canCreate} canReportActivity={canReportActivity} canCreateCustomer={hasEffectivePermission(session?.user, "customers", "create")} canCreateQuote={canCreateQuote} onFollowUp={(lead) => { setContextLead(lead); setModal("follow-up"); }} onVisit={(lead) => { setContextLead(lead); setModal("activity"); }} onConvert={(lead) => { setConvertLead(lead); setModal("convert"); }} onQuote={(lead) => lead.customerId && onCreateQuotation?.(lead.customerId, lead.id)} /></Modal>
       <Modal open={modal === "convert" && Boolean(convertLead)} title={`Convert ${convertLead?.leadNumber ?? "Lead"} to Customer`} subtitle="The lead remains in history and becomes the marketing context for the customer." onClose={() => { setModal("leads"); setConvertLead(undefined); }}><ConvertLeadForm lead={convertLead!} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => marketingService.convertLead(convertLead!.id, payload), success: "Lead converted to customer" })} /></Modal>
-      <Modal open={modal === "report"} title="Generate Marketing Report" subtitle="Choose a practical preset, then refine filters in the canonical Reports workspace." onClose={() => setModal(null)}><QuickReportMenu userId={session?.user.id ?? ""} executive={role === "Sales Executive"} onOpen={navigate} /></Modal>
-      <Modal open={modal === "snapshot"} title="Employee Marketing Snapshot" subtitle="Today, targets, activity, follow-ups and funnel context in one view." onClose={() => { setModal(null); setSnapshotEmployeeId(""); if (params.get("employee")) setParams({ view: "marketing" }, { replace: true }); }} width="max-w-5xl">{snapshotQuery.isLoading ? <LoadingBlock label="Building employee snapshot" /> : snapshotQuery.isError || !snapshotQuery.data ? <ErrorBlock error={snapshotQuery.error} /> : <SnapshotView snapshot={snapshotQuery.data} onMap={() => setParams({ view: "marketing", marketing: "field-team", employee: snapshotEmployeeId })} onReport={() => navigate(`/app/reports?view=marketing&employee=${snapshotEmployeeId}&preset=month`)} />}</Modal>
+      <Modal open={modal === "report"} title="Generate Marketing Report" subtitle="Choose a practical preset, then refine filters in Reports." onClose={() => setModal(null)}><QuickReportMenu userId={session?.user.id ?? ""} executive={selfScope} onOpen={navigate} /></Modal>
+      <Modal open={modal === "snapshot"} title="Employee Marketing Snapshot" subtitle="Today, targets, activity, follow-ups and funnel context in one view." onClose={() => { setModal(null); setSnapshotEmployeeId(""); if (params.get("employee")) setParams({ view: "marketing" }, { replace: true }); }} width="max-w-5xl">{snapshotQuery.isLoading ? <LoadingBlock label="Building employee snapshot" /> : snapshotQuery.isError || !snapshotQuery.data ? <ErrorBlock error={snapshotQuery.error} /> : <SnapshotView snapshot={snapshotQuery.data} onMap={() => managedScope ? navigate(`/app/employees?view=field-team&employee=${snapshotEmployeeId}`) : setParams({ view: "marketing", marketing: "field-team", employee: snapshotEmployeeId })} onReport={() => navigate(`/app/reports?view=marketing&employee=${snapshotEmployeeId}&preset=month`)} />}</Modal>
       <DocumentViewer document={viewingDocument} onClose={() => setViewingDocument(null)} />
     </div>
   );
@@ -373,8 +416,8 @@ function FollowUpQueue({ view, onView, rows, canEdit, busy, onComplete, onResche
   })}</tbody></table></TableFrame>{!rows.length ? <EmptyState title={`No ${view.toLowerCase()} follow-ups`} message="The queue has no matching records." /> : null}</div>;
 }
 
-function LeadQueue({ leads, employees, products, canCreate, canReportActivity, canCreateCustomer, canCreateQuote, onFollowUp, onVisit, onConvert, onQuote }: { leads: MarketingLead[]; employees: EmployeeDirectoryEntry[]; products: Product[]; canCreate: boolean; canReportActivity: boolean; canCreateCustomer: boolean; canCreateQuote: boolean; onFollowUp: (lead: MarketingLead) => void; onVisit: (lead: MarketingLead) => void; onConvert: (lead: MarketingLead) => void; onQuote: (lead: MarketingLead) => void }) {
-  return <TableFrame><table className="min-w-[1220px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-2">Lead / Organization</th><th className="px-3 py-2">Contact</th><th className="px-3 py-2">Products</th><th className="px-3 py-2">Assigned</th><th className="px-3 py-2">Next Follow-up</th><th className="px-3 py-2">Stage</th><th className="px-3 py-2 text-right">Next Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{leads.map((lead) => <tr key={lead.id}><td className="px-3 py-3"><strong className="block">{lead.organizationName}</strong><span className="text-xs text-slate-500">{lead.leadNumber} | {lead.organizationType} | {lead.leadSource}</span></td><td className="px-3 py-3 text-slate-600">{lead.contactPerson ?? lead.contactRole ?? "-"}<span className="block text-xs">{lead.mobile}</span></td><td className="px-3 py-3">{lead.interestedProductIds.map((id) => products.find((product) => product.id === id)?.code ?? id).join(", ") || "-"}</td><td className="px-3 py-3">{employees.find((employee) => employee.id === lead.assignedUserId)?.name ?? lead.assignedUserId}</td><td className="px-3 py-3 text-xs text-slate-600">{lead.nextFollowUpAt ? dateTimeLabel(lead.nextFollowUpAt) : "-"}</td><td className="px-3 py-3"><StatusBadge status={lead.stage} /></td><td className="px-3 py-3"><div className="flex justify-end gap-1">{canCreate && lead.stage !== "LOST" ? <Button variant="ghost" icon={<CalendarCheck className="h-4 w-4 text-cyan-700" />} onClick={() => onFollowUp(lead)} aria-label={`Schedule follow-up for ${lead.organizationName}`} title="Schedule follow-up" /> : null}{canReportActivity && lead.stage !== "LOST" ? <Button variant="ghost" icon={<MapPinned className="h-4 w-4 text-blue-700" />} onClick={() => onVisit(lead)} aria-label={`Report visit for ${lead.organizationName}`} title="Report customer visit" /> : null}{!lead.customerId && lead.stage !== "LOST" && canCreateCustomer ? <Button variant="ghost" icon={<UserPlus className="h-4 w-4" />} onClick={() => onConvert(lead)}>Convert</Button> : null}{lead.customerId && canCreateQuote ? <Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => onQuote(lead)}>Quotation</Button> : null}</div></td></tr>)}</tbody></table></TableFrame>;
+function LeadQueue({ leads, stageFilter, onClearStage, employees, products, canCreate, canReportActivity, canCreateCustomer, canCreateQuote, onFollowUp, onVisit, onConvert, onQuote }: { leads: MarketingLead[]; stageFilter?: MarketingLead["stage"]; onClearStage: () => void; employees: EmployeeDirectoryEntry[]; products: Product[]; canCreate: boolean; canReportActivity: boolean; canCreateCustomer: boolean; canCreateQuote: boolean; onFollowUp: (lead: MarketingLead) => void; onVisit: (lead: MarketingLead) => void; onConvert: (lead: MarketingLead) => void; onQuote: (lead: MarketingLead) => void }) {
+  return <div className="grid gap-3">{stageFilter ? <div className="flex items-center justify-between gap-3 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-900"><span><b>{leads.length}</b> lead{leads.length === 1 ? "" : "s"} in {stageFilter.replaceAll("_", " ")}</span><Button variant="ghost" onClick={onClearStage}>Show All Stages</Button></div> : null}<TableFrame><table className="min-w-[1220px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-2">Lead / Organization</th><th className="px-3 py-2">Contact</th><th className="px-3 py-2">Products</th><th className="px-3 py-2">Assigned</th><th className="px-3 py-2">Next Follow-up</th><th className="px-3 py-2">Stage</th><th className="px-3 py-2 text-right">Next Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{leads.map((lead) => <tr key={lead.id}><td className="px-3 py-3"><strong className="block">{lead.organizationName}</strong><span className="text-xs text-slate-500">{lead.leadNumber} | {lead.organizationType} | {lead.leadSource}</span></td><td className="px-3 py-3 text-slate-600">{lead.contactPerson ?? lead.contactRole ?? "-"}<span className="block text-xs">{lead.mobile}</span></td><td className="px-3 py-3">{lead.interestedProductIds.map((id) => products.find((product) => product.id === id)?.code ?? id).join(", ") || "-"}</td><td className="px-3 py-3">{employees.find((employee) => employee.id === lead.assignedUserId)?.name ?? lead.assignedUserId}</td><td className="px-3 py-3 text-xs text-slate-600">{lead.nextFollowUpAt ? dateTimeLabel(lead.nextFollowUpAt) : "-"}</td><td className="px-3 py-3"><StatusBadge status={lead.stage} /></td><td className="px-3 py-3"><div className="flex justify-end gap-1">{canCreate && lead.stage !== "LOST" ? <Button variant="ghost" icon={<CalendarCheck className="h-4 w-4 text-cyan-700" />} onClick={() => onFollowUp(lead)} aria-label={`Schedule follow-up for ${lead.organizationName}`} title="Schedule follow-up" /> : null}{canReportActivity && lead.stage !== "LOST" ? <Button variant="ghost" icon={<MapPinned className="h-4 w-4 text-blue-700" />} onClick={() => onVisit(lead)} aria-label={`Report visit for ${lead.organizationName}`} title="Report customer visit" /> : null}{!lead.customerId && lead.stage !== "LOST" && canCreateCustomer ? <Button variant="ghost" icon={<UserPlus className="h-4 w-4" />} onClick={() => onConvert(lead)}>Convert</Button> : null}{lead.customerId && canCreateQuote ? <Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => onQuote(lead)}>Quotation</Button> : null}</div></td></tr>)}{!leads.length ? <tr><td className="px-3 py-10 text-center text-slate-500" colSpan={7}>No leads are in this stage.</td></tr> : null}</tbody></table></TableFrame></div>;
 }
 
 function ConvertLeadForm({ lead, busy, onSubmit }: { lead: MarketingLead; busy: boolean; onSubmit: (payload: { paymentTerms: string; creditLimit: string }) => void }) {
@@ -388,7 +431,7 @@ function QuickReportMenu({ userId, executive, onOpen }: { userId: string; execut
   const rows = [
     { id: "today", title: executive ? "My Daily Activity" : "Today's Team Activity", detail: "Live activity and verification", path: `/app/reports?view=marketing&preset=${executive ? "my-day" : "today"}${employeeQuery}` },
     { id: "week", title: "Weekly Marketing Summary", detail: "Activity and follow-up movement", path: "/app/reports?view=marketing&preset=week" },
-    { id: "performance", title: "Employee Performance", detail: "Sales plus marketing achievement", path: `/app/reports?view=sales&table=salesperson-performance${employeeQuery}` },
+    { id: "performance", title: "Employee Performance", detail: "Sales plus marketing achievement", path: `/app/reports?view=marketing&preset=month${employeeQuery}` },
     { id: "funnel", title: "Lead Funnel", detail: "Stage and owner analysis", path: "/app/reports?view=marketing&preset=funnel" },
     { id: "overdue", title: "Overdue Follow-ups", detail: "Missed due times requiring action", path: "/app/reports?view=marketing&preset=overdue" },
     { id: "target", title: "Target vs Actual", detail: "Official transaction-backed progress", path: "/app/reports?view=marketing&preset=target" },
