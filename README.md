@@ -274,5 +274,4 @@ The backend phase should replace this with persistent authentication, Postgres/S
 ## Presentation Material
 
 - `PRESENTATION.md`: complete business/data/API explanation
-- `VIDEO_PRESENTATION_SCRIPT.md`: timed visual walkthrough
 - `DEMO_INSTRUCTIONS.md`: practical UAT and live-demo checklist
