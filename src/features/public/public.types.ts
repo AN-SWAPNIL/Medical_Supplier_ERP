@@ -123,6 +123,8 @@ export type PublicInquiryRecord = PublicInquiryInput & {
   receivedAt: string;
   status: PublicInquiryStatus;
   internalNotes?: string;
+  leadId?: string;
+  leadNumber?: string;
 };
 
 export type PublicContentAdminSnapshot = {

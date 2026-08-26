@@ -47,7 +47,7 @@ export default function AppLayout() {
   }, []);
 
   const visibleItems = useMemo(
-    () => navSections.flatMap((section) => section.items).filter((item) => item.permission === "settings" ? canAccessSettings(session?.user) : hasEffectivePermission(session?.user, item.permission)),
+    () => navSections.flatMap((section) => section.items).filter((item) => item.permission === "settings" ? canAccessSettings(session?.user) : item.path === "/app/sales" ? hasEffectivePermission(session?.user, "sales") || hasEffectivePermission(session?.user, "marketing") : hasEffectivePermission(session?.user, item.permission)),
     [session?.user]
   );
 

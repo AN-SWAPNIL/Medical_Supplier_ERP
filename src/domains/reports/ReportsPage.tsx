@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   ArrowUpDown,
   Download,
   FileDown,
@@ -29,11 +30,43 @@ import { aiService, reportService, settingsService } from "../services";
 import { useAIContextStore } from "../../lib/ai/context";
 import EmployeePicker from "../../components/employees/EmployeePicker";
 import type { Role } from "../../types";
+import MarketingReportWorkspace from "./MarketingReportWorkspace";
 
-type View = "overview" | "imports" | "inventory" | "sales" | "expenses" | "audit";
-type ReportGroupId = Exclude<View, "overview" | "audit">;
+type View = "overview" | "marketing" | "imports" | "inventory" | "sales" | "expenses" | "audit";
+type ReportGroupId = Exclude<View, "overview" | "marketing" | "audit">;
 
 const colors = ["#075985", "#0891b2", "#059669", "#d97706"];
+type PeriodPreset = "today" | "yesterday" | "this-week" | "last-week" | "this-month" | "last-month" | "custom";
+
+function dateOffset(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function periodForPreset(preset: PeriodPreset, today: string) {
+  if (preset === "today" || preset === "custom") return { from: today, to: today };
+  if (preset === "yesterday") { const date = dateOffset(today, -1); return { from: date, to: date }; }
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  const mondayOffset = -((todayDate.getUTCDay() + 6) % 7);
+  const thisMonday = dateOffset(today, mondayOffset);
+  if (preset === "this-week") return { from: thisMonday, to: today };
+  if (preset === "last-week") return { from: dateOffset(thisMonday, -7), to: dateOffset(thisMonday, -1) };
+  const [year, month] = today.split("-").map(Number);
+  if (preset === "last-month") {
+    const from = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10);
+    return { from, to };
+  }
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+}
+
+function initialPeriodPreset(preset: string): PeriodPreset {
+  if (["today", "my-day", "overdue"].includes(preset)) return "today";
+  if (preset === "week") return "this-week";
+  if (preset === "custom") return "custom";
+  return "this-month";
+}
 
 function numeric(value: string) {
   const parsed = Number(value.replace(/[^0-9.-]/g, ""));
@@ -57,16 +90,20 @@ export default function ReportsPage() {
   const canExport = hasEffectivePermission(user, "reports", "export");
   const canPrint = hasEffectivePermission(user, "print", "view");
   const [params, setParams] = useSearchParams();
+  const preset = params.get("preset") ?? "";
   const requestedView = params.get("view") as View | null;
   const [view, setView] = useState<View>(requestedView ?? (role === "Sales Executive" ? "sales" : "overview"));
-  const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
-  const [to, setTo] = useState(today);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => initialPeriodPreset(preset));
+  const initialPeriod = periodForPreset(initialPeriodPreset(preset), today);
+  const [from, setFrom] = useState(initialPeriod.from);
+  const [to, setTo] = useState(initialPeriod.to);
   const [tableId, setTableId] = useState(params.get("table") ?? (role === "Sales Executive" ? "salesperson-performance" : ""));
   const [taDaEmployee, setTaDaEmployee] = useState("All employees");
   const [salesEmployeeId, setSalesEmployeeId] = useState(params.get("employee") ?? (role === "Sales Executive" ? "self" : "all"));
   const navigate = useNavigate();
   const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
   const canAudit = ["Super Admin", "Managing Director", "Accounts"].includes(role);
+  const canMarketing = hasEffectivePermission(user, "marketing", "view");
   const reportQuery = useQuery({
     queryKey: ["reports", from, to],
     queryFn: () => reportService.get(from, to),
@@ -124,6 +161,13 @@ export default function ReportsPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+  const applyPeriodPreset = (next: PeriodPreset) => {
+    setPeriodPreset(next);
+    if (next === "custom") return;
+    const period = periodForPreset(next, today);
+    setFrom(period.from);
+    setTo(period.to);
+  };
 
   return (
     <>
@@ -133,16 +177,17 @@ export default function ReportsPage() {
         subtitle="Period-specific operating reports built from the same import, stock, delivery, collection and expense records."
         actions={
           <>
-            {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Current Data</Button> : null}
-            {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Current Report</Button> : null}
+            {canExport && view !== "marketing" ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Current Data</Button> : null}
+            {canPrint && view !== "marketing" ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Current Report</Button> : null}
           </>
         }
       />
 
       <Panel>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[220px_220px_1fr] lg:items-end">
-          <label><span className={labelClass}>From Date</span><input className={inputClass} type="date" max={to} value={from} onChange={(event) => setFrom(event.target.value)} /></label>
-          <label><span className={labelClass}>To Date</span><input className={inputClass} type="date" min={from} value={to} onChange={(event) => setTo(event.target.value)} /></label>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[190px_190px_190px_1fr] lg:items-end">
+          <label><span className={labelClass}>Period</span><select className={inputClass} value={periodPreset} onChange={(event) => applyPeriodPreset(event.target.value as PeriodPreset)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This Week</option><option value="last-week">Last Week</option><option value="this-month">This Month</option><option value="last-month">Last Month</option><option value="custom">Custom</option></select></label>
+          <label><span className={labelClass}>From Date</span><input className={inputClass} type="date" max={to} value={from} onChange={(event) => { setFrom(event.target.value); setPeriodPreset("custom"); }} /></label>
+          <label><span className={labelClass}>To Date</span><input className={inputClass} type="date" min={from} value={to} onChange={(event) => { setTo(event.target.value); setPeriodPreset("custom"); }} /></label>
           <div className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-900">
             <strong>Applied scope:</strong> {report.period.from} to {report.period.to} | {role} | Main Warehouse
           </div>
@@ -157,12 +202,14 @@ export default function ReportsPage() {
         ariaLabel="Report groups"
         options={[
           ...(role === "Sales Executive" ? [] : [{ value: "overview" as const, label: "Overview" }]),
+          ...(canMarketing ? [{ value: "marketing" as const, label: "Marketing" }] : []),
           ...groups.map((group) => ({ value: group.id, label: group.title })),
           ...(canAudit ? [{ value: "audit" as const, label: "Audit" }] : [])
         ]}
       />
 
       {view === "overview" ? <ReportOverview groups={groups} onOpen={setView} /> : null}
+      {view === "marketing" && canMarketing ? <MarketingReportWorkspace from={from} to={to} preset={preset} initialEmployeeId={params.get("employee") ?? undefined} initialSubjectId={params.get("subject") ?? undefined} /> : null}
       {selectedGroup ? (
         <ReportWorkspace
           group={selectedGroup}
@@ -178,7 +225,8 @@ export default function ReportsPage() {
           role={role}
           onSalesEmployeeChange={(employeeId) => { setSalesEmployeeId(employeeId); setParams((current) => { const next = new URLSearchParams(current); next.set("view", "sales"); next.set("table", "salesperson-performance"); next.set("employee", employeeId); return next; }, { replace: true }); }}
           onPrintEmployee={(employeeId) => navigate(`/app/print/employee-performance/${employeeId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)}
-          onViewFieldActivity={(employeeId) => navigate(`/app/sales?view=field-team&employee=${employeeId}`)}
+          onViewMarketingActivity={(employeeId) => navigate(`/app/sales?view=marketing&employee=${employeeId}`)}
+          onViewFieldActivity={(employeeId) => navigate(`/app/sales?view=marketing&marketing=field-team&employee=${employeeId}`)}
         />
       ) : null}
       {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}
@@ -220,7 +268,7 @@ function ReportOverview({ groups, onOpen }: { groups: Array<{ id: ReportGroupId;
   );
 }
 
-function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, salesEmployeeId, role, onSalesEmployeeChange, onPrintEmployee, onViewFieldActivity }: {
+function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, salesEmployeeId, role, onSalesEmployeeChange, onPrintEmployee, onViewMarketingActivity, onViewFieldActivity }: {
   group: { id: ReportGroupId; title: string; rows: { label: string; value: string }[]; tables: ReportTable[] };
   selectedTable?: ReportTable;
   tableId: string;
@@ -234,6 +282,7 @@ function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, t
   role: Role;
   onSalesEmployeeChange: (value: string) => void;
   onPrintEmployee: (employeeId: string) => void;
+  onViewMarketingActivity: (employeeId: string) => void;
   onViewFieldActivity: (employeeId: string) => void;
 }) {
   const isTaDa = selectedTable?.id === "ta-da";
@@ -247,7 +296,7 @@ function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, t
         {group.rows.map((row, index) => <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm" key={row.label}><span className="block text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl" style={{ color: colors[index % colors.length] }}>{displayValue(row.value, row.label)}</strong></div>)}
       </div>
       <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"><Segmented value={tableId} onChange={onTableChange} ariaLabel={`${group.title} report types`} options={tableOptions} /></div>
-      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} employeeId={salesEmployeeId} role={role} onEmployeeChange={onSalesEmployeeChange} onPrint={onPrintEmployee} onViewFieldActivity={onViewFieldActivity} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
+      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} employeeId={salesEmployeeId} role={role} onEmployeeChange={onSalesEmployeeChange} onPrint={onPrintEmployee} onViewMarketingActivity={onViewMarketingActivity} onViewFieldActivity={onViewFieldActivity} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
         <div className="flex flex-wrap items-end justify-end gap-4 border-b border-slate-200 p-4">
           {isTaDa ? <label className="w-full sm:w-64"><span className={labelClass}>Employee</span><select className={inputClass} value={taDaEmployee} onChange={(event) => onTaDaEmployeeChange(event.target.value)}>{employees.map((name) => <option key={name}>{name}</option>)}</select></label> : <div className="flex items-center justify-end gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" /> {visibleRows.length} filtered rows</div>}
         </div>
@@ -291,10 +340,14 @@ function comparisonTable(data: SalespersonPerformanceData): ReportTable {
       { key: "orders", label: "Orders", align: "right" },
       { key: "sales", label: "Delivered Sales", align: "right" },
       { key: "collections", label: "Collections", align: "right" },
+      { key: "visits", label: "Verified Visits", align: "right" },
+      { key: "leads", label: "New Leads", align: "right" },
+      { key: "score", label: "Activity Score", align: "right" },
+      { key: "target", label: "Target", align: "right" },
       { key: "customers", label: "Customers", align: "right" },
       { key: "conversion", label: "Conversion", align: "right" }
     ],
-    rows: data.comparison.map((row) => ({ employee: row.name, territory: row.territory ?? "-", quotes: String(row.quotationsCreated), converted: String(row.convertedQuotations), orders: String(row.ordersCreated), sales: row.deliveredSalesValue, collections: row.collectionsReceived, customers: String(row.customersHandled), conversion: `${row.conversionRate}%` }))
+    rows: data.comparison.map((row) => ({ employee: row.name, territory: row.territory ?? "-", quotes: String(row.quotationsCreated), converted: String(row.convertedQuotations), orders: String(row.ordersCreated), sales: row.deliveredSalesValue, collections: row.collectionsReceived, visits: String(row.verifiedVisits), leads: String(row.newLeads), score: String(row.activityScore), target: `${row.targetProgress}%`, customers: String(row.customersHandled), conversion: `${row.conversionRate}%` }))
   };
 }
 
@@ -304,11 +357,11 @@ function buildPerformanceExportTables(data?: SalespersonPerformanceData) {
   return [comparisonTable(data), ...Object.values(data.selected.tables)];
 }
 
-function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeChange, onPrint, onViewFieldActivity, from, to }: { data: SalespersonPerformanceData; employeeId: string; role: Role; onEmployeeChange: (value: string) => void; onPrint: (employeeId: string) => void; onViewFieldActivity: (employeeId: string) => void; from: string; to: string }) {
+function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeChange, onPrint, onViewMarketingActivity, onViewFieldActivity, from, to }: { data: SalespersonPerformanceData; employeeId: string; role: Role; onEmployeeChange: (value: string) => void; onPrint: (employeeId: string) => void; onViewMarketingActivity: (employeeId: string) => void; onViewFieldActivity: (employeeId: string) => void; from: string; to: string }) {
   const [detailTableId, setDetailTableId] = useState("quotations");
   const [territory, setTerritory] = useState("");
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<"deliveredSalesValue" | "collectionsReceived" | "conversionRate" | "ordersCreated" | "assignedCustomerDue">("deliveredSalesValue");
+  const [sortField, setSortField] = useState<"deliveredSalesValue" | "collectionsReceived" | "conversionRate" | "ordersCreated" | "assignedCustomerDue" | "activityScore" | "targetProgress">("deliveredSalesValue");
   const [ascending, setAscending] = useState(false);
   const [page, setPage] = useState(1);
   const detail = data.selected;
@@ -333,13 +386,13 @@ function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeCha
         <div><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-blue-50 text-blue-800"><Users className="h-4 w-4" /></span><div><h2 className="text-base font-bold text-slate-950">Salesperson Performance</h2><p className="text-xs text-slate-500">Business ownership stays with the executive even when a manager or Accounts posts the action.</p></div></div></div>
         <EmployeePicker employees={pickerEmployees} value={employeeId} onChange={onEmployeeChange} allowAll={managementView} />
         {managementView ? <label><span className={labelClass}>Territory</span><select className={inputClass} value={territory} onChange={(event) => { const next = event.target.value; setTerritory(next); setPage(1); if (detail && next && detail.employee.territory !== next) onEmployeeChange("all"); }}><option value="">All territories</option>{territories.map((entry) => <option key={entry}>{entry}</option>)}</select></label> : <div />}
-        {detail ? <div className="flex flex-wrap gap-2 xl:justify-end"><Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onViewFieldActivity(detail.employee.id)}>View Field Activity</Button><Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => onPrint(detail.employee.id)}>Print Report</Button></div> : null}
+        {detail ? <div className="flex flex-wrap gap-2 xl:justify-end"><Button icon={<Activity className="h-4 w-4" />} onClick={() => onViewMarketingActivity(detail.employee.id)}>Daily Activity</Button><Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onViewFieldActivity(detail.employee.id)}>Field Map</Button><Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => onPrint(detail.employee.id)}>Print Report</Button></div> : null}
       </div>
 
       {!detail ? (
         <>
           <Panel title="Sales team comparison" subtitle={`${from} to ${to}. Values come from owned quotations, inherited orders/deliveries and attributed collections.`}>
-            <div className="grid gap-2 border-b border-slate-200 p-4 sm:grid-cols-[minmax(220px,1fr)_220px_auto] sm:items-end"><label><span className={labelClass}>Search Team</span><span className="relative block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={inputClass + " pl-9"} placeholder="Name / ID / territory" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></span></label><label><span className={labelClass}>Sort By</span><select className={inputClass} value={sortField} onChange={(event) => { setSortField(event.target.value as typeof sortField); setPage(1); }}><option value="deliveredSalesValue">Delivered Sales</option><option value="collectionsReceived">Collections</option><option value="conversionRate">Quotation Conversion</option><option value="ordersCreated">Orders</option><option value="assignedCustomerDue">Outstanding Due</option></select></label><Button icon={<ArrowUpDown className="h-4 w-4" />} onClick={() => setAscending((value) => !value)}>{ascending ? "Ascending" : "Descending"}</Button></div>
+            <div className="grid gap-2 border-b border-slate-200 p-4 sm:grid-cols-[minmax(220px,1fr)_220px_auto] sm:items-end"><label><span className={labelClass}>Search Team</span><span className="relative block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={inputClass + " pl-9"} placeholder="Name / ID / territory" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></span></label><label><span className={labelClass}>Sort By</span><select className={inputClass} value={sortField} onChange={(event) => { setSortField(event.target.value as typeof sortField); setPage(1); }}><option value="deliveredSalesValue">Delivered Sales</option><option value="collectionsReceived">Collections</option><option value="activityScore">Activity Score</option><option value="targetProgress">Target Progress</option><option value="conversionRate">Quotation Conversion</option><option value="ordersCreated">Orders</option><option value="assignedCustomerDue">Outstanding Due</option></select></label><Button icon={<ArrowUpDown className="h-4 w-4" />} onClick={() => setAscending((value) => !value)}>{ascending ? "Ascending" : "Descending"}</Button></div>
             <div className="h-72 p-4">
               <ResponsiveContainer width="100%" height="100%"><BarChart data={filteredComparison.map((row) => ({ name: row.name.split(" ")[0], sales: Number(row.deliveredSalesValue), collections: Number(row.collectionsReceived) }))} margin={{ top: 10, right: 10, left: 10, bottom: 15 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} /><Tooltip formatter={(value) => formatCurrency(String(value))} /><Bar dataKey="sales" name="Delivered sales" fill="#075985" radius={[3, 3, 0, 0]} /><Bar dataKey="collections" name="Collections" fill="#059669" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer>
             </div>
@@ -355,6 +408,13 @@ function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeCha
           <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600 sm:grid-cols-4">
             <span><b className="block text-slate-900">{detail.summary.sentQuotations}</b> Sent quotations</span><span><b className="block text-slate-900">{detail.summary.acceptedQuotations}</b> Accepted quotations</span><span><b className="block text-slate-900">{formatCurrency(detail.summary.pendingQuotationValue)}</b> Pending quote value</span><span><b className="block text-slate-900">{formatCurrency(detail.summary.totalDiscount)}</b> Total discount</span>
           </div>
+          <Panel title="Marketing and field performance" subtitle="Verified activity, follow-up discipline and target actuals from the same employee record">
+            <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-5">{[
+              ["Check-ins", detail.summary.checkIns], ["Completed Visits", detail.summary.completedVisits], ["Verified Visits", detail.summary.verifiedVisits], ["New Leads", detail.summary.newLeads], ["Qualified Leads", detail.summary.qualifiedLeads],
+              ["Follow-ups", detail.summary.followUpsCompleted], ["Overdue", detail.summary.overdueFollowUps], ["Presentations", detail.summary.presentations], ["Samples", detail.summary.samples], ["Activity Score", detail.summary.activityScore]
+            ].map(([label, value]) => <div className="bg-white p-3" key={String(label)}><span className="block text-[10px] font-bold uppercase text-slate-400">{label}</span><strong className="mt-1 block text-xl text-slate-950">{formatNumber(value)}</strong></div>)}</div>
+            <div className="border-t border-slate-200 p-4"><div className="mb-1 flex items-center justify-between text-xs"><span className="font-semibold text-slate-600">Overall target progress</span><b className="text-blue-950">{formatNumber(detail.summary.targetProgress)}%</b></div><div className="h-2 overflow-hidden rounded bg-slate-100"><span className="block h-full bg-cyan-600" style={{ width: `${Math.min(100, Number(detail.summary.targetProgress))}%` }} /></div></div>
+          </Panel>
           <Panel title={`${detail.employee.name} | Activity details`} subtitle={`${detail.employee.title}${detail.employee.territory ? ` | ${detail.employee.territory}` : ""} | ${from} to ${to}`}>
             <div className="border-b border-slate-200 p-3"><Segmented value={detailTableId} onChange={setDetailTableId} ariaLabel="Employee report details" options={detailTables.map(([key, table]) => ({ value: key, label: table.title, count: table.rows.length }))} /></div>
             {selectedTable ? <ReportDataTable table={selectedTable} rows={selectedTable.rows} /> : null}

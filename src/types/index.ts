@@ -21,6 +21,7 @@ export type PermissionKey =
   | "import"
   | "inventory"
   | "sales"
+  | "marketing"
   | "accounts"
   | "reports"
   | "settings"

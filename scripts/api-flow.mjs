@@ -26,7 +26,7 @@ function rememberOutput(chunk) {
 }
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     if (server && server.exitCode !== null) throw new Error("Mock API exited before startup.\n" + serverOutput);
     try {
       const response = await fetch(base + "/api/health");
@@ -480,7 +480,7 @@ async function run() {
     method: "POST",
     as: identities.accounts,
     expected: 201,
-    body: { date: today, categoryId: "ec-4", subtype: "TA/DA", amount: "999999", taAmount: "20", daAmount: "30", employee: "Rafiq Ahmed", designation: "Sales Executive", paidFromAccountId: "acc-cash", remarks: "Approved customer visit expense" }
+    body: { date: today, categoryId: "ec-4", subtype: "TA/DA", expenseFor: "Employee", employeeId: identities.sales1.id, amount: "999999", taAmount: "20", daAmount: "30", paidFromAccountId: "acc-cash", remarks: "Approved customer visit expense" }
   });
   assert.equal(taDa.amount, "50.00");
   assert.equal((await api("/api/imports/" + importRecord.id)).snapshot.totalShipmentCostBdt, snapshotTotal);
@@ -490,7 +490,8 @@ async function run() {
   assert.ok(table(currentReport, "imports", "import-register").rows.some((row) => row.reference === lcReference));
   assert.ok(table(currentReport, "sales", "sales-by-product").rows.some((row) => row.product === product.name));
   assert.ok(table(currentReport, "sales", "customer-ledger").rows.length > 0);
-  assert.ok(table(currentReport, "expenses", "daily-expenditure").rows.some((row) => row.category.includes("Rafiq Ahmed")));
+  assert.ok(table(currentReport, "expenses", "daily-expenditure").rows.some((row) => row.expenseFor === "Rafiq Ahmed"));
+  assert.ok(table(currentReport, "expenses", "expense-by-person").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "expenses", "ta-da").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
   const accountsReport = await api("/api/reports?from=" + monthStart + "&to=" + today, { as: identities.accounts });
@@ -595,7 +596,70 @@ async function run() {
   assert.equal(reportAi.restricted, false);
   assert.doesNotMatch(JSON.stringify(reportAi), /landedCost|fob|grossProfit|profitMargin|supplierPrice/i);
 
-  console.log("9. Field Team privacy, scalable selection and Smart Insights");
+  console.log("9. Marketing hub, scope, funnel, plans and practical reports");
+  await api("/api/marketing/dashboard", { as: identities.accounts, expected: 403 });
+  const ownMarketing = await api("/api/marketing/dashboard", { as: identities.sales1 });
+  assert.equal(ownMarketing.scope, "SELF");
+  assert.ok(ownMarketing.activities.every((entry) => entry.userId === identities.sales1.id));
+  assert.deepEqual(ownMarketing.performance.map((entry) => entry.employee.id), [identities.sales1.id]);
+  const teamMarketing = await api("/api/marketing/dashboard", { as: identities.salesManager });
+  assert.equal(teamMarketing.scope, "TEAM");
+  assert.ok(teamMarketing.performance.length >= 5);
+  assert.ok(teamMarketing.metrics.some((entry) => entry.id === "overdue"));
+  const ownDirectory = await api("/api/employees/directory?scope=marketing", { as: identities.sales1 });
+  assert.deepEqual(ownDirectory.map((entry) => entry.id), [identities.sales1.id]);
+  await api("/api/marketing/activities", { method: "POST", as: identities.salesManager, expected: 403, body: { activityType: "GENERAL_NOTE", remarks: "Managers cannot impersonate a daily employee activity." } });
+
+  const marketingLead = await api("/api/marketing/leads", {
+    method: "POST",
+    expected: 201,
+    as: identities.sales1,
+    body: { organizationName: "Marketing Flow Clinic " + suffix, organizationType: "Clinic", mobile: "+8801712345678", assignedUserId: identities.sales2.id, leadSource: "Field Prospecting", interestedProductIds: ["prd-d17h"], nextFollowUpAt: new Date(Date.now() + 86_400_000).toISOString() }
+  });
+  assert.equal(marketingLead.assignedUserId, identities.sales1.id, "Sales Executive identity and assignment must come from the session.");
+  const loggedActivity = await api("/api/marketing/activities", {
+    method: "POST",
+    expected: 201,
+    as: identities.sales1,
+    body: { activityType: "CUSTOMER_CONTACT", leadId: marketingLead.id, occurredAt: new Date().toISOString(), purpose: "Initial qualification call", remarks: "Procurement requested a quotation.", productIds: ["prd-d17h"], nextFollowUpAt: new Date(Date.now() + 172_800_000).toISOString() }
+  });
+  assert.equal(loggedActivity.userId, identities.sales1.id);
+  assert.equal((await api("/api/marketing/leads", { as: identities.sales1 })).find((entry) => entry.id === marketingLead.id).stage, "CONTACTED");
+  const convertedMarketingCustomer = await api("/api/marketing/leads/" + marketingLead.id + "/convert", { method: "POST", expected: 201, as: identities.sales1, body: { paymentTerms: "30 days", creditLimit: "50000" } });
+  assert.equal(convertedMarketingCustomer.assignedSalesUserId, identities.sales1.id);
+  const linkedQuotation = await api("/api/quotations", {
+    method: "POST",
+    expected: 201,
+    as: identities.sales1,
+    body: { date: today, customerId: convertedMarketingCustomer.id, leadId: marketingLead.id, validityDays: 15, paymentTerms: "30 days", remarks: "Created from the Marketing lead without re-entry", lines: [{ productId: "prd-d17h", quantity: "5", unitPrice: "700", discount: "0" }] }
+  });
+  assert.equal(linkedQuotation.leadId, marketingLead.id);
+  assert.equal((await api("/api/marketing/leads", { as: identities.sales1 })).find((entry) => entry.id === marketingLead.id).stage, "QUOTATION");
+  const monthlyPlan = await api("/api/marketing/plans/monthly", { method: "POST", as: identities.sales1, body: { userId: identities.sales2.id, month: today.slice(0, 7), prioritySubjects: [convertedMarketingCustomer.name], productIds: ["prd-d17h"], plannedActivities: 35, notes: "Own plan identity test" } });
+  assert.equal(monthlyPlan.userId, identities.sales1.id);
+  assert.equal(monthlyPlan.status, "SUBMITTED");
+  await api("/api/marketing/plans/daily", { method: "POST", as: identities.sales1, expected: 403, body: { date: today, plannedVisits: [{ id: "outside-scope-" + suffix, customerId: "cus-labaid", subjectName: "Payload must not bypass scope", purpose: "Invalid plan", completed: false }] } });
+  const dailyPlan = await api("/api/marketing/plans/daily", { method: "POST", as: identities.sales1, body: { date: today, plannedVisits: [{ id: "plan-popular-" + suffix, customerId: "cus-popular", subjectName: "Tampered name", plannedTime: "12:00", purpose: "Stock and collection follow-up", completed: true }], notes: "Canonical customer plan" } });
+  const plannedPopular = dailyPlan.plannedVisits.find((entry) => entry.customerId === "cus-popular");
+  assert.equal(plannedPopular.subjectName, "Popular Medicine & Departmental Store");
+  assert.equal(plannedPopular.completed, false, "Plan editing must not self-certify a field visit as completed.");
+  const directFollowUp = await api("/api/marketing/follow-ups", { method: "POST", expected: 201, as: identities.sales1, body: { assignedUserId: identities.sales2.id, leadId: marketingLead.id, dueAt: new Date(Date.now() + 86_400_000).toISOString(), purpose: "Confirm quotation review" } });
+  await api("/api/marketing/follow-ups/" + directFollowUp.id, { method: "PATCH", as: identities.sales1, expected: 422, body: { dueAt: "not-a-date" } });
+  const rescheduledDueAt = new Date(Date.now() + 259_200_000).toISOString();
+  const rescheduledFollowUp = await api("/api/marketing/follow-ups/" + directFollowUp.id, { method: "PATCH", as: identities.sales1, body: { dueAt: rescheduledDueAt } });
+  assert.equal(rescheduledFollowUp.dueAt, rescheduledDueAt);
+  assert.equal(rescheduledFollowUp.status, "PENDING");
+  const marketingReport = await api("/api/reports/marketing?from=" + monthStart + "&to=" + today + "&employeeId=all&groupBy=Employee&mode=Detail", { as: identities.salesManager });
+  assert.ok(marketingReport.tables.some((entry) => entry.id === "marketing-activity"));
+  assert.ok(marketingReport.tables.some((entry) => entry.id === "lead-funnel"));
+  assert.ok(marketingReport.performance.some((entry) => entry.employee.id === identities.sales1.id));
+  await api("/api/reports/marketing/export-authorization", { as: identities.sales1, expected: 403 });
+  await api("/api/reports/marketing/export-authorization", { as: identities.salesManager });
+  const marketingAi = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who has overdue follow-ups today?", context: { route: "/app/sales?view=marketing", entityType: "marketing" } } });
+  assert.equal(marketingAi.restricted, false);
+  assert.ok(marketingAi.sources.some((source) => source.path.includes("view=marketing")));
+
+  console.log("10. Field Team privacy, employee actions and Smart Insights");
   const managerField = await api("/api/field-team/current", { as: identities.salesManager });
   assert.equal(managerField.feedLabel, "Demo location feed");
   assert.ok(managerField.employees.length >= 5);
@@ -627,18 +691,34 @@ async function run() {
   await api("/api/field-team/tracking/location", { method: "POST", as: identities.sales1, expected: 422, body: { latitude: 200, longitude: 90, accuracyMeters: 10, recordedAt: new Date().toISOString(), source: "WEB_FOREGROUND" } });
   await api("/api/field-team/visits/visit-rafiq-popular/check-in", { method: "POST", as: identities.sales1, expected: 422, body: { latitude: 200, longitude: 90, accuracyMeters: -1 } });
   await api("/api/field-team/visits/visit-shamima-labaid/check-out", { method: "POST", as: identities.sales1, expected: 403, body: { outcome: "Must not post" } });
-  const fieldAiRestricted = await api("/api/ai/chat", { method: "POST", as: identities.sales1, body: { message: "Where is Shamima?", context: { route: "/app/sales?view=field-team", entityType: "field-team", employeeId: identities.sales2.id } } });
+  await api("/api/field-team/visits/visit-rafiq-popular/check-out", { method: "POST", as: identities.sales1, expected: 422, body: { outcome: "Quotation requested" } });
+  const completedVisit = await api("/api/field-team/visits/visit-rafiq-popular/check-out", {
+    method: "POST",
+    as: identities.sales1,
+    body: { outcome: "Quotation requested after stock review", productIds: ["prd-d17h", "prd-bts"], nextFollowUpAt: new Date(Date.now() + 86_400_000).toISOString(), remarks: "Customer requested institutional pricing.", checkOutLatitude: 23.87585, checkOutLongitude: 90.37945, checkOutAccuracyMeters: 16, attachmentUpload: { fileName: "visit-evidence.pdf", mimeType: "application/pdf", sizeBytes: 15, fileDataUrl: "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK" } }
+  });
+  assert.equal(completedVisit.status, "Completed");
+  assert.equal(completedVisit.checkOutLatitude, 23.87585);
+  assert.equal(completedVisit.attachments.length, 1);
+  await rawApi("/api/documents/" + completedVisit.attachments[0].id + "/content", { as: identities.sales1, expected: 200 });
+  const fieldAfterCheckout = await api("/api/field-team/current", { as: identities.sales1 });
+  assert.equal(fieldAfterCheckout.locations[0].currentVisit, undefined);
+  const ownPlanAfterCheckout = await api("/api/marketing/plans/daily?employeeId=" + identities.sales1.id + "&date=" + today, { as: identities.sales1 });
+  assert.equal(ownPlanAfterCheckout[0].plannedVisits.find((entry) => entry.customerId === "cus-popular").completed, true);
+  const fieldActivities = await api("/api/marketing/activities?from=" + today + "&to=" + today, { as: identities.sales1 });
+  assert.ok(fieldActivities.some((entry) => entry.activityType === "CHECK_OUT" && entry.referenceId === completedVisit.id));
+  const fieldAiRestricted = await api("/api/ai/chat", { method: "POST", as: identities.sales1, body: { message: "Where is Shamima?", context: { route: "/app/sales?view=marketing&marketing=field-team", entityType: "field-team", employeeId: identities.sales2.id } } });
   assert.equal(fieldAiRestricted.restricted, true);
-  const fieldAiManager = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who is active in the field?", context: { route: "/app/sales?view=field-team", entityType: "field-team" } } });
+  const fieldAiManager = await api("/api/ai/chat", { method: "POST", as: identities.salesManager, body: { message: "Who is active in the field?", context: { route: "/app/sales?view=marketing&marketing=field-team", entityType: "field-team" } } });
   assert.equal(fieldAiManager.restricted, false);
-  assert.ok(fieldAiManager.sources.some((source) => source.path.includes("view=field-team")));
+  assert.ok(fieldAiManager.sources.some((source) => source.path.includes("view=marketing") && source.path.includes("marketing=field-team")));
   const managerInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.salesManager });
   assert.ok(managerInsights.some((entry) => entry.category === "Field Team"));
   assert.ok(managerInsights.every((entry) => entry.sourcePath && entry.recommendedAction));
   const accountsInsights = await api("/api/ai/recommendations?route=%2Fapp%2Finsights&entityType=insights", { as: identities.accounts });
   assert.ok(accountsInsights.every((entry) => entry.category !== "Field Team"));
 
-  console.log("10. Public business inquiry boundary");
+  console.log("11. Public business inquiry boundary");
   const inquiry = await api("/api/public/contact", {
     method: "POST",
     expected: 201,
@@ -660,7 +740,7 @@ async function run() {
     body: { name: "<b>Bad</b>", phone: "123", message: "<script>alert(1)</script>" }
   });
 
-  console.log("11. Public content publication and Super Admin boundary");
+  console.log("12. Public content publication and Super Admin boundary");
   await api("/api/settings/website", { as: identities.md, expected: 403 });
   const website = await api("/api/settings/website", { as: identities.super });
   assert.ok(website.heroSlides.length >= 3);
@@ -695,8 +775,12 @@ async function run() {
   assert.equal(await api("/api/public/products/temporary-publication-test"), null);
   const reviewedInquiry = await api("/api/settings/website/inquiries/" + inquiry.inquiryId, { method: "PATCH", as: identities.super, body: { status: "Qualified", internalNotes: "Automated follow-up verification." } });
   assert.equal(reviewedInquiry.status, "Qualified");
+  const convertedInquiry = await api("/api/settings/website/inquiries/" + inquiry.inquiryId + "/convert-to-lead", { method: "POST", expected: 201, as: identities.super, body: { assignedUserId: identities.sales2.id, productIds: ["prd-d17h"], nextFollowUpAt: new Date(Date.now() + 86_400_000).toISOString() } });
+  assert.match(convertedInquiry.leadNumber, /^LEAD-2026-/);
+  assert.ok((await api("/api/marketing/leads", { as: identities.salesManager })).some((entry) => entry.id === convertedInquiry.leadId && entry.assignedUserId === identities.sales2.id));
+  await api("/api/settings/website/inquiries/" + inquiry.inquiryId, { method: "DELETE", as: identities.super, expected: 409 });
 
-  console.log("All digital-platform, effective-access and public-content scenarios passed.");
+  console.log("All digital-platform, marketing, effective-access and public-content scenarios passed.");
 }
 
 try {

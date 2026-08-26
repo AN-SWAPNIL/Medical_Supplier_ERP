@@ -74,12 +74,16 @@ const routes = [
   ["inventory-mobile", "/app/inventory", 390, 1100, people.super],
   ["sales-desktop", "/app/sales", 1440, 1000, people.super],
   ["sales-mobile", "/app/sales", 390, 1100, people.super],
-  ["field-team-desktop", "/app/sales?view=field-team", 1440, 1100, people.salesManager],
-  ["field-team-mobile", "/app/sales?view=field-team", 390, 1100, people.sales],
+  ["marketing-desktop", "/app/sales?view=marketing", 1440, 1200, people.salesManager],
+  ["marketing-mobile", "/app/sales?view=marketing", 390, 1200, people.sales],
+  ["field-team-desktop", "/app/sales?view=marketing&marketing=field-team", 1440, 1100, people.salesManager],
+  ["field-team-mobile", "/app/sales?view=marketing&marketing=field-team", 390, 1100, people.sales],
   ["accounts-desktop", "/app/accounts", 1440, 1000, people.super],
   ["accounts-mobile", "/app/accounts", 390, 1100, people.super],
   ["reports-desktop", "/app/reports", 1440, 1000, people.super],
   ["reports-mobile", "/app/reports", 390, 1100, people.super],
+  ["marketing-reports-desktop", "/app/reports?view=marketing&preset=month", 1440, 1200, people.salesManager],
+  ["marketing-reports-mobile", "/app/reports?view=marketing&preset=my-day", 390, 1200, people.sales],
   ["reports-import-override", "/app/reports", 1440, 1000, people.import],
   ["smart-insights-desktop", "/app/insights", 1440, 1000, people.salesManager],
   ["smart-insights-mobile", "/app/insights", 390, 1000, people.sales],
@@ -156,6 +160,24 @@ await customerLedger.getByText("Current Due", { exact: true }).waitFor({ timeout
 await customerLedger.screenshot({ path: "artifacts/customer-ledger-desktop.png", fullPage: true });
 await customerLedger.close();
 
+const customerActions = await preparePage({ name: "customer-connected-actions", width: 1440, height: 1000, user: people.super });
+await customerActions.goto(baseUrl + "/app/sales?view=customers", { waitUntil: "networkidle", timeout: 60000 });
+await customerActions.getByRole("button", { name: "Create quotation for Popular Medicine & Departmental Store" }).click();
+const quotationDialog = customerActions.getByRole("dialog");
+await quotationDialog.getByText("New quotation", { exact: true }).waitFor();
+if (await quotationDialog.locator("select").first().inputValue() !== "cus-popular") issues.push("Customer-to-quotation shortcut did not carry the customer context.");
+await customerActions.goto(baseUrl + "/app/sales?view=customers", { waitUntil: "networkidle", timeout: 60000 });
+await customerActions.getByRole("button", { name: "Post collection for Popular Medicine & Departmental Store" }).click();
+const collectionDialog = customerActions.getByRole("dialog");
+await collectionDialog.getByText("Post customer collection", { exact: true }).waitFor();
+if (await collectionDialog.locator("select").first().inputValue() !== "cus-popular") issues.push("Customer-to-collection shortcut did not carry the customer context.");
+await customerActions.goto(baseUrl + "/app/sales?view=customers", { waitUntil: "networkidle", timeout: 60000 });
+await customerActions.getByRole("button", { name: "Open marketing history for Popular Medicine & Departmental Store" }).click();
+await customerActions.getByRole("heading", { name: "Marketing Report Builder" }).waitFor({ timeout: 30000 });
+if (await customerActions.getByText("Customer / Lead", { exact: true }).locator("..").locator("select").inputValue() !== "customer:cus-popular") issues.push("Customer marketing-history shortcut did not retain the selected subject.");
+await customerActions.screenshot({ path: "artifacts/customer-marketing-history.png", fullPage: true });
+await customerActions.close();
+
 const employeeReport = await preparePage({ name: "employee-performance-desktop", width: 1440, height: 1100, user: people.salesManager });
 await employeeReport.goto(baseUrl + "/app/reports?view=sales&table=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
 await employeeReport.getByLabel("From Date").fill("2026-08-01");
@@ -166,7 +188,7 @@ await employeeReport.getByPlaceholder("Search name / ID / territory").fill("SE-0
 await employeeReport.getByRole("option", { name: /Rafiq Ahmed/ }).click();
 await employeeReport.getByText(/Rafiq Ahmed \| Activity details/).waitFor({ timeout: 30000 });
 await employeeReport.getByRole("button", { name: "Print Report" }).waitFor();
-await employeeReport.getByRole("button", { name: "View Field Activity" }).waitFor();
+await employeeReport.getByRole("button", { name: "Field Map" }).waitFor();
 const performanceText = await employeeReport.locator("body").textContent();
 if (!performanceText?.includes("Delivered Sales") || !performanceText.includes("Collections")) issues.push("Employee report summary is incomplete.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
@@ -176,7 +198,7 @@ await employeeReport.screenshot({ path: "artifacts/print-employee-performance.pn
 await employeeReport.close();
 
 const fieldTeam = await preparePage({ name: "field-team-interactions", width: 1440, height: 1050, user: people.salesManager });
-await fieldTeam.goto(baseUrl + "/app/sales?view=field-team", { waitUntil: "domcontentloaded", timeout: 60000 });
+await fieldTeam.goto(baseUrl + "/app/sales?view=marketing&marketing=field-team", { waitUntil: "domcontentloaded", timeout: 60000 });
 await fieldTeam.getByTestId("field-team-workspace").waitFor({ timeout: 30000 });
 await fieldTeam.locator(".leaflet-container").waitFor({ timeout: 30000 });
 await fieldTeam.waitForTimeout(1000);
@@ -355,12 +377,39 @@ if ((await accountsActions.getByRole("button", { name: "Expense Category" }).cou
 await accountsActions.close();
 
 const salesPage = await preparePage({ name: "sales-executive-own-record", width: 1280, height: 900, user: people.sales });
-await salesPage.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
-if ((await salesPage.getByText("My Customers").count()) === 0) issues.push("Sales Executive own-record sales view is missing.");
+await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
+if ((await salesPage.getByText("My Marketing Day").count()) === 0) issues.push("Sales Executive own-record Marketing hub is missing.");
+if ((await salesPage.getByRole("button", { name: "Check In / Out" }).count()) !== 1) issues.push("Sales Executive field-action shortcut is missing.");
+await salesPage.getByRole("button", { name: "Open Leads" }).click();
+const leadDialog = salesPage.getByRole("dialog");
+await leadDialog.getByText("Lead Pipeline", { exact: true }).waitFor();
+const followUpShortcut = leadDialog.getByRole("button", { name: /Schedule follow-up for/ }).first();
+await followUpShortcut.waitFor();
+await followUpShortcut.click();
+const followUpDialog = salesPage.getByRole("dialog");
+await followUpDialog.getByRole("heading", { name: "Schedule Follow-up" }).waitFor();
+if (!(await followUpDialog.locator("select").first().inputValue()).startsWith("lead:")) issues.push("Lead-to-follow-up shortcut did not carry the lead context.");
+await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
+await salesPage.getByRole("button", { name: "Open Leads" }).click();
+const visitShortcut = salesPage.getByRole("dialog").getByRole("button", { name: /Report visit for/ }).first();
+await visitShortcut.waitFor();
+await visitShortcut.click();
+const activityDialog = salesPage.getByRole("dialog");
+await activityDialog.getByText("Report Marketing Activity", { exact: true }).waitFor();
+if (await activityDialog.locator("select").first().inputValue() !== "CUSTOMER_VISIT" || !(await activityDialog.locator("select").nth(1).inputValue()).startsWith("lead:")) issues.push("Lead-to-visit shortcut did not carry the activity and lead context.");
+await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
+await salesPage.getByRole("button", { name: "Update Plan" }).click();
+const planDialog = salesPage.getByRole("dialog");
+await planDialog.getByText("Completion is posted by a verified field check-out, not by editing this plan.", { exact: true }).waitFor();
+if ((await planDialog.locator("select").count()) < 1) issues.push("Daily plan is missing canonical customer/lead selectors.");
+await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
+await salesPage.getByRole("button", { name: "Open Queue" }).click();
+await salesPage.getByRole("dialog").getByRole("button", { name: "Reschedule" }).first().waitFor();
+await salesPage.screenshot({ path: "artifacts/marketing-connected-actions.png", fullPage: true });
 await salesPage.close();
 
 const headers = { "x-user-id": people.super.id, "x-role": people.super.role, "Content-Type": "application/json" };
-for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
+for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/marketing/dashboard", "/api/reports/marketing", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
   const response = await fetch(apiBaseUrl + path, { headers });
   console.log("api " + path + ": " + response.status);
   if (!response.ok) issues.push(path + " returned " + response.status);

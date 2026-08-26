@@ -32,6 +32,20 @@ test("Managing Director can open the connected Sales customer view", () => {
   assert.equal(hasEffectivePermission(director, "customers", "view"), true);
 });
 
+test("marketing role defaults separate employee work, management review and export", () => {
+  const executive = user({ role: "Sales Executive" });
+  const manager = user({ role: "Sales Manager" });
+  const director = user({ role: "Managing Director" });
+  const accounts = user({ role: "Accounts" });
+  assert.equal(hasEffectivePermission(executive, "marketing", "create"), true);
+  assert.equal(hasEffectivePermission(executive, "marketing", "export"), false);
+  assert.equal(hasEffectivePermission(manager, "marketing", "approve"), true);
+  assert.equal(hasEffectivePermission(manager, "marketing", "export"), true);
+  assert.equal(hasEffectivePermission(director, "marketing", "view"), true);
+  assert.equal(hasEffectivePermission(director, "marketing", "create"), false);
+  assert.equal(hasEffectivePermission(accounts, "marketing", "view"), false);
+});
+
 test("ALLOW adds access and DENY removes role-default access", () => {
   const officer = user({ permissionOverrides: [{ permission: "reports", action: "view", effect: "ALLOW" }] });
   const manager = user({ role: "Sales Manager", permissionOverrides: [{ permission: "reports", action: "export", effect: "DENY" }] });

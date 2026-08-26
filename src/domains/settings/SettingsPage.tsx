@@ -7,6 +7,7 @@ import {
   Database,
   ExternalLink,
   FileQuestion,
+  Gauge,
   Image as ImageIcon,
   Link2,
   PackagePlus,
@@ -57,6 +58,7 @@ import type {
   CostPreset,
   Customer,
   CustomerOpeningBalance,
+  MarketingScoreRule,
   PrintConfiguration,
   PrintIdentity,
   Product,
@@ -65,7 +67,7 @@ import type {
   Supplier,
   WarehouseConfig
 } from "../erp.types";
-import { accountsService, inventoryService, salesService, settingsService } from "../services";
+import { accountsService, inventoryService, marketingService, salesService, settingsService } from "../services";
 import WebsiteContentWorkspace from "./WebsiteContentWorkspace";
 
 type View = "decisions" | "users" | "products" | "suppliers" | "business" | "migration" | "website";
@@ -139,10 +141,11 @@ export default function SettingsPage() {
   const presetsQuery = useQuery({ queryKey: ["settings", "cost-presets"], queryFn: settingsService.costPresets, enabled: view === "business" && viewAccess.business });
   const printQuery = useQuery({ queryKey: ["settings", "print"], queryFn: settingsService.printConfiguration, enabled: view === "business" && viewAccess.business });
   const categoriesQuery = useQuery({ queryKey: ["accounts", "categories"], queryFn: accountsService.categories, enabled: view === "business" && viewAccess.business });
+  const scoreRulesQuery = useQuery({ queryKey: ["marketing", "score-rules"], queryFn: marketingService.scoreRules, enabled: view === "business" && actor?.role === "Super Admin" });
   const batchesQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches, enabled: view === "migration" && viewAccess.migration });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: salesService.customers, enabled: view === "migration" && viewAccess.migration });
   const customerOpeningsQuery = useQuery({ queryKey: ["settings", "customer-opening-balances"], queryFn: settingsService.customerOpeningBalances, enabled: view === "migration" && viewAccess.migration });
-  const queries = view === "decisions" ? [decisionsQuery] : view === "users" ? [usersQuery] : view === "products" ? [productsQuery, aliasesQuery] : view === "suppliers" ? [suppliersQuery] : view === "business" ? [accountsQuery, warehouseQuery, presetsQuery, printQuery, categoriesQuery] : view === "migration" ? [productsQuery, warehouseQuery, batchesQuery, customersQuery, customerOpeningsQuery] : [];
+  const queries = view === "decisions" ? [decisionsQuery] : view === "users" ? [usersQuery] : view === "products" ? [productsQuery, aliasesQuery] : view === "suppliers" ? [suppliersQuery] : view === "business" ? [accountsQuery, warehouseQuery, presetsQuery, printQuery, categoriesQuery, ...(actor?.role === "Super Admin" ? [scoreRulesQuery] : [])] : view === "migration" ? [productsQuery, warehouseQuery, batchesQuery, customersQuery, customerOpeningsQuery] : [];
 
   const closeEditor = () => {
     setModal(null);
@@ -184,6 +187,7 @@ export default function SettingsPage() {
   const warehouse = warehouseQuery.data!;
   const printConfiguration = printQuery.data!;
   const categories = categoriesQuery.data ?? [];
+  const scoreRules = scoreRulesQuery.data ?? [];
   const openingBatches = (batchesQuery.data ?? []).filter((batch) => batch.sourceType === "Opening Stock");
   const customers = customersQuery.data ?? [];
   const customerOpenings = customerOpeningsQuery.data ?? [];
@@ -229,7 +233,7 @@ export default function SettingsPage() {
       {view === "users" && actor ? <UsersTable users={users} actor={actor} canSeeAccess={canManageAccess} onEdit={(user) => { setEditingUser(user); setAccessPreviewRole(user.role); setModal("user"); }} /> : null}
       {view === "products" ? <ProductsWorkspace products={products} aliases={aliases} canCreate={hasEffectivePermission(actor, "products", "create")} canEdit={hasEffectivePermission(actor, "products", "edit")} canDelete={hasEffectivePermission(actor, "products", "delete")} onNewAlias={() => setModal("alias")} onEdit={(product) => { setEditingProduct(product); setModal("product"); }} onDelete={setDeleteTarget} /> : null}
       {view === "suppliers" ? <SuppliersTable suppliers={suppliers} canEdit={hasEffectivePermission(actor, "suppliers", "edit")} canDelete={hasEffectivePermission(actor, "suppliers", "delete")} onEdit={(supplier) => { setEditingSupplier(supplier); setModal("supplier"); }} onDelete={setDeleteTarget} /> : null}
-      {view === "business" ? <BusinessSetup accounts={accounts} warehouse={warehouse} categories={categories} presets={presets} printConfiguration={printConfiguration} canCreate={hasEffectivePermission(actor, "settings", "create")} canEdit={hasEffectivePermission(actor, "settings", "edit")} canDelete={hasEffectivePermission(actor, "settings", "delete")} onModal={setModal} onEditAccount={(account) => { setEditingAccount(account); setModal("account"); }} onEditPreset={(preset) => { setEditingPreset(preset); setModal("preset"); }} onDelete={setDeleteTarget} /> : null}
+      {view === "business" ? <BusinessSetup accounts={accounts} warehouse={warehouse} categories={categories} presets={presets} printConfiguration={printConfiguration} scoreRules={scoreRules} canCreate={hasEffectivePermission(actor, "settings", "create")} canEdit={hasEffectivePermission(actor, "settings", "edit")} canDelete={hasEffectivePermission(actor, "settings", "delete")} canEditScoreRules={actor?.role === "Super Admin"} busy={action.isPending} onModal={setModal} onEditAccount={(account) => { setEditingAccount(account); setModal("account"); }} onEditPreset={(preset) => { setEditingPreset(preset); setModal("preset"); }} onSaveScoreRule={(rule, payload) => action.mutate({ run: () => marketingService.updateScoreRule(rule.id, payload), success: `${rule.label} score rule updated` })} onDelete={setDeleteTarget} /> : null}
       {view === "migration" ? <MigrationWorkspace batches={openingBatches} customerOpenings={customerOpenings} canCreate={hasEffectivePermission(actor, "settings", "create")} onOpeningStock={() => setModal("opening")} onCustomerBalance={() => setModal("customer-opening")} /> : null}
       {view === "website" ? <WebsiteContentWorkspace /> : null}
 
@@ -311,7 +315,7 @@ function SuppliersTable({ suppliers, canEdit, canDelete, onEdit, onDelete }: { s
   );
 }
 
-function BusinessSetup({ accounts, warehouse, categories, presets, printConfiguration, canCreate, canEdit, canDelete, onModal, onEditAccount, onEditPreset, onDelete }: { accounts: CashBankAccount[]; warehouse: WarehouseConfig; categories: { id: string; name: string; active: boolean }[]; presets: CostPreset[]; printConfiguration: PrintConfiguration; canCreate: boolean; canEdit: boolean; canDelete: boolean; onModal: (modal: ModalType) => void; onEditAccount: (account: CashBankAccount) => void; onEditPreset: (preset: CostPreset) => void; onDelete: (target: DeleteTarget) => void }) {
+function BusinessSetup({ accounts, warehouse, categories, presets, printConfiguration, scoreRules, canCreate, canEdit, canDelete, canEditScoreRules, busy, onModal, onEditAccount, onEditPreset, onSaveScoreRule, onDelete }: { accounts: CashBankAccount[]; warehouse: WarehouseConfig; categories: { id: string; name: string; active: boolean }[]; presets: CostPreset[]; printConfiguration: PrintConfiguration; scoreRules: MarketingScoreRule[]; canCreate: boolean; canEdit: boolean; canDelete: boolean; canEditScoreRules: boolean; busy: boolean; onModal: (modal: ModalType) => void; onEditAccount: (account: CashBankAccount) => void; onEditPreset: (preset: CostPreset) => void; onSaveScoreRule: (rule: MarketingScoreRule, payload: Partial<MarketingScoreRule>) => void; onDelete: (target: DeleteTarget) => void }) {
   return (
     <div className="grid gap-4">
       <Panel title="Cash, bank and mobile accounts" subtitle="Collections and expenses must post to an active real account." actions={canCreate ? <Button icon={<Plus className="h-4 w-4" />} onClick={() => onModal("account")}>Add Account</Button> : undefined}>
@@ -324,11 +328,22 @@ function BusinessSetup({ accounts, warehouse, categories, presets, printConfigur
       <Panel title="Import cost presets" subtitle="Local Transport defaults to confirmed CBM. Common-cost methods remain explicit until the client confirms a default." actions={canCreate ? <Button icon={<Plus className="h-4 w-4" />} onClick={() => onModal("preset")}>Add Preset</Button> : undefined}>
         <TableFrame><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Preset</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Suggested Basis</th><th className="px-4 py-3">Explicit Choice</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{presets.map((preset) => <tr key={preset.id}><td className="px-4 py-3 font-semibold">{preset.name}</td><td className="px-4 py-3 text-slate-600">{preset.category}</td><td className="px-4 py-3">{preset.suggestedAllocationMethod?.replaceAll("_", " ") ?? "No suggestion"}</td><td className="px-4 py-3"><StatusBadge status={preset.requiresExplicitChoice ? "Pending" : "Confirmed"} /></td><td className="px-4 py-3 text-right">{canEdit ? <Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => onEditPreset(preset)} aria-label={`Edit ${preset.name}`} /> : null}{canDelete ? <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => onDelete({ type: "preset", id: preset.id, label: preset.name })} aria-label={`Delete ${preset.name}`} /> : null}</td></tr>)}</tbody></table></TableFrame>
       </Panel>
+      {scoreRules.length ? <Panel title="Marketing activity score rules" subtitle="Official points are deterministic. Manual notes cannot award transaction points.">
+        <div className="divide-y divide-slate-100">{scoreRules.map((rule) => <ScoreRuleEditor rule={rule} canEdit={canEditScoreRules} busy={busy} onSave={(payload) => onSaveScoreRule(rule, payload)} key={rule.id} />)}</div>
+      </Panel> : null}
       <Panel title="Supplied stationery and A4 calibration" subtitle="Quotation and order outputs use the real MIPRO / LED backgrounds with millimetre safe areas." actions={canEdit ? <Button icon={<Ruler className="h-4 w-4" />} onClick={() => onModal("print")}>Calibrate</Button> : undefined}>
         <div className="grid gap-4 p-4 md:grid-cols-2">{printConfiguration.identities.map((identity) => <div className="flex min-w-0 gap-3 border-b border-slate-100 pb-4 md:border-b-0" key={identity.id}><div className="h-28 w-20 shrink-0 overflow-hidden border border-slate-200 bg-slate-50">{identity.backgroundImageUrl ? <img className="h-full w-full object-cover object-top" src={identity.backgroundImageUrl} alt={`${identity.displayName} letterhead`} /> : <ImageIcon className="m-auto h-7 w-7 text-slate-300" />}</div><div className="min-w-0"><strong className="block">{identity.displayName}</strong><span className="block truncate text-xs text-slate-500">{identity.address}</span><span className="mt-2 block text-xs text-slate-600">Safe area: {identity.safeArea.topMm} / {identity.safeArea.rightMm} / {identity.safeArea.bottomMm} / {identity.safeArea.leftMm} mm</span>{printConfiguration.defaultIdentityId === identity.id ? <span className="mt-2 inline-block rounded bg-cyan-50 px-2 py-1 text-[10px] font-bold text-cyan-800">Default identity</span> : null}</div></div>)}</div>
       </Panel>
     </div>
   );
+}
+
+function ScoreRuleEditor({ rule, canEdit, busy, onSave }: { rule: MarketingScoreRule; canEdit: boolean; busy: boolean; onSave: (payload: Partial<MarketingScoreRule>) => void }) {
+  const [points, setPoints] = useState(rule.points);
+  const [active, setActive] = useState(rule.active);
+  useEffect(() => { setPoints(rule.points); setActive(rule.active); }, [rule]);
+  const changed = points !== rule.points || active !== rule.active;
+  return <div className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_110px_120px_auto] sm:items-end"><div className="flex min-w-0 items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded bg-cyan-50 text-cyan-800"><Gauge className="h-4 w-4" /></span><div className="min-w-0"><strong className="block text-sm">{rule.label}</strong><span className="block text-xs text-slate-500">{rule.event.replaceAll("_", " ")} | authoritative event</span></div></div><label><span className={labelClass}>Points</span><input className={inputClass} type="number" min="0" max="100" step="1" disabled={!canEdit} value={points} onChange={(event) => setPoints(Number(event.target.value))} /></label><label className="flex min-h-10 items-center gap-2 text-sm font-semibold"><input type="checkbox" disabled={!canEdit} checked={active} onChange={(event) => setActive(event.target.checked)} /> Active</label><Button icon={<Save className="h-4 w-4" />} disabled={!canEdit || busy || !changed || !Number.isInteger(points) || points < 0 || points > 100} onClick={() => onSave({ points, active })}>Save</Button></div>;
 }
 
 function MigrationWorkspace({ batches, customerOpenings, canCreate, onOpeningStock, onCustomerBalance }: { batches: StockBatch[]; customerOpenings: CustomerOpeningBalance[]; canCreate: boolean; onOpeningStock: () => void; onCustomerBalance: () => void }) {

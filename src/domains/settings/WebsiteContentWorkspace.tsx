@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Building2, ExternalLink, FileBadge2, Image as ImageIcon, Inbox, LayoutTemplate, PackageSearch, Pencil, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Building2, ExternalLink, FileBadge2, Image as ImageIcon, Inbox, LayoutTemplate, PackageSearch, Pencil, Plus, Save, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import Button from "../../components/ui/Button";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import EmployeePicker from "../../components/employees/EmployeePicker";
 import { useToastStore } from "../../lib/ui/toast";
 import { websiteContentService } from "../../features/public/publicSiteService";
 import type { PublicCertificate, PublicHeroSlide, PublicInquiryRecord, PublicInquiryStatus, PublicProduct, PublicProductCategoryRecord, PublicResource, PublicSiteSettings } from "../../features/public/public.types";
 import { EmptyState, ErrorBlock, LoadingBlock, Modal, Panel, ProductThumb, Segmented, TableFrame, inputClass, labelClass, textareaClass } from "../components";
+import { employeeService, settingsService } from "../services";
 
 type View = "overview" | "homepage" | "products" | "documents" | "inquiries";
 type Task = { run: () => Promise<unknown>; success: string };
@@ -32,10 +34,13 @@ export default function WebsiteContentWorkspace() {
   const [editingCertificate, setEditingCertificate] = useState<{ originalId?: string; value: PublicCertificate }>();
   const [editingResource, setEditingResource] = useState<{ originalId?: string; value: PublicResource }>();
   const [editingInquiry, setEditingInquiry] = useState<PublicInquiryRecord>();
+  const [convertInquiry, setConvertInquiry] = useState<PublicInquiryRecord>();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const snapshot = useQuery({ queryKey: ["settings", "website-content"], queryFn: websiteContentService.snapshot });
+  const employees = useQuery({ queryKey: ["employees", "directory", "marketing", "website"], queryFn: () => employeeService.directory("marketing") });
+  const erpProducts = useQuery({ queryKey: ["products", "website-lead-conversion"], queryFn: settingsService.products });
 
   const closeEditors = () => {
     setEditingSettings(undefined);
@@ -45,6 +50,7 @@ export default function WebsiteContentWorkspace() {
     setEditingCertificate(undefined);
     setEditingResource(undefined);
     setEditingInquiry(undefined);
+    setConvertInquiry(undefined);
   };
   const action = useMutation({
     mutationFn: (task: Task) => task.run(),
@@ -54,12 +60,13 @@ export default function WebsiteContentWorkspace() {
       setDeleteTarget(undefined);
       void queryClient.invalidateQueries({ queryKey: ["settings", "website-content"] });
       void queryClient.invalidateQueries({ queryKey: ["public"] });
+      void queryClient.invalidateQueries({ queryKey: ["marketing"] });
     },
     onError: (error) => pushToast({ kind: "error", title: "Website content was not saved", message: error instanceof Error ? error.message : "Unexpected API error." })
   });
 
-  if (snapshot.isLoading) return <LoadingBlock label="Loading public website content" />;
-  if (snapshot.isError || !snapshot.data) return <ErrorBlock error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
+  if (snapshot.isLoading || employees.isLoading || erpProducts.isLoading) return <LoadingBlock label="Loading public website content" />;
+  if (snapshot.isError || employees.isError || erpProducts.isError || !snapshot.data) return <ErrorBlock error={snapshot.error ?? employees.error ?? erpProducts.error} onRetry={() => { void snapshot.refetch(); void employees.refetch(); void erpProducts.refetch(); }} />;
   const data = snapshot.data;
   const pendingInquiries = data.inquiries.filter((inquiry) => ["Received", "Contacted", "Qualified"].includes(inquiry.status)).length;
 
@@ -82,7 +89,7 @@ export default function WebsiteContentWorkspace() {
       {view === "homepage" ? <HomepageContent data={data} onSettings={() => setEditingSettings(data.settings)} onHero={(value) => setEditingHero({ originalId: value.id, value })} onNewHero={() => setEditingHero({ value: newHero(data.heroSlides.length + 1) })} onDeleteHero={(value) => runDelete(value.title, () => websiteContentService.removeHero(value.id))} onCategory={(value) => setEditingCategory({ originalId: value.id, value })} onNewCategory={() => setEditingCategory({ value: newCategory(data.categories.length + 1) })} onDeleteCategory={(value) => runDelete(value.name, () => websiteContentService.removeCategory(value.id))} /> : null}
       {view === "products" ? <PublicProductsContent products={data.products} onNew={() => setEditingProduct({ value: newProduct(data.categories[0]?.name ?? "", data.products.length + 1) })} onEdit={(value) => setEditingProduct({ originalId: value.slug, value })} onDelete={(value) => runDelete(value.name, () => websiteContentService.removeProduct(value.slug))} /> : null}
       {view === "documents" ? <DocumentsContent data={data} onNewCertificate={() => setEditingCertificate({ value: newCertificate(data.certificates.length + 1) })} onCertificate={(value) => setEditingCertificate({ originalId: value.id, value })} onDeleteCertificate={(value) => runDelete(value.title, () => websiteContentService.removeCertificate(value.id))} onNewResource={() => setEditingResource({ value: newResource(data.resources.length + 1) })} onResource={(value) => setEditingResource({ originalId: value.slug, value })} onDeleteResource={(value) => runDelete(value.title, () => websiteContentService.removeResource(value.slug))} /> : null}
-      {view === "inquiries" ? <InquiriesContent inquiries={data.inquiries} onEdit={setEditingInquiry} onDelete={(value) => runDelete(value.organization || value.name, () => websiteContentService.removeInquiry(value.inquiryId))} /> : null}
+      {view === "inquiries" ? <InquiriesContent inquiries={data.inquiries} onEdit={setEditingInquiry} onConvert={setConvertInquiry} onDelete={(value) => runDelete(value.organization || value.name, () => websiteContentService.removeInquiry(value.inquiryId))} /> : null}
 
       {editingSettings ? <Modal open title="Edit public company details" subtitle="These values appear in the corporate header, contact page, map and footer. They never change ERP company records." onClose={closeEditors} width="max-w-4xl"><SiteSettingsForm value={editingSettings} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => websiteContentService.updateSettings(payload), success: "Public company details updated" })} /></Modal> : null}
       {editingHero ? <Modal open title={editingHero.originalId ? "Edit homepage slide" : "Add homepage slide"} subtitle="Published slides rotate automatically on the first public viewport." onClose={closeEditors} width="max-w-4xl"><HeroForm value={editingHero.value} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingHero.originalId ? websiteContentService.updateHero(editingHero.originalId, payload) : websiteContentService.createHero(payload), success: editingHero.originalId ? "Homepage slide updated" : "Homepage slide created" })} /></Modal> : null}
@@ -91,6 +98,7 @@ export default function WebsiteContentWorkspace() {
       {editingCertificate ? <Modal open title={editingCertificate.originalId ? "Edit public document" : "Add public document"} subtitle="State the document owner and validity clearly; a manufacturer certificate must not be presented as MIPRO's own." onClose={closeEditors} width="max-w-4xl"><CertificateForm value={editingCertificate.value} products={data.products} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingCertificate.originalId ? websiteContentService.updateCertificate(editingCertificate.originalId, payload) : websiteContentService.createCertificate(payload), success: editingCertificate.originalId ? "Public document updated" : "Public document created" })} /></Modal> : null}
       {editingResource ? <Modal open title={editingResource.originalId ? "Edit news or resource" : "Add news or resource"} subtitle="Publish product guidance and company updates relevant to healthcare procurement." onClose={closeEditors} width="max-w-4xl"><ResourceForm value={editingResource.value} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingResource.originalId ? websiteContentService.updateResource(editingResource.originalId, payload) : websiteContentService.createResource(payload), success: editingResource.originalId ? "Public resource updated" : "Public resource created" })} /></Modal> : null}
       {editingInquiry ? <Modal open title="Review website inquiry" subtitle={`${editingInquiry.inquiryId} from ${editingInquiry.organization || editingInquiry.name}`} onClose={closeEditors}><InquiryForm value={editingInquiry} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => websiteContentService.updateInquiry(editingInquiry.inquiryId, payload), success: "Website inquiry updated" })} /></Modal> : null}
+      {convertInquiry ? <Modal open title="Convert qualified inquiry to lead" subtitle={`${convertInquiry.inquiryId} will remain linked to the new marketing record.`} onClose={closeEditors} width="max-w-3xl"><InquiryLeadForm inquiry={convertInquiry} employees={employees.data ?? []} products={erpProducts.data ?? []} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => websiteContentService.convertInquiryToLead(convertInquiry.inquiryId, payload), success: "Qualified inquiry converted to marketing lead" })} /></Modal> : null}
 
       <ConfirmDialog open={Boolean(deleteTarget)} title="Delete website record?" message={`${deleteTarget?.label ?? "This record"} will disappear from the running prototype. Published content should normally be unpublished first when review history matters.`} confirmLabel="Delete" onCancel={() => setDeleteTarget(undefined)} onConfirm={() => deleteTarget && action.mutate({ run: deleteTarget.run, success: "Website record deleted" })} />
     </>
@@ -143,8 +151,17 @@ function DocumentsContent({ data, onNewCertificate, onCertificate, onDeleteCerti
   </>;
 }
 
-function InquiriesContent({ inquiries, onEdit, onDelete }: { inquiries: PublicInquiryRecord[]; onEdit: (value: PublicInquiryRecord) => void; onDelete: (value: PublicInquiryRecord) => void }) {
-  return <Panel title="Business inquiry queue" subtitle="Public contact requests are commercial messages, never ERP account requests."><div className="divide-y divide-slate-100">{inquiries.map((inquiry) => <article className="grid gap-4 p-4 lg:grid-cols-[1fr_220px]" key={inquiry.inquiryId}><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-950">{inquiry.organization || inquiry.name}</strong><InquiryBadge status={inquiry.status} /><span className="text-xs text-slate-400">{inquiry.inquiryId}</span></div><p className="mt-1 text-sm font-semibold text-slate-700">{inquiry.subject || inquiry.productInterest || "General business inquiry"}</p><p className="mt-2 text-sm leading-6 text-slate-600">{inquiry.message}</p>{inquiry.internalNotes ? <p className="mt-2 rounded bg-amber-50 p-2 text-xs leading-5 text-amber-900"><b>Internal note:</b> {inquiry.internalNotes}</p> : null}</div><div className="flex flex-col items-start gap-2 lg:items-end"><small className="text-slate-500">{new Date(inquiry.receivedAt).toLocaleString()}</small><a className="text-sm font-semibold text-cyan-700" href={`tel:${inquiry.phone}`}>{inquiry.phone}</a>{inquiry.email ? <a className="max-w-full truncate text-sm text-slate-600" href={`mailto:${inquiry.email}`}>{inquiry.email}</a> : null}<div className="mt-auto flex gap-1"><Button icon={<Pencil className="h-4 w-4" />} onClick={() => onEdit(inquiry)}>Review</Button><Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-rose-600" />} onClick={() => onDelete(inquiry)} aria-label="Delete inquiry" title="Delete inquiry" /></div></div></article>)}{!inquiries.length ? <EmptyState title="No inquiries yet" message="Validated public form submissions will appear here." /> : null}</div></Panel>;
+function InquiriesContent({ inquiries, onEdit, onConvert, onDelete }: { inquiries: PublicInquiryRecord[]; onEdit: (value: PublicInquiryRecord) => void; onConvert: (value: PublicInquiryRecord) => void; onDelete: (value: PublicInquiryRecord) => void }) {
+  return <Panel title="Business inquiry queue" subtitle="Review first, then convert only qualified opportunities into assigned marketing leads."><div className="divide-y divide-slate-100">{inquiries.map((inquiry) => <article className="grid gap-4 p-4 lg:grid-cols-[1fr_250px]" key={inquiry.inquiryId}><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-950">{inquiry.organization || inquiry.name}</strong><InquiryBadge status={inquiry.status} /><span className="text-xs text-slate-400">{inquiry.inquiryId}</span>{inquiry.leadNumber ? <span className="rounded bg-cyan-50 px-2 py-1 text-[10px] font-bold text-cyan-800">Linked {inquiry.leadNumber}</span> : null}</div><p className="mt-1 text-sm font-semibold text-slate-700">{inquiry.subject || inquiry.productInterest || "General business inquiry"}</p><p className="mt-2 text-sm leading-6 text-slate-600">{inquiry.message}</p>{inquiry.internalNotes ? <p className="mt-2 rounded bg-amber-50 p-2 text-xs leading-5 text-amber-900"><b>Internal note:</b> {inquiry.internalNotes}</p> : null}</div><div className="flex flex-col items-start gap-2 lg:items-end"><small className="text-slate-500">{new Date(inquiry.receivedAt).toLocaleString()}</small><a className="text-sm font-semibold text-cyan-700" href={`tel:${inquiry.phone}`}>{inquiry.phone}</a>{inquiry.email ? <a className="max-w-full truncate text-sm text-slate-600" href={`mailto:${inquiry.email}`}>{inquiry.email}</a> : null}<div className="mt-auto flex flex-wrap justify-end gap-1">{inquiry.status === "Qualified" && !inquiry.leadId ? <Button variant="primary" icon={<UserPlus className="h-4 w-4" />} onClick={() => onConvert(inquiry)}>Convert to Lead</Button> : null}{inquiry.leadId ? <Button icon={<ExternalLink className="h-4 w-4" />} onClick={() => window.open("/app/sales?view=marketing", "_self")}>Open Lead</Button> : <><Button icon={<Pencil className="h-4 w-4" />} onClick={() => onEdit(inquiry)}>Review</Button><Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-rose-600" />} onClick={() => onDelete(inquiry)} aria-label="Delete inquiry" title="Delete inquiry" /></>}</div></div></article>)}{!inquiries.length ? <EmptyState title="No inquiries yet" message="Validated public form submissions will appear here." /> : null}</div></Panel>;
+}
+
+function InquiryLeadForm({ inquiry, employees, products, busy, onSubmit }: { inquiry: PublicInquiryRecord; employees: Awaited<ReturnType<typeof employeeService.directory>>; products: Awaited<ReturnType<typeof settingsService.products>>; busy: boolean; onSubmit: (payload: { assignedUserId: string; productIds: string[]; nextFollowUpAt?: string }) => void }) {
+  const likelyProducts = products.filter((product) => inquiry.productInterest && `${product.name} ${product.family} ${product.variant}`.toLowerCase().includes(inquiry.productInterest.toLowerCase().split(",")[0].trim())).map((product) => product.id);
+  const [assignedUserId, setAssignedUserId] = useState(employees[0]?.id ?? "");
+  const [productIds, setProductIds] = useState(likelyProducts);
+  const [nextFollowUpAt, setNextFollowUpAt] = useState("");
+  const toggleProduct = (productId: string) => setProductIds((current) => current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]);
+  return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); onSubmit({ assignedUserId, productIds, nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt).toISOString() : undefined }); }}><div className="rounded-md border border-slate-200 bg-slate-50 p-4"><strong className="text-sm">{inquiry.organization || inquiry.name}</strong><p className="mt-1 text-xs text-slate-500">{inquiry.name} | {inquiry.phone} | {inquiry.productInterest || "General inquiry"}</p><p className="mt-2 text-sm leading-6 text-slate-700">{inquiry.message}</p></div><EmployeePicker employees={employees} value={assignedUserId} onChange={setAssignedUserId} allowAll={false} label="Assigned Sales Executive" /><label><span className={labelClass}>First Follow-up</span><input className={inputClass} type="datetime-local" value={nextFollowUpAt} onChange={(event) => setNextFollowUpAt(event.target.value)} /></label><fieldset><legend className={labelClass}>Interested ERP Products</legend><div className="grid gap-2 sm:grid-cols-2">{products.filter((product) => product.active).map((product) => <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm" key={product.id}><input type="checkbox" checked={productIds.includes(product.id)} onChange={() => toggleProduct(product.id)} /><ProductThumb src={product.imageUrl} name={product.name} size="sm" /><span className="min-w-0 truncate">{product.name}</span></label>)}</div></fieldset><div className="flex justify-end"><Button type="submit" variant="primary" icon={<UserPlus className="h-4 w-4" />} disabled={busy || !assignedUserId}>Create Linked Lead</Button></div></form>;
 }
 
 function RowActions({ edit, remove }: { edit: () => void; remove: () => void }) {

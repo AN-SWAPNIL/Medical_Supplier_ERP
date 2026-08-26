@@ -37,13 +37,18 @@ import type {
   AIRecommendation,
   Capability,
   Collection,
+  Customer,
   CustomerOpeningBalance,
   CustomerLedger,
+  DailyMarketingPlan,
   DispatchAllocation,
   Delivery,
   DocumentRecord,
   DocumentUpload,
   Expense,
+  EmployeeDirectoryEntry,
+  EmployeeMarketingSnapshot,
+  EmployeeMarketingTarget,
   CurrentEmployeeLocation,
   FieldEmployee,
   FieldTeamHistoryData,
@@ -53,6 +58,16 @@ import type {
   ImportDocument,
   ImportItem,
   ImportStatus,
+  MarketingActivity,
+  MarketingActivityType,
+  MarketingDashboardData,
+  MarketingFollowUp,
+  MarketingLead,
+  MarketingLeadStage,
+  MarketingPerformanceRow,
+  MarketingReportData,
+  MarketingScoreRule,
+  MonthlyMarketingPlan,
   ProductAlias,
   ProfitPreview,
   Quotation,
@@ -92,8 +107,15 @@ import {
   expenses as seedExpenses,
   currentEmployeeLocations as seedCurrentEmployeeLocations,
   fieldVisits as seedFieldVisits,
+  dailyMarketingPlans as seedDailyMarketingPlans,
   imports as seedImports,
   locationHistory as seedLocationHistory,
+  marketingActivities as seedMarketingActivities,
+  marketingFollowUps as seedMarketingFollowUps,
+  marketingLeads as seedMarketingLeads,
+  marketingScoreRules as seedMarketingScoreRules,
+  marketingTargets as seedMarketingTargets,
+  monthlyMarketingPlans as seedMonthlyMarketingPlans,
   orders as seedOrders,
   passwordByEmail,
   printConfiguration as seedPrintConfiguration,
@@ -137,6 +159,13 @@ const accountTransactions = structuredClone(seedAccountTransactions);
 const expenseCategories = structuredClone(seedExpenseCategories);
 const currentEmployeeLocations: CurrentEmployeeLocation[] = structuredClone(seedCurrentEmployeeLocations);
 const fieldVisits: FieldVisit[] = structuredClone(seedFieldVisits);
+const marketingActivities: MarketingActivity[] = structuredClone(seedMarketingActivities);
+const marketingLeads: MarketingLead[] = structuredClone(seedMarketingLeads);
+const marketingFollowUps: MarketingFollowUp[] = structuredClone(seedMarketingFollowUps);
+const dailyMarketingPlans: DailyMarketingPlan[] = structuredClone(seedDailyMarketingPlans);
+const monthlyMarketingPlans: MonthlyMarketingPlan[] = structuredClone(seedMonthlyMarketingPlans);
+const marketingTargets: EmployeeMarketingTarget[] = structuredClone(seedMarketingTargets);
+const marketingScoreRules: MarketingScoreRule[] = structuredClone(seedMarketingScoreRules);
 const locationHistory: LocationHistoryPoint[] = structuredClone(seedLocationHistory);
 const trackingSessions: TrackingSession[] = structuredClone(seedTrackingSessions);
 const auditEvents = structuredClone(seedAuditEvents);
@@ -206,6 +235,7 @@ const areaPermissions = {
   imports: "import",
   inventory: "inventory",
   sales: "sales",
+  marketing: "marketing",
   accounts: "accounts",
   reports: "reports",
   settings: "settings"
@@ -574,6 +604,226 @@ function canAccessFieldEmployee(user: User, userId: string) {
   return fieldManagementRoles.includes(user.role) || (user.role === "Sales Executive" && user.id === userId);
 }
 
+const marketingManagementRoles: Role[] = ["Super Admin", "Managing Director", "Sales Manager"];
+const manualMarketingActivityTypes: MarketingActivityType[] = ["CUSTOMER_CONTACT", "CUSTOMER_VISIT", "PRODUCT_PRESENTATION", "SAMPLE_DELIVERED", "NEGOTIATION_UPDATE", "GENERAL_NOTE"];
+const marketingStages: MarketingLeadStage[] = ["NEW", "CONTACTED", "INTERESTED", "PRESENTATION", "SAMPLE", "QUOTATION", "NEGOTIATION", "ORDER", "DELIVERED", "PAYMENT"];
+
+function directoryEntry(user: User): EmployeeDirectoryEntry {
+  return {
+    id: user.id,
+    name: user.name,
+    title: user.title,
+    territory: user.territory,
+    employeeCode: user.employeeCode ?? user.id.toUpperCase(),
+    department: user.department,
+    status: user.status
+  };
+}
+
+function marketingEmployeeIds(user: User) {
+  if (marketingManagementRoles.includes(user.role)) {
+    return new Set(demoUsers.filter((entry) => entry.role === "Sales Executive" && entry.status === "Active").map((entry) => entry.id));
+  }
+  return new Set(user.role === "Sales Executive" ? [user.id] : []);
+}
+
+function marketingScope(user: User): MarketingDashboardData["scope"] {
+  if (["Super Admin", "Managing Director"].includes(user.role)) return "ALL";
+  if (user.role === "Sales Manager") return "TEAM";
+  if (user.role === "Sales Executive") return "SELF";
+  return "NONE";
+}
+
+function canAccessMarketingEmployee(user: User, employeeId: string) {
+  return marketingEmployeeIds(user).has(employeeId);
+}
+
+function timestampForDate(date: string, hour = 12) {
+  return `${date}T${String(hour).padStart(2, "0")}:00:00+06:00`;
+}
+
+function inTimestampPeriod(value: string | undefined, from: string, to: string) {
+  if (!value) return false;
+  const date = businessDate(new Date(value));
+  return date >= from && date <= to;
+}
+
+function followUpForResponse(followUp: MarketingFollowUp): MarketingFollowUp {
+  const status = followUp.status === "PENDING" && new Date(followUp.dueAt).getTime() < Date.now() ? "OVERDUE" : followUp.status;
+  return { ...followUp, status };
+}
+
+function stageRank(stage: MarketingLeadStage) {
+  return stage === "LOST" ? Number.MAX_SAFE_INTEGER : marketingStages.indexOf(stage);
+}
+
+function advanceLead(leadId: string | undefined, stage: MarketingLeadStage, occurredAt = new Date().toISOString()) {
+  if (!leadId) return;
+  const lead = marketingLeads.find((entry) => entry.id === leadId);
+  if (!lead || lead.stage === "LOST" || stage === "LOST" || stageRank(stage) <= stageRank(lead.stage)) return;
+  lead.stage = stage;
+  lead.lastContactAt = occurredAt;
+  lead.updatedAt = occurredAt;
+}
+
+function leadIdForOrder(order: SalesOrder | undefined) {
+  if (!order?.quotationId) return undefined;
+  return quotations.find((quote) => quote.id === order.quotationId)?.leadId;
+}
+
+function employeeActivity(
+  userId: string,
+  activityType: MarketingActivityType,
+  source: MarketingActivity["source"],
+  occurredAt: string,
+  values: Partial<MarketingActivity>
+): MarketingActivity | null {
+  const employee = demoUsers.find((entry) => entry.id === userId);
+  if (!employee) return null;
+  return {
+    id: values.id ?? `${source.toLowerCase()}-${values.referenceId ?? activityType.toLowerCase()}-${occurredAt}`,
+    userId,
+    employeeCode: employee.employeeCode ?? employee.id.toUpperCase(),
+    employeeName: employee.name,
+    territory: employee.territory,
+    activityType,
+    source,
+    occurredAt,
+    submittedAt: values.submittedAt ?? occurredAt,
+    verification: values.verification ?? "SYSTEM_VERIFIED",
+    createdByUserId: values.createdByUserId ?? userId,
+    ...values
+  };
+}
+
+function unifiedMarketingActivities(req: Request, from?: string, to?: string) {
+  const user = userFor(req)!;
+  const allowed = marketingEmployeeIds(user);
+  const derived: MarketingActivity[] = [];
+
+  for (const visit of fieldVisits) {
+    if (visit.checkInAt) {
+      const activity = employeeActivity(visit.userId, "CHECK_IN", "FIELD_VISIT", visit.checkInAt, { id: `visit-in-${visit.id}`, customerId: visit.customerId, leadId: visit.leadId, subjectName: visit.customerName, productIds: visit.productIds, purpose: visit.purpose, remarks: visit.remarks, latitude: visit.checkInLatitude, longitude: visit.checkInLongitude, accuracyMeters: visit.checkInAccuracyMeters, verification: visit.verification ?? "GPS_VERIFIED", referenceType: "FieldVisit", referenceId: visit.id, referenceNumber: visit.id });
+      if (activity) derived.push(activity);
+    }
+    if (visit.checkOutAt) {
+      const activity = employeeActivity(visit.userId, "CHECK_OUT", "FIELD_VISIT", visit.checkOutAt, { id: `visit-out-${visit.id}`, customerId: visit.customerId, leadId: visit.leadId, subjectName: visit.customerName, productIds: visit.productIds, purpose: visit.purpose, remarks: visit.outcome ?? visit.remarks, nextFollowUpAt: visit.nextFollowUpAt, verification: visit.verification ?? "GPS_VERIFIED", referenceType: "FieldVisit", referenceId: visit.id, referenceNumber: visit.id });
+      if (activity) derived.push(activity);
+    }
+  }
+  for (const followUp of marketingFollowUps.filter((entry) => entry.status === "COMPLETED" && entry.completedAt)) {
+    const activity = employeeActivity(followUp.assignedUserId, "FOLLOW_UP_COMPLETED", "LEAD", followUp.completedAt!, { id: `followup-${followUp.id}`, leadId: followUp.leadId, customerId: followUp.customerId, subjectName: followUp.subjectName, purpose: followUp.purpose, remarks: followUp.outcome, nextFollowUpAt: followUp.nextFollowUpAt, referenceType: "FollowUp", referenceId: followUp.id, referenceNumber: followUp.id });
+    if (activity) derived.push(activity);
+  }
+  for (const quote of quotations) {
+    const activity = employeeActivity(quote.ownerId, "QUOTATION_SUBMITTED", "QUOTATION", timestampForDate(quote.date, 12), { id: `quote-${quote.id}`, leadId: quote.leadId, customerId: quote.customerId, subjectName: quote.customerName, productIds: quote.lines.map((line) => line.productId), referenceType: "Quotation", referenceId: quote.id, referenceNumber: quote.quotationNumber, amountBdt: quote.total });
+    if (activity) derived.push(activity);
+  }
+  for (const order of orders) {
+    const activity = employeeActivity(order.ownerId, "ORDER_RECEIVED", "ORDER", timestampForDate(order.date, 13), { id: `order-${order.id}`, leadId: leadIdForOrder(order), customerId: order.customerId, subjectName: order.customerName, productIds: order.lines.map((line) => line.productId), referenceType: "SalesOrder", referenceId: order.id, referenceNumber: order.orderNumber, amountBdt: order.total });
+    if (activity) derived.push(activity);
+  }
+  for (const delivery of deliveries) {
+    const order = orders.find((entry) => entry.id === delivery.orderId);
+    const activity = employeeActivity(salesOwnerForDelivery(delivery) ?? "", "DELIVERY_POSTED", "DELIVERY", timestampForDate(delivery.date, 14), { id: `delivery-${delivery.id}`, leadId: leadIdForOrder(order), customerId: delivery.customerId, subjectName: delivery.customerName, productIds: delivery.lines.map((line) => line.productId), referenceType: "Delivery", referenceId: delivery.id, referenceNumber: delivery.challanNumber, amountBdt: money(delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0))) });
+    if (activity) derived.push(activity);
+  }
+  for (const collection of collections.filter((entry) => entry.status === "Posted")) {
+    const order = collection.orderId ? orders.find((entry) => entry.id === collection.orderId) : undefined;
+    const activity = employeeActivity(collection.ownerId, "PAYMENT_COLLECTED", "COLLECTION", timestampForDate(collection.date, 15), { id: `collection-${collection.id}`, leadId: leadIdForOrder(order), customerId: collection.customerId, subjectName: collection.customerName, referenceType: "Collection", referenceId: collection.id, referenceNumber: collection.receiptNumber, amountBdt: collection.amount });
+    if (activity) derived.push(activity);
+  }
+
+  return [...marketingActivities, ...derived]
+    .filter((activity) => allowed.has(activity.userId))
+    .filter((activity) => !from || !to || inTimestampPeriod(activity.occurredAt, from, to))
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || left.id.localeCompare(right.id));
+}
+
+function visibleMarketingLeads(req: Request) {
+  const allowed = marketingEmployeeIds(userFor(req)!);
+  return marketingLeads.filter((lead) => allowed.has(lead.assignedUserId));
+}
+
+function visibleMarketingFollowUps(req: Request) {
+  const allowed = marketingEmployeeIds(userFor(req)!);
+  return marketingFollowUps.filter((followUp) => allowed.has(followUp.assignedUserId)).map(followUpForResponse);
+}
+
+function scoreWeight(event: MarketingScoreRule["event"]) {
+  return marketingScoreRules.find((rule) => rule.event === event && rule.active)?.points ?? 0;
+}
+
+function percent(actual: Decimal | number | string, target: Decimal | number | string) {
+  const targetValue = new Decimal(target);
+  return precise(targetValue.lte(0) ? 0 : new Decimal(actual).div(targetValue).mul(100), 2);
+}
+
+function distanceMeters(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number) {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const dLat = radians(latitudeB - latitudeA);
+  const dLng = radians(longitudeB - longitudeA);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(latitudeA)) * Math.cos(radians(latitudeB)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function marketingPerformance(employee: EmployeeDirectoryEntry, from: string, to: string): MarketingPerformanceRow {
+  const requestLike = { headers: { "x-user-id": "u-super" } } as unknown as Request;
+  const activities = unifiedMarketingActivities(requestLike, from, to).filter((activity) => activity.userId === employee.id);
+  const employeeVisits = fieldVisits.filter((visit) => visit.userId === employee.id && inTimestampPeriod(visit.plannedAt, from, to));
+  const employeeLeads = marketingLeads.filter((lead) => lead.assignedUserId === employee.id && inTimestampPeriod(lead.createdAt, from, to));
+  const employeeFollowUps = marketingFollowUps.filter((followUp) => followUp.assignedUserId === employee.id && inTimestampPeriod(followUp.dueAt, from, to));
+  const employeeQuotes = quotations.filter((quote) => quote.ownerId === employee.id && inPeriod(quote.date, from, to));
+  const employeeOrders = orders.filter((order) => order.ownerId === employee.id && inPeriod(order.date, from, to));
+  const employeeDeliveries = deliveries.filter((delivery) => salesOwnerForDelivery(delivery) === employee.id && inPeriod(delivery.date, from, to));
+  const employeeCollections = collections.filter((collection) => collection.ownerId === employee.id && collection.status === "Posted" && inPeriod(collection.date, from, to));
+  const completedVisits = employeeVisits.filter((visit) => visit.status === "Completed").length;
+  const verifiedVisits = employeeVisits.filter((visit) => visit.status === "Completed" && ["GPS_VERIFIED", "SYSTEM_VERIFIED"].includes(visit.verification ?? "UNVERIFIED")).length;
+  const qualifiedLeads = employeeLeads.filter((lead) => !["NEW", "CONTACTED", "LOST"].includes(lead.stage)).length;
+  const convertedCustomers = employeeLeads.filter((lead) => Boolean(lead.customerId)).length;
+  const followUpsCompleted = employeeFollowUps.filter((followUp) => followUp.status === "COMPLETED").length;
+  const overdueFollowUps = employeeFollowUps.map(followUpForResponse).filter((followUp) => followUp.status === "OVERDUE").length;
+  const deliveredSales = employeeDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0));
+  const collected = employeeCollections.reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
+  const targetMonth = to.slice(0, 7);
+  const target = marketingTargets.find((entry) => entry.userId === employee.id && entry.month === targetMonth) ?? { id: `target-empty-${employee.id}`, userId: employee.id, month: targetMonth, salesTargetBdt: "0.00", newCustomerTarget: 0, visitTarget: 0, collectionTargetBdt: "0.00", createdByUserId: "system", createdAt: new Date().toISOString() };
+  const progress = {
+    sales: percent(deliveredSales, target.salesTargetBdt),
+    visits: percent(verifiedVisits, target.visitTarget),
+    customers: percent(convertedCustomers, target.newCustomerTarget),
+    collections: percent(collected, target.collectionTargetBdt),
+    overall: "0.00"
+  };
+  progress.overall = precise([progress.sales, progress.visits, progress.customers, progress.collections].reduce((sum, value) => sum.plus(value), new Decimal(0)).div(4), 2);
+  const activityScore = convertedCustomers * scoreWeight("NEW_QUALIFIED_CUSTOMER") + verifiedVisits * scoreWeight("VERIFIED_CUSTOMER_VISIT") + qualifiedLeads * scoreWeight("QUALIFIED_LEAD") + employeeQuotes.length * scoreWeight("QUOTATION_SUBMITTED") + employeeOrders.length * scoreWeight("ORDER_RECEIVED") + employeeCollections.length * scoreWeight("PAYMENT_COLLECTED") + followUpsCompleted * scoreWeight("FOLLOW_UP_COMPLETED");
+  return {
+    employee,
+    activityCount: activities.length,
+    checkIns: activities.filter((activity) => activity.activityType === "CHECK_IN").length,
+    completedVisits,
+    verifiedVisits,
+    newLeads: employeeLeads.length,
+    qualifiedLeads,
+    followUpsCompleted,
+    overdueFollowUps,
+    presentations: activities.filter((activity) => activity.activityType === "PRODUCT_PRESENTATION").length,
+    samples: activities.filter((activity) => activity.activityType === "SAMPLE_DELIVERED").length,
+    quotations: employeeQuotes.length,
+    orders: employeeOrders.length,
+    deliveredSalesBdt: money(deliveredSales),
+    collectionsBdt: money(collected),
+    convertedCustomers,
+    activityScore,
+    targets: target,
+    progress
+  };
+}
+
+function performanceRowsFor(req: Request, from: string, to: string) {
+  const allowed = marketingEmployeeIds(userFor(req)!);
+  return demoUsers.filter((entry) => allowed.has(entry.id)).map((entry) => marketingPerformance(directoryEntry(entry), from, to));
+}
+
 function derivedTrackingStatus(location: CurrentEmployeeLocation, now = Date.now()): CurrentEmployeeLocation["status"] {
   const ageMinutes = Math.max(0, (now - new Date(location.recordedAt).getTime()) / 60_000);
   const activeSession = Boolean(location.sessionId && trackingSessions.some((session) => session.id === location.sessionId && session.status === "Active"));
@@ -593,7 +843,7 @@ function currentFieldLocations(user: User) {
     .filter((location) => allowed.has(location.userId))
     .map((location) => {
       const next = structuredClone(location);
-      if (next.userId === "sales1") {
+      if (next.userId === "sales1" && next.source === "DEMO") {
         const coordinate = demoPath[demoLocationPoll % demoPath.length];
         next.latitude = coordinate[0];
         next.longitude = coordinate[1];
@@ -629,6 +879,11 @@ function salespersonPerformance(employee: SalespersonEmployee, from: string, to:
   const pendingQuotationValue = employeeQuotes.filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status) && !orders.some((order) => order.quotationId === quote.id)).reduce((sum, quote) => sum.plus(quote.total), new Decimal(0));
   const totalDiscount = employeeQuotes.reduce((sum, quote) => sum.plus(quote.discountTotal), new Decimal(0));
   const orderValue = employeeOrders.reduce((sum, order) => sum.plus(order.total), new Decimal(0));
+  const employeeUser = demoUsers.find((entry) => entry.id === employee.id)!;
+  const marketing = marketingPerformance(directoryEntry(employeeUser), from, to);
+  const requestLike = { headers: { "x-user-id": "u-super" } } as unknown as Request;
+  const marketingRows = unifiedMarketingActivities(requestLike, from, to).filter((activity) => activity.userId === employee.id);
+  const employeeFollowUps = marketingFollowUps.filter((followUp) => followUp.assignedUserId === employee.id && inTimestampPeriod(followUp.dueAt, from, to)).map(followUpForResponse);
   const summary: SalespersonPerformanceSummary = {
     quotationsCreated: employeeQuotes.length,
     quotationValue: money(quotationValue),
@@ -647,7 +902,18 @@ function salespersonPerformance(employee: SalespersonEmployee, from: string, to:
     averageOrderValue: money(employeeOrders.length ? orderValue.div(employeeOrders.length) : 0),
     conversionRate: precise(employeeQuotes.length ? new Decimal(convertedCount).div(employeeQuotes.length).mul(100) : 0, 2),
     totalDiscount: money(totalDiscount),
-    averageDiscount: money(employeeQuotes.length ? totalDiscount.div(employeeQuotes.length) : 0)
+    averageDiscount: money(employeeQuotes.length ? totalDiscount.div(employeeQuotes.length) : 0),
+    checkIns: marketing.checkIns,
+    completedVisits: marketing.completedVisits,
+    verifiedVisits: marketing.verifiedVisits,
+    newLeads: marketing.newLeads,
+    qualifiedLeads: marketing.qualifiedLeads,
+    followUpsCompleted: marketing.followUpsCompleted,
+    overdueFollowUps: marketing.overdueFollowUps,
+    presentations: marketing.presentations,
+    samples: marketing.samples,
+    activityScore: marketing.activityScore,
+    targetProgress: marketing.progress.overall
   };
   const productTotals = new Map<string, { product: string; units: Decimal; value: Decimal }>();
   for (const line of employeeDeliveries.flatMap((delivery) => delivery.lines)) {
@@ -666,7 +932,9 @@ function salespersonPerformance(employee: SalespersonEmployee, from: string, to:
       deliveries: { id: "employee-deliveries", title: "Delivery / Challan Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Challan" }, { key: "customer", label: "Customer" }, { key: "units", label: "Units", align: "right" }, { key: "value", label: "Delivered Value", align: "right" }], rows: employeeDeliveries.map((delivery) => ({ date: delivery.date, reference: delivery.challanNumber, customer: delivery.customerName, units: precise(delivery.lines.reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), value: money(delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0))) })) },
       collections: { id: "employee-collections", title: "Collection Details", columns: [{ key: "date", label: "Date" }, { key: "reference", label: "Receipt" }, { key: "customer", label: "Customer" }, { key: "mode", label: "Mode" }, { key: "amount", label: "Amount", align: "right" }], rows: employeeCollections.map((collection) => ({ date: collection.date, reference: collection.receiptNumber, customer: collection.customerName, mode: collection.paymentMode, amount: collection.amount })) },
       customers: { id: "employee-customers", title: "Customer Summary", columns: [{ key: "customer", label: "Customer" }, { key: "territory", label: "Territory" }, { key: "terms", label: "Terms" }, { key: "sales", label: "Total Sales", align: "right" }, { key: "collected", label: "Collected", align: "right" }, { key: "due", label: "Current Due", align: "right" }], rows: visibleCustomers.map((customer) => ({ customer: customer.name, territory: customer.territory, terms: customer.paymentTerms, sales: customer.totalSales, collected: customer.totalCollected, due: customer.currentDue })) },
-      products: { id: "employee-products", title: "Top Products", columns: [{ key: "product", label: "Product" }, { key: "units", label: "Units", align: "right" }, { key: "value", label: "Delivered Value", align: "right" }], rows: [...productTotals.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, units: precise(row.units, 4), value: money(row.value) })) }
+      products: { id: "employee-products", title: "Top Products", columns: [{ key: "product", label: "Product" }, { key: "units", label: "Units", align: "right" }, { key: "value", label: "Delivered Value", align: "right" }], rows: [...productTotals.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, units: precise(row.units, 4), value: money(row.value) })) },
+      marketingActivities: { id: "employee-marketing", title: "Marketing Activity", columns: [{ key: "date", label: "Date / Time" }, { key: "activity", label: "Activity" }, { key: "subject", label: "Customer / Lead" }, { key: "verification", label: "Verification" }, { key: "reference", label: "ERP Reference" }], rows: marketingRows.map((activity) => ({ date: activity.occurredAt, activity: activity.activityType.replaceAll("_", " "), subject: activity.subjectName ?? "-", verification: activity.verification.replaceAll("_", " "), reference: activity.referenceNumber ?? "Manual" })) },
+      followUps: { id: "employee-followups", title: "Follow-up Status", columns: [{ key: "due", label: "Due" }, { key: "subject", label: "Customer / Lead" }, { key: "purpose", label: "Purpose" }, { key: "status", label: "Status" }, { key: "outcome", label: "Outcome" }], rows: employeeFollowUps.map((followUp) => ({ due: followUp.dueAt, subject: followUp.subjectName, purpose: followUp.purpose, status: followUp.status, outcome: followUp.outcome ?? "-" })) }
     }
   };
 }
@@ -680,6 +948,10 @@ function documentById(documentId: string) {
   }
   const expenseDocument = expenses.find((expense) => expense.attachment?.id === documentId)?.attachment;
   if (expenseDocument) return { document: expenseDocument, area: "accounts" as const };
+  const activityDocument = marketingActivities.flatMap((activity) => activity.attachments ?? []).find((document) => document.id === documentId);
+  if (activityDocument) return { document: activityDocument, area: "marketing" as const };
+  const visitDocument = fieldVisits.flatMap((visit) => visit.attachments ?? []).find((document) => document.id === documentId);
+  if (visitDocument) return { document: visitDocument, area: "marketing" as const };
   return null;
 }
 
@@ -699,6 +971,9 @@ function aiSuggestionsFor(user: User, context: AIContext) {
   if (context.entityType === "import" && canAccessArea(user, "imports")) return ["Explain the current shipment stage", "Which documents are missing?", "What needs attention next?"];
   if (context.entityType === "inventory" && canAccessArea(user, "inventory")) return ["Which batches need attention?", "Which lot should be issued first?", "Explain the FIFO rule"];
   if (context.entityType === "sales" && canAccessArea(user, "sales")) return ["Which customers need follow-up?", "Which quotations are still pending?", "Summarize collections and dues"];
+  if (context.entityType === "marketing" && hasEffectivePermission(user, "marketing", "view")) return user.role === "Sales Executive"
+    ? ["Summarize my activity today", "Which follow-ups are overdue?", "How am I progressing against target?"]
+    : ["Who has overdue follow-ups?", "Which leads need attention?", "Who is below visit target?"];
   if (context.entityType === "field-team" && (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive")) return ["Who is active in the field?", "Summarize today's visits", "Which location updates are stale?"];
   if (context.entityType === "insights") return ["What needs attention first?", "Summarize my operational alerts", "Open the highest priority source"];
   if (context.entityType === "reports" && canAccessArea(user, "reports")) return ["Summarize this report period", "Compare salesperson performance", "Which customer owes the most?"];
@@ -711,6 +986,7 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
   const canSeeImports = canAccessArea(user, "imports");
   const canSeeInventory = canAccessArea(user, "inventory");
   const canSeeSales = canAccessArea(user, "sales");
+  const canSeeMarketing = hasEffectivePermission(user, "marketing", "view");
   const include = (entities: AIContext["entityType"][]) => !context.entityType || context.entityType === "dashboard" || context.entityType === "insights" || entities.includes(context.entityType);
 
   if (canSeeImports && include(["import"])) {
@@ -756,13 +1032,28 @@ function aiRecommendationsFor(req: Request, context: AIContext): AIRecommendatio
     result.unshift({ id: "management-cash-gap", title: collected.lt(sales) ? "Collections trail delivered sales" : "Collections cover delivered sales", summary: `This month: delivered sales Tk ${money(sales)}; collections Tk ${money(collected)}.`, severity: collected.lt(sales) ? "Attention" : "Info", sourceLabel: "Management reports", sourcePath: "/app/reports", reason: "This compares posted delivery value with posted collections without inventing profit or accounting entries.", recommendedAction: collected.lt(sales) ? "Review customer dues and salesperson follow-up priorities." : "Continue monitoring receivables and upcoming deliveries." });
   }
 
-  if ((fieldManagementRoles.includes(user.role) || user.role === "Sales Executive") && include(["field-team", "sales"])) {
+  if (canSeeMarketing && include(["marketing"])) {
+    const today = businessDate();
+    const followUps = visibleMarketingFollowUps(req);
+    const overdue = followUps.filter((followUp) => followUp.status === "OVERDUE");
+    if (overdue.length) result.push({ id: "marketing-overdue-followups", title: `${overdue.length} marketing follow-up${overdue.length === 1 ? " is" : "s are"} overdue`, summary: `${overdue[0].subjectName}: ${overdue[0].purpose}, due ${overdue[0].dueAt}.`, severity: "Attention", sourceLabel: "Marketing follow-ups", sourcePath: "/app/sales?view=marketing", reason: "Overdue status is calculated from the saved due time in Asia/Dhaka and an incomplete status.", recommendedAction: "Open the follow-up queue, record the outcome, and schedule the next valid action." });
+    const visibleLeads = visibleMarketingLeads(req);
+    const untouchedThreshold = Date.now() - 14 * 86_400_000;
+    const untouched = visibleLeads.filter((lead) => lead.stage !== "LOST" && new Date(lead.lastContactAt ?? lead.createdAt).getTime() < untouchedThreshold);
+    if (untouched.length) result.push({ id: "marketing-untouched-leads", title: `${untouched.length} lead${untouched.length === 1 ? " has" : "s have"} no contact for 14+ days`, summary: `${untouched[0].leadNumber} ${untouched[0].organizationName} is currently at ${untouched[0].stage}.`, severity: "Attention", sourceLabel: "Marketing lead funnel", sourcePath: "/app/sales?view=marketing", reason: "The latest stored contact timestamp is older than the deterministic 14-day review threshold.", recommendedAction: "Assign a follow-up or record a verified outcome; do not advance the funnel without evidence." });
+    const negotiation = visibleLeads.filter((lead) => lead.stage === "NEGOTIATION");
+    if (negotiation.length) result.push({ id: "marketing-negotiation", title: `${negotiation.length} lead${negotiation.length === 1 ? " is" : "s are"} in negotiation`, summary: negotiation.slice(0, 3).map((lead) => lead.organizationName).join(", "), severity: "Info", sourceLabel: "Marketing funnel", sourcePath: "/app/sales?view=marketing", reason: "These stages come from recorded negotiation activity and have not yet advanced through an ERP order.", recommendedAction: "Review the last contact, quotation status and next follow-up before deciding the next step." });
+    const unverifiedVisits = fieldVisits.filter((visit) => marketingEmployeeIds(user).has(visit.userId) && inTimestampPeriod(visit.plannedAt, `${today.slice(0, 7)}-01`, today) && ["MANUAL", "UNVERIFIED"].includes(visit.verification ?? "UNVERIFIED"));
+    if (unverifiedVisits.length) result.push({ id: "marketing-unverified-visits", title: `${unverifiedVisits.length} visit${unverifiedVisits.length === 1 ? " lacks" : "s lack"} GPS verification`, summary: `${unverifiedVisits[0].customerName}: ${unverifiedVisits[0].verification ?? "UNVERIFIED"}.`, severity: "Info", sourceLabel: "Visit verification", sourcePath: "/app/reports?view=marketing&preset=verification", reason: "A visit is never silently marked GPS verified when coordinates are missing.", recommendedAction: "Review the visit evidence and location timestamp before relying on it for field verification." });
+  }
+
+  if ((fieldManagementRoles.includes(user.role) || user.role === "Sales Executive") && include(["field-team", "marketing"])) {
     const locations = currentFieldLocations(user);
     const stale = locations.filter((location) => ["STALE", "OFFLINE", "NOT_TRACKING"].includes(location.status));
     const activeVisits = locations.filter((location) => location.currentVisit?.status === "Checked In");
-    result.push({ id: "field-team-status", title: stale.length ? `${stale.length} field update${stale.length === 1 ? " needs" : "s need"} attention` : "Field team feed is current", summary: `${locations.filter((location) => location.status === "LIVE").length} live, ${locations.filter((location) => location.status === "RECENT").length} recent and ${activeVisits.length} currently checked in.`, severity: stale.some((location) => location.status === "STALE") ? "Attention" : "Info", sourceLabel: user.role === "Sales Executive" ? "My field activity" : "Field Team", sourcePath: "/app/sales?view=field-team", reason: stale.length ? `Latest affected employee: ${stale[0].employee.name} (${stale[0].status.toLowerCase()}); last update ${stale[0].recordedAt}.` : "Every visible active session has a recent coordinate.", recommendedAction: stale.length ? "Open the map and verify the timestamp before contacting the employee; old coordinates are never labelled live." : "Continue monitoring visits and planned follow-ups." });
+    result.push({ id: "field-team-status", title: stale.length ? `${stale.length} field update${stale.length === 1 ? " needs" : "s need"} attention` : "Field team feed is current", summary: `${locations.filter((location) => location.status === "LIVE").length} live, ${locations.filter((location) => location.status === "RECENT").length} recent and ${activeVisits.length} currently checked in.`, severity: stale.some((location) => location.status === "STALE") ? "Attention" : "Info", sourceLabel: user.role === "Sales Executive" ? "My field activity" : "Field Team", sourcePath: "/app/sales?view=marketing&marketing=field-team", reason: stale.length ? `Latest affected employee: ${stale[0].employee.name} (${stale[0].status.toLowerCase()}); last update ${stale[0].recordedAt}.` : "Every visible active session has a recent coordinate.", recommendedAction: stale.length ? "Open the map and verify the timestamp before contacting the employee; old coordinates are never labelled live." : "Continue monitoring visits and planned follow-ups." });
   }
-  const categoryFor = (recommendation: AIRecommendation): NonNullable<AIRecommendation["category"]> => recommendation.id.startsWith("import-") ? "Imports" : recommendation.id.startsWith("expiry-") || recommendation.id.startsWith("fifo-") ? "Inventory" : recommendation.id.startsWith("due-") ? "Collections" : recommendation.id.startsWith("field-") ? "Field Team" : recommendation.id.startsWith("management-") ? "Finance" : "Sales";
+  const categoryFor = (recommendation: AIRecommendation): NonNullable<AIRecommendation["category"]> => recommendation.id.startsWith("import-") ? "Imports" : recommendation.id.startsWith("expiry-") || recommendation.id.startsWith("fifo-") ? "Inventory" : recommendation.id.startsWith("due-") ? "Collections" : recommendation.id.startsWith("marketing-") ? "Marketing" : recommendation.id.startsWith("field-") ? "Field Team" : recommendation.id.startsWith("management-") ? "Finance" : "Sales";
   return result.slice(0, context.entityType === "insights" ? 20 : 6).map((recommendation) => ({ ...recommendation, category: categoryFor(recommendation), detectedAt: new Date().toISOString() }));
 }
 
@@ -854,6 +1145,508 @@ app.get("/api/me", (req, res) => {
   res.json(ok({ token: `mock-token-${user.id}`, user }, "Current access profile refreshed"));
 });
 
+app.get("/api/employees/directory", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const canUseDirectory = hasEffectivePermission(user, "users", "view") || hasEffectivePermission(user, "accounts", "view") || hasEffectivePermission(user, "marketing", "view");
+  if (!canUseDirectory) return fail(res, 403, `${user.role} cannot access the employee directory.`);
+  const marketingOnly = req.query.scope === "marketing";
+  const ids = !marketingOnly && (hasEffectivePermission(user, "users", "view") || hasEffectivePermission(user, "accounts", "view"))
+    ? new Set(demoUsers.filter((entry) => entry.status === "Active").map((entry) => entry.id))
+    : marketingEmployeeIds(user);
+  const rows = demoUsers.filter((entry) => ids.has(entry.id)).map(directoryEntry);
+  res.json(ok(rows, "Safe employee directory loaded", { total: rows.length, role: user.role, scoped: marketingOnly || !(hasEffectivePermission(user, "users", "view") || hasEffectivePermission(user, "accounts", "view")) }));
+});
+
+app.get("/api/marketing/dashboard", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const today = businessDate();
+  const monthFrom = `${today.slice(0, 7)}-01`;
+  const activities = unifiedMarketingActivities(req);
+  const todayActivities = activities.filter((activity) => inTimestampPeriod(activity.occurredAt, today, today));
+  const leads = visibleMarketingLeads(req);
+  const followUps = visibleMarketingFollowUps(req);
+  const allowedEmployeeIds = marketingEmployeeIds(user);
+  const locations = (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive" ? currentFieldLocations(user) : []).filter((location) => allowedEmployeeIds.has(location.userId));
+  const statusCount = (statuses: CurrentEmployeeLocation["status"][]) => locations.filter((location) => statuses.includes(location.status)).length;
+  const fieldTeam = {
+    activeNow: statusCount(["LIVE"]),
+    recent: statusCount(["RECENT", "STALE"]),
+    offline: statusCount(["OFFLINE"]),
+    notTracking: statusCount(["NOT_TRACKING"]),
+    visitsToday: fieldVisits.filter((visit) => marketingEmployeeIds(user).has(visit.userId) && inTimestampPeriod(visit.plannedAt, today, today)).length
+  };
+  const performance = performanceRowsFor(req, monthFrom, today);
+  const collectionToday = todayActivities.filter((activity) => activity.activityType === "PAYMENT_COLLECTED").reduce((sum, activity) => sum.plus(activity.amountBdt ?? 0), new Decimal(0));
+  const followUpToday = followUps.filter((followUp) => businessDate(new Date(followUp.dueAt)) === today && followUp.status === "PENDING").length;
+  const overdue = followUps.filter((followUp) => followUp.status === "OVERDUE").length;
+  const ownPerformance = performance.find((row) => row.employee.id === user.id);
+  const ownPlan = dailyMarketingPlans.find((plan) => plan.userId === user.id && plan.date === today);
+  const remainingPlan = ownPlan?.plannedVisits.filter((visit) => !visit.completed).length ?? 0;
+  const metrics = user.role === "Sales Executive"
+    ? [
+        { id: "plan", label: "Plan Remaining", value: String(remainingPlan), unit: "visits" },
+        { id: "activity", label: "Activities Today", value: String(todayActivities.length), unit: "updates" },
+        { id: "overdue", label: "Overdue Follow-ups", value: String(overdue), unit: "items" },
+        { id: "visits", label: "Verified Visits", value: String(ownPerformance?.verifiedVisits ?? 0), unit: "month" },
+        { id: "target", label: "Target Progress", value: ownPerformance?.progress.overall ?? "0.00", unit: "%" },
+        { id: "leads", label: "New Leads", value: String(ownPerformance?.newLeads ?? 0), unit: "month" },
+        { id: "quotes", label: "Quotations", value: String(ownPerformance?.quotations ?? 0), unit: "month" },
+        { id: "collection", label: "Collections", value: ownPerformance?.collectionsBdt ?? "0.00", unit: "BDT" }
+      ]
+    : [
+        { id: "active", label: "Active Employees", value: String(statusCount(["LIVE", "RECENT"])), unit: "people" },
+        { id: "visits", label: "Visits Today", value: String(fieldTeam.visitsToday), unit: "visits" },
+        { id: "leads", label: "New Leads", value: String(leads.filter((lead) => inTimestampPeriod(lead.createdAt, today, today)).length), unit: "today" },
+        { id: "followups", label: "Follow-ups Today", value: String(followUpToday), unit: "items" },
+        { id: "overdue", label: "Overdue", value: String(overdue), unit: "items" },
+        { id: "quotes", label: "Quotations", value: String(todayActivities.filter((activity) => activity.activityType === "QUOTATION_SUBMITTED").length), unit: "today" },
+        { id: "orders", label: "Orders", value: String(todayActivities.filter((activity) => activity.activityType === "ORDER_RECEIVED").length), unit: "today" },
+        { id: "collection", label: "Collection", value: money(collectionToday), unit: "BDT" }
+      ];
+  const data: MarketingDashboardData = {
+    scope: marketingScope(user),
+    businessDate: today,
+    metrics,
+    activities: activities.slice(0, 40),
+    followUps,
+    leads,
+    funnel: [...marketingStages, "LOST" as const].map((stage) => ({ stage, count: leads.filter((lead) => lead.stage === stage).length })),
+    fieldTeam,
+    performance,
+    dailyPlan: ownPlan,
+    monthlyPlan: monthlyMarketingPlans.find((plan) => plan.userId === user.id && plan.month === today.slice(0, 7))
+  };
+  res.json(ok(data, user.role === "Sales Executive" ? "My marketing day loaded" : "Role-scoped marketing hub loaded", { role: user.role, scoped: data.scope !== "ALL" }));
+});
+
+app.get("/api/marketing/subjects", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const visibleLeads = visibleMarketingLeads(req);
+  const leads = visibleLeads.map((lead) => ({ value: `lead:${lead.id}`, label: `${lead.leadNumber} - ${lead.organizationName}`, type: "Lead" as const }));
+  const scopedCustomers = customerScoped(req).map((customer) => ({ value: `customer:${customer.id}`, label: customer.name, type: "Customer" as const }));
+  res.json(ok([...leads, ...scopedCustomers], "Role-scoped marketing subjects loaded"));
+});
+
+app.get("/api/marketing/activities", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const from = String(req.query.from ?? "");
+  const to = String(req.query.to ?? "");
+  if ((from || to) && (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)) return fail(res, 422, "Enter a valid activity date range.");
+  const employeeId = String(req.query.employeeId ?? "all");
+  if (employeeId !== "all" && !canAccessMarketingEmployee(user, employeeId)) return fail(res, 403, "The selected employee is outside your marketing scope.");
+  const activityType = String(req.query.activityType ?? "");
+  const rows = unifiedMarketingActivities(req, from || undefined, to || undefined).filter((activity) => (employeeId === "all" || activity.userId === employeeId) && (!activityType || activity.activityType === activityType));
+  res.json(ok(rows, "Unified marketing activity loaded", { total: rows.length, role: user.role, scoped: marketingScope(user) !== "ALL" }));
+});
+
+app.post("/api/marketing/activities", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  if (user.role !== "Sales Executive") return fail(res, 403, "Daily field activity must be submitted from the assigned Sales Executive account. Managers can create leads, follow-ups and targets.");
+  const activityType = String(req.body?.activityType ?? "") as MarketingActivityType;
+  if (!manualMarketingActivityTypes.includes(activityType)) return fail(res, 422, "Select a supported manual marketing activity. Transaction events are generated by the ERP.");
+  const lead = req.body.leadId ? marketingLeads.find((entry) => entry.id === req.body.leadId) : undefined;
+  const customer = req.body.customerId ? customers.find((entry) => entry.id === req.body.customerId) : undefined;
+  if (!lead && !customer && activityType !== "GENERAL_NOTE") return fail(res, 422, "Select a lead or customer for this activity.");
+  if (lead && !canAccessMarketingEmployee(user, lead.assignedUserId)) return fail(res, 403, "This lead is outside your marketing scope.");
+  if (customer && user.role === "Sales Executive" && customer.assignedSalesUserId !== user.id) return fail(res, 403, "This customer is outside your assigned records.");
+  const occurredAt = String(req.body.occurredAt ?? new Date().toISOString());
+  if (!Number.isFinite(new Date(occurredAt).getTime())) return fail(res, 422, "Enter a valid activity date and time.");
+  const productIds: string[] = Array.isArray(req.body.productIds) ? Array.from(new Set<string>((req.body.productIds as unknown[]).map((value) => String(value)))) : [];
+  if (productIds.some((productId) => !products.some((product) => product.id === productId && product.active))) return fail(res, 422, "One or more selected products are invalid.");
+  const activity: MarketingActivity = {
+    id: id("activity"),
+    userId: user.id,
+    employeeCode: user.employeeCode ?? user.id.toUpperCase(),
+    employeeName: user.name,
+    territory: user.territory,
+    activityType,
+    source: "MANUAL",
+    occurredAt,
+    submittedAt: new Date().toISOString(),
+    leadId: lead?.id,
+    customerId: customer?.id,
+    subjectName: lead?.organizationName ?? customer?.name ?? String(req.body.subjectName ?? "General marketing"),
+    productIds,
+    purpose: String(req.body.purpose ?? "").trim() || undefined,
+    remarks: String(req.body.remarks ?? "").trim() || undefined,
+    nextFollowUpAt: String(req.body.nextFollowUpAt ?? "").trim() || undefined,
+    latitude: Number.isFinite(Number(req.body.latitude)) ? Number(req.body.latitude) : undefined,
+    longitude: Number.isFinite(Number(req.body.longitude)) ? Number(req.body.longitude) : undefined,
+    accuracyMeters: Number.isFinite(Number(req.body.accuracyMeters)) ? Number(req.body.accuracyMeters) : undefined,
+    verification: Number.isFinite(Number(req.body.latitude)) && Number.isFinite(Number(req.body.longitude)) ? "GPS_VERIFIED" : "MANUAL",
+    attachments: [],
+    createdByUserId: user.id
+  };
+  if (req.body.attachmentUpload) {
+    try {
+      activity.attachments = [uploadedDocument(req, req.body.attachmentUpload as DocumentUpload, "marketing-activity", activity.id, "Marketing Evidence", false)];
+    } catch (error) {
+      return fail(res, 422, error instanceof Error ? error.message : "Marketing evidence is invalid.");
+    }
+  }
+  marketingActivities.unshift(activity);
+  if (lead) {
+    const nextStage: Partial<Record<MarketingActivityType, MarketingLeadStage>> = { CUSTOMER_CONTACT: "CONTACTED", CUSTOMER_VISIT: "CONTACTED", PRODUCT_PRESENTATION: "PRESENTATION", SAMPLE_DELIVERED: "SAMPLE", NEGOTIATION_UPDATE: "NEGOTIATION" };
+    if (nextStage[activityType]) advanceLead(lead.id, nextStage[activityType]!, occurredAt);
+  }
+  if (activity.nextFollowUpAt) {
+    marketingFollowUps.unshift({ id: id("follow"), assignedUserId: user.id, leadId: lead?.id, customerId: customer?.id, subjectName: activity.subjectName ?? "Marketing follow-up", dueAt: activity.nextFollowUpAt, purpose: activity.purpose ?? "Marketing follow-up", status: "PENDING", createdAt: activity.submittedAt });
+  }
+  audit(req, "Marketing activity reported", "MarketingActivity", activity.id, `${user.name}: ${activityType.replaceAll("_", " ")} for ${activity.subjectName}.`);
+  res.status(201).json(ok(activity, "Marketing activity reported"));
+});
+
+app.get("/api/marketing/leads", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  res.json(ok(visibleMarketingLeads(req), "Role-scoped leads loaded", { role: user.role, scoped: marketingScope(user) !== "ALL" }));
+});
+
+app.post("/api/marketing/leads", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  const assignedUserId = user.role === "Sales Executive" ? user.id : String(req.body.assignedUserId ?? "");
+  if (!canAccessMarketingEmployee(user, assignedUserId)) return fail(res, 403, "Select an employee inside your marketing scope.");
+  const organizationName = String(req.body.organizationName ?? "").trim();
+  const mobile = String(req.body.mobile ?? "").trim();
+  if (organizationName.length < 2 || mobile.length < 7) return fail(res, 422, "Organization and valid mobile number are required.");
+  const organizationTypes: MarketingLead["organizationType"][] = ["Hospital", "Clinic", "Dealer", "Pharmacy", "Other"];
+  if (!organizationTypes.includes(req.body.organizationType)) return fail(res, 422, "Select a valid organization type.");
+  const now = new Date().toISOString();
+  const lead: MarketingLead = {
+    id: id("lead"),
+    leadNumber: nextReference("LEAD", marketingLeads.length),
+    organizationName,
+    organizationType: req.body.organizationType,
+    contactPerson: String(req.body.contactPerson ?? "").trim() || undefined,
+    contactRole: req.body.contactRole || undefined,
+    mobile,
+    email: String(req.body.email ?? "").trim() || undefined,
+    address: String(req.body.address ?? "").trim() || undefined,
+    latitude: Number.isFinite(Number(req.body.latitude)) ? Number(req.body.latitude) : undefined,
+    longitude: Number.isFinite(Number(req.body.longitude)) ? Number(req.body.longitude) : undefined,
+    interestedProductIds: Array.isArray(req.body.interestedProductIds) ? Array.from(new Set<string>((req.body.interestedProductIds as unknown[]).map((value) => String(value)))) : [],
+    leadSource: String(req.body.leadSource ?? "Field Prospecting").trim(),
+    assignedUserId,
+    stage: "NEW",
+    nextFollowUpAt: String(req.body.nextFollowUpAt ?? "").trim() || undefined,
+    notes: String(req.body.notes ?? "").trim() || undefined,
+    createdAt: now,
+    updatedAt: now
+  };
+  marketingLeads.unshift(lead);
+  const employee = demoUsers.find((entry) => entry.id === assignedUserId)!;
+  marketingActivities.unshift({ id: id("activity"), userId: assignedUserId, employeeCode: employee.employeeCode ?? employee.id.toUpperCase(), employeeName: employee.name, territory: employee.territory, activityType: "LEAD_CREATED", source: "LEAD", occurredAt: now, submittedAt: now, leadId: lead.id, subjectName: lead.organizationName, productIds: lead.interestedProductIds, purpose: "New lead", referenceType: "Lead", referenceId: lead.id, referenceNumber: lead.leadNumber, verification: "SYSTEM_VERIFIED", createdByUserId: user.id });
+  if (lead.nextFollowUpAt) marketingFollowUps.unshift({ id: id("follow"), assignedUserId, leadId: lead.id, subjectName: lead.organizationName, dueAt: lead.nextFollowUpAt, purpose: "Initial lead follow-up", status: "PENDING", createdAt: now });
+  audit(req, "Lead created", "MarketingLead", lead.id, `${lead.leadNumber}: ${lead.organizationName} assigned to ${employee.name}.`);
+  res.status(201).json(ok(lead, "Marketing lead created"));
+});
+
+app.patch("/api/marketing/leads/:leadId", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "edit");
+  if (!user) return;
+  const lead = marketingLeads.find((entry) => entry.id === req.params.leadId);
+  if (!lead) return fail(res, 404, "Marketing lead not found.");
+  if (!canAccessMarketingEmployee(user, lead.assignedUserId)) return fail(res, 403, "This lead is outside your marketing scope.");
+  if (req.body.assignedUserId && req.body.assignedUserId !== lead.assignedUserId) {
+    if (user.role === "Sales Executive" || !canAccessMarketingEmployee(user, String(req.body.assignedUserId))) return fail(res, 403, "You cannot reassign this lead to that employee.");
+    lead.assignedUserId = String(req.body.assignedUserId);
+  }
+  const editable = ["organizationName", "organizationType", "contactPerson", "contactRole", "mobile", "email", "address", "latitude", "longitude", "interestedProductIds", "leadSource", "nextFollowUpAt", "notes"] as const;
+  for (const key of editable) if (req.body[key] !== undefined) (lead as Record<string, unknown>)[key] = req.body[key];
+  if (req.body.stage === "LOST") {
+    const reason = String(req.body.lostReason ?? "").trim();
+    if (reason.length < 5) return fail(res, 422, "Enter a clear reason before marking a lead lost.");
+    lead.stage = "LOST";
+    lead.lostReason = reason;
+  } else if (req.body.stage && req.body.stage !== lead.stage) {
+    return fail(res, 422, "Funnel stages progress from recorded activity and ERP transactions. Only Lost may be selected manually.");
+  }
+  lead.updatedAt = new Date().toISOString();
+  audit(req, "Lead updated", "MarketingLead", lead.id, `${lead.leadNumber}: ${lead.organizationName} updated.`);
+  res.json(ok(lead, "Marketing lead updated"));
+});
+
+app.post("/api/marketing/leads/:leadId/convert", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  if (!hasEffectivePermission(user, "customers", "create")) return fail(res, 403, "Customer creation access is required to convert a lead.");
+  const lead = marketingLeads.find((entry) => entry.id === req.params.leadId);
+  if (!lead) return fail(res, 404, "Marketing lead not found.");
+  if (!canAccessMarketingEmployee(user, lead.assignedUserId)) return fail(res, 403, "This lead is outside your marketing scope.");
+  if (lead.customerId) return res.json(ok(customers.find((customer) => customer.id === lead.customerId)!, "Lead is already linked to a customer"));
+  const customer: Customer = {
+    id: id("customer"), name: lead.organizationName, type: lead.organizationType, contactPerson: lead.contactPerson ?? lead.contactRole ?? "Procurement", phone: lead.mobile, email: lead.email, address: lead.address ?? "Address pending", latitude: lead.latitude, longitude: lead.longitude, territory: demoUsers.find((entry) => entry.id === lead.assignedUserId)?.territory ?? "Unassigned", assignedSalesUserId: lead.assignedUserId, paymentTerms: String(req.body.paymentTerms ?? "30 days"), creditLimit: money(req.body.creditLimit ?? "0"), currentDue: "0.00", totalSales: "0.00", totalCollected: "0.00", active: true
+  };
+  customers.unshift(customer);
+  lead.customerId = customer.id;
+  lead.updatedAt = new Date().toISOString();
+  const employee = demoUsers.find((entry) => entry.id === lead.assignedUserId)!;
+  marketingActivities.unshift({ id: id("activity"), userId: lead.assignedUserId, employeeCode: employee.employeeCode ?? employee.id.toUpperCase(), employeeName: employee.name, territory: employee.territory, activityType: "LEAD_CONVERTED", source: "LEAD", occurredAt: lead.updatedAt, submittedAt: lead.updatedAt, leadId: lead.id, customerId: customer.id, subjectName: customer.name, productIds: lead.interestedProductIds, purpose: "Lead converted to customer", referenceType: "Customer", referenceId: customer.id, referenceNumber: customer.id, verification: "SYSTEM_VERIFIED", createdByUserId: user.id });
+  audit(req, "Lead converted", "Customer", customer.id, `${lead.leadNumber} converted to ${customer.name}.`);
+  res.status(201).json(ok(customer, "Lead converted to customer"));
+});
+
+app.get("/api/marketing/follow-ups", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const status = String(req.query.status ?? "");
+  const rows = visibleMarketingFollowUps(req).filter((followUp) => !status || followUp.status === status);
+  res.json(ok(rows, "Role-scoped follow-ups loaded", { total: rows.length, role: user.role, scoped: marketingScope(user) !== "ALL" }));
+});
+
+app.post("/api/marketing/follow-ups", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  const assignedUserId = user.role === "Sales Executive" ? user.id : String(req.body.assignedUserId ?? "");
+  if (!canAccessMarketingEmployee(user, assignedUserId)) return fail(res, 403, "Select an employee inside your marketing scope.");
+  const lead = req.body.leadId ? marketingLeads.find((entry) => entry.id === req.body.leadId) : undefined;
+  const customer = req.body.customerId ? customers.find((entry) => entry.id === req.body.customerId) : undefined;
+  if (!lead && !customer) return fail(res, 422, "Select a lead or customer for this follow-up.");
+  const dueAt = String(req.body.dueAt ?? "");
+  if (!Number.isFinite(new Date(dueAt).getTime())) return fail(res, 422, "Enter a valid follow-up date and time.");
+  const followUp: MarketingFollowUp = { id: id("follow"), assignedUserId, leadId: lead?.id, customerId: customer?.id, subjectName: lead?.organizationName ?? customer!.name, dueAt, purpose: String(req.body.purpose ?? "").trim(), status: "PENDING", createdAt: new Date().toISOString() };
+  if (followUp.purpose.length < 3) return fail(res, 422, "Enter a follow-up purpose.");
+  marketingFollowUps.unshift(followUp);
+  audit(req, "Follow-up scheduled", "MarketingFollowUp", followUp.id, `${followUp.subjectName}: ${followUp.purpose}.`);
+  res.status(201).json(ok(followUpForResponse(followUp), "Marketing follow-up scheduled"));
+});
+
+app.patch("/api/marketing/follow-ups/:followUpId", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "edit");
+  if (!user) return;
+  const followUp = marketingFollowUps.find((entry) => entry.id === req.params.followUpId);
+  if (!followUp) return fail(res, 404, "Follow-up not found.");
+  if (!canAccessMarketingEmployee(user, followUp.assignedUserId)) return fail(res, 403, "This follow-up is outside your marketing scope.");
+  if (req.body.status === "COMPLETED") {
+    followUp.status = "COMPLETED";
+    followUp.completedAt = new Date().toISOString();
+    followUp.outcome = String(req.body.outcome ?? "Completed").trim();
+    followUp.nextFollowUpAt = String(req.body.nextFollowUpAt ?? "").trim() || undefined;
+    if (followUp.nextFollowUpAt) marketingFollowUps.unshift({ id: id("follow"), assignedUserId: followUp.assignedUserId, leadId: followUp.leadId, customerId: followUp.customerId, subjectName: followUp.subjectName, dueAt: followUp.nextFollowUpAt, purpose: followUp.outcome || followUp.purpose, status: "PENDING", createdAt: followUp.completedAt });
+  } else if (req.body.status === "CANCELLED") {
+    followUp.status = "CANCELLED";
+  } else {
+    if (req.body.dueAt) {
+      const dueAt = String(req.body.dueAt);
+      if (!Number.isFinite(new Date(dueAt).getTime())) return fail(res, 422, "Enter a valid follow-up date and time.");
+      followUp.dueAt = dueAt;
+      followUp.status = "PENDING";
+    }
+    if (req.body.purpose) followUp.purpose = String(req.body.purpose);
+  }
+  audit(req, "Follow-up updated", "MarketingFollowUp", followUp.id, `${followUp.subjectName}: ${followUp.status}.`);
+  res.json(ok(followUpForResponse(followUp), "Marketing follow-up updated"));
+});
+
+app.get("/api/marketing/plans/daily", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const employeeId = String(req.query.employeeId ?? (user.role === "Sales Executive" ? user.id : "all"));
+  if (employeeId !== "all" && !canAccessMarketingEmployee(user, employeeId)) return fail(res, 403, "The selected employee is outside your scope.");
+  const date = String(req.query.date ?? businessDate());
+  const rows = dailyMarketingPlans.filter((plan) => (employeeId === "all" || plan.userId === employeeId) && plan.date === date);
+  res.json(ok(rows, "Daily marketing plans loaded"));
+});
+
+app.post("/api/marketing/plans/daily", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  const userId = user.role === "Sales Executive" ? user.id : String(req.body.userId ?? "");
+  if (!canAccessMarketingEmployee(user, userId)) return fail(res, 403, "Select an employee inside your marketing scope.");
+  const date = String(req.body.date ?? businessDate());
+  const existing = dailyMarketingPlans.find((plan) => plan.userId === userId && plan.date === date);
+  const rawVisits: Record<string, unknown>[] = Array.isArray(req.body.plannedVisits) ? req.body.plannedVisits : [];
+  if (!rawVisits.length) return fail(res, 422, "Add at least one planned visit.");
+  const permittedLeadIds = new Set(visibleMarketingLeads(req).map((lead) => lead.id));
+  const permittedCustomerIds = new Set(customerScoped(req).map((customer) => customer.id));
+  for (const visit of rawVisits) {
+    const leadId = visit.leadId ? String(visit.leadId) : undefined;
+    const customerId = visit.customerId ? String(visit.customerId) : undefined;
+    if (leadId && customerId) return fail(res, 422, "A planned visit must reference either a lead or a customer, not both.");
+    if (leadId && !permittedLeadIds.has(leadId)) return fail(res, 403, "A planned lead is outside your marketing scope.");
+    if (customerId && !permittedCustomerIds.has(customerId)) return fail(res, 403, "A planned customer is outside your marketing scope.");
+    if (!leadId && !customerId && String(visit.subjectName ?? "").trim().length < 2) return fail(res, 422, "Select a customer or lead for every planned visit.");
+  }
+  const plannedVisits: DailyMarketingPlan["plannedVisits"] = rawVisits.map((visit) => {
+    const visitId = String(visit.id || id("plan-item"));
+    const previous = existing?.plannedVisits.find((entry) => entry.id === visitId);
+    if (previous?.completed) return previous;
+    const customerId = visit.customerId ? String(visit.customerId) : undefined;
+    const leadId = visit.leadId ? String(visit.leadId) : undefined;
+    const customer = customerId ? customers.find((entry) => entry.id === customerId) : undefined;
+    const lead = leadId ? marketingLeads.find((entry) => entry.id === leadId) : undefined;
+    return { id: visitId, customerId, leadId, subjectName: lead?.organizationName ?? customer?.name ?? String(visit.subjectName).trim(), plannedTime: visit.plannedTime ? String(visit.plannedTime) : undefined, purpose: String(visit.purpose ?? "Customer visit").trim() || "Customer visit", completed: false };
+  });
+  for (const previous of existing?.plannedVisits ?? []) if (previous.completed && !plannedVisits.some((visit) => visit.id === previous.id)) plannedVisits.push(previous);
+  const plan: DailyMarketingPlan = { id: existing?.id ?? id("daily-plan"), userId, date, plannedVisits, notes: String(req.body.notes ?? "").trim() || undefined, status: plannedVisits.every((visit) => visit.completed) ? "COMPLETED" : "SUBMITTED" };
+  if (existing) Object.assign(existing, plan); else dailyMarketingPlans.unshift(plan);
+  audit(req, existing ? "Daily plan updated" : "Daily plan submitted", "DailyMarketingPlan", plan.id, `${date}: ${plannedVisits.length} planned visits.`);
+  res.status(existing ? 200 : 201).json(ok(plan, existing ? "Daily marketing plan updated" : "Daily marketing plan submitted"));
+});
+
+app.get("/api/marketing/plans/monthly", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const month = String(req.query.month ?? businessDate().slice(0, 7));
+  const ids = marketingEmployeeIds(user);
+  res.json(ok(monthlyMarketingPlans.filter((plan) => ids.has(plan.userId) && plan.month === month), "Monthly marketing plans loaded"));
+});
+
+app.post("/api/marketing/plans/monthly", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "create");
+  if (!user) return;
+  const userId = user.role === "Sales Executive" ? user.id : String(req.body.userId ?? "");
+  if (!canAccessMarketingEmployee(user, userId)) return fail(res, 403, "Select an employee inside your marketing scope.");
+  const month = String(req.body.month ?? businessDate().slice(0, 7));
+  const employee = demoUsers.find((entry) => entry.id === userId)!;
+  const existing = monthlyMarketingPlans.find((plan) => plan.userId === userId && plan.month === month);
+  const plan: MonthlyMarketingPlan = { id: existing?.id ?? id("monthly-plan"), userId, month, territory: String(req.body.territory ?? employee.territory ?? "Unassigned"), prioritySubjects: Array.isArray(req.body.prioritySubjects) ? req.body.prioritySubjects.map(String) : [], productIds: Array.isArray(req.body.productIds) ? req.body.productIds.map(String) : [], plannedActivities: Math.max(0, Number(req.body.plannedActivities ?? 0)), notes: String(req.body.notes ?? "").trim() || undefined, status: marketingManagementRoles.includes(user.role) && req.body.status === "APPROVED" ? "APPROVED" : "SUBMITTED" };
+  if (existing) Object.assign(existing, plan); else monthlyMarketingPlans.unshift(plan);
+  res.status(existing ? 200 : 201).json(ok(plan, existing ? "Monthly plan updated" : "Monthly plan submitted"));
+});
+
+app.get("/api/marketing/targets", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  const month = String(req.query.month ?? businessDate().slice(0, 7));
+  const ids = marketingEmployeeIds(user);
+  res.json(ok(marketingTargets.filter((target) => ids.has(target.userId) && target.month === month), "Marketing targets loaded"));
+});
+
+app.post("/api/marketing/targets", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "approve");
+  if (!user) return;
+  const userId = String(req.body.userId ?? "");
+  if (!canAccessMarketingEmployee(user, userId)) return fail(res, 403, "Select an employee inside your marketing scope.");
+  const month = String(req.body.month ?? businessDate().slice(0, 7));
+  const values = { salesTargetBdt: money(requiredDecimal(req.body.salesTargetBdt ?? "0", "Sales target", { allowZero: true })), newCustomerTarget: Math.max(0, Number(req.body.newCustomerTarget ?? 0)), visitTarget: Math.max(0, Number(req.body.visitTarget ?? 0)), collectionTargetBdt: money(requiredDecimal(req.body.collectionTargetBdt ?? "0", "Collection target", { allowZero: true })) };
+  const existing = marketingTargets.find((target) => target.userId === userId && target.month === month);
+  const target: EmployeeMarketingTarget = { id: existing?.id ?? id("target"), userId, month, ...values, createdByUserId: user.id, createdAt: existing?.createdAt ?? new Date().toISOString() };
+  if (existing) Object.assign(existing, target); else marketingTargets.unshift(target);
+  audit(req, existing ? "Marketing target updated" : "Marketing target assigned", "EmployeeMarketingTarget", target.id, `${userId}: ${month} target saved.`);
+  res.status(existing ? 200 : 201).json(ok(target, existing ? "Marketing target updated" : "Marketing target assigned"));
+});
+
+app.patch("/api/marketing/targets/:targetId", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "approve");
+  if (!user) return;
+  const target = marketingTargets.find((entry) => entry.id === req.params.targetId);
+  if (!target) return fail(res, 404, "Marketing target not found.");
+  if (!canAccessMarketingEmployee(user, target.userId)) return fail(res, 403, "This target is outside your scope.");
+  for (const key of ["salesTargetBdt", "collectionTargetBdt"] as const) if (req.body[key] !== undefined) target[key] = money(requiredDecimal(req.body[key], key, { allowZero: true }));
+  for (const key of ["newCustomerTarget", "visitTarget"] as const) if (req.body[key] !== undefined) target[key] = Math.max(0, Number(req.body[key]));
+  audit(req, "Marketing target updated", "EmployeeMarketingTarget", target.id, `${target.userId}: ${target.month} target updated.`);
+  res.json(ok(target, "Marketing target updated"));
+});
+
+app.get("/api/marketing/performance", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  let period;
+  try { period = reportPeriod(req); } catch (error) { return fail(res, 422, error instanceof Error ? error.message : "Report period is invalid."); }
+  const employeeId = String(req.query.employeeId ?? "all");
+  if (employeeId !== "all" && !canAccessMarketingEmployee(user, employeeId)) return fail(res, 403, "The selected employee is outside your scope.");
+  const rows = performanceRowsFor(req, period.from, period.to).filter((row) => employeeId === "all" || row.employee.id === employeeId);
+  res.json(ok(rows, "Marketing performance loaded", { total: rows.length, role: user.role, scoped: marketingScope(user) !== "ALL" }));
+});
+
+app.get("/api/marketing/employees/:employeeId/snapshot", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "view");
+  if (!user) return;
+  if (!canAccessMarketingEmployee(user, req.params.employeeId)) return fail(res, 403, "The selected employee is outside your marketing scope.");
+  const employeeUser = demoUsers.find((entry) => entry.id === req.params.employeeId);
+  if (!employeeUser) return fail(res, 404, "Employee not found.");
+  const today = businessDate();
+  const employee = directoryEntry(employeeUser);
+  const requestLike = { headers: { "x-user-id": user.id } } as unknown as Request;
+  const snapshot: EmployeeMarketingSnapshot = { employee, performance: marketingPerformance(employee, `${today.slice(0, 7)}-01`, today), recentActivities: unifiedMarketingActivities(requestLike).filter((activity) => activity.userId === employee.id).slice(0, 12), followUps: marketingFollowUps.filter((followUp) => followUp.assignedUserId === employee.id).map(followUpForResponse), leads: marketingLeads.filter((lead) => lead.assignedUserId === employee.id), dailyPlan: dailyMarketingPlans.find((plan) => plan.userId === employee.id && plan.date === today) };
+  res.json(ok(snapshot, `${employee.name} marketing snapshot loaded`));
+});
+
+app.get("/api/marketing/score-rules", (req, res) => {
+  if (!requirePermission(req, res, "marketing", "view")) return;
+  res.json(ok(marketingScoreRules, "Marketing score rules loaded"));
+});
+
+app.patch("/api/marketing/score-rules/:ruleId", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (user.role !== "Super Admin") return fail(res, 403, "Only Super Admin can change official marketing score weights.");
+  const rule = marketingScoreRules.find((entry) => entry.id === req.params.ruleId);
+  if (!rule) return fail(res, 404, "Marketing score rule not found.");
+  if (req.body.points !== undefined) {
+    const points = Number(req.body.points);
+    if (!Number.isInteger(points) || points < 0 || points > 100) return fail(res, 422, "Score points must be a whole number from 0 to 100.");
+    rule.points = points;
+  }
+  if (req.body.active !== undefined) rule.active = Boolean(req.body.active);
+  audit(req, "Marketing score rule updated", "MarketingScoreRule", rule.id, `${rule.label}: ${rule.points} points.`);
+  res.json(ok(rule, "Marketing score rule updated"));
+});
+
+app.get("/api/reports/marketing", (req, res) => {
+  const user = requirePermission(req, res, "reports", "view");
+  if (!user) return;
+  if (!hasEffectivePermission(user, "marketing", "view")) return fail(res, 403, "Marketing report access is required.");
+  let period;
+  try { period = reportPeriod(req); } catch (error) { return fail(res, 422, error instanceof Error ? error.message : "Report period is invalid."); }
+  const employeeId = String(req.query.employeeId ?? "all");
+  const territory = String(req.query.territory ?? "");
+  const activityType = String(req.query.activityType ?? "");
+  const subjectId = String(req.query.subjectId ?? "");
+  const verification = String(req.query.verification ?? "");
+  const status = String(req.query.status ?? "");
+  const groupBy = String(req.query.groupBy ?? "Date");
+  const mode = req.query.mode === "Detail" ? "Detail" as const : "Summary" as const;
+  if (employeeId !== "all" && !canAccessMarketingEmployee(user, employeeId)) return fail(res, 403, "The selected employee is outside your report scope.");
+  const subjectLeadId = subjectId.startsWith("lead:") ? subjectId.slice(5) : "";
+  const subjectCustomerId = subjectId.startsWith("customer:") ? subjectId.slice(9) : "";
+  if (subjectId && !subjectLeadId && !subjectCustomerId) return fail(res, 422, "Select a valid customer or lead report subject.");
+  if (subjectLeadId && !visibleMarketingLeads(req).some((lead) => lead.id === subjectLeadId)) return fail(res, 403, "The selected lead is outside your report scope.");
+  if (subjectCustomerId && !customerScoped(req).some((customer) => customer.id === subjectCustomerId)) return fail(res, 403, "The selected customer is outside your report scope.");
+  const matchesSubject = (leadId?: string, customerId?: string) => !subjectId || (subjectLeadId ? leadId === subjectLeadId : customerId === subjectCustomerId);
+  const matchesEmployeeScope = (userId: string) => (employeeId === "all" || userId === employeeId) && (!territory || demoUsers.find((entry) => entry.id === userId)?.territory === territory);
+  const activities = unifiedMarketingActivities(req, period.from, period.to).filter((activity) => (employeeId === "all" || activity.userId === employeeId) && (!territory || activity.territory === territory) && (!activityType || activity.activityType === activityType) && matchesSubject(activity.leadId, activity.customerId) && (!verification || activity.verification === verification));
+  const leads = visibleMarketingLeads(req).filter((lead) => matchesEmployeeScope(lead.assignedUserId) && inTimestampPeriod(lead.createdAt, period.from, period.to) && matchesSubject(lead.id, lead.customerId) && (!status || lead.stage === status));
+  const followUps = visibleMarketingFollowUps(req).filter((followUp) => matchesEmployeeScope(followUp.assignedUserId) && inTimestampPeriod(followUp.dueAt, period.from, period.to) && matchesSubject(followUp.leadId, followUp.customerId) && (!status || followUp.status === status));
+  const visits = fieldVisits.filter((visit) => marketingEmployeeIds(user).has(visit.userId) && matchesEmployeeScope(visit.userId) && inTimestampPeriod(visit.plannedAt, period.from, period.to) && matchesSubject(visit.leadId, visit.customerId) && (!verification || visit.verification === verification) && (!status || visit.status.toUpperCase().replace(" ", "_") === status));
+  const performance = performanceRowsFor(req, period.from, period.to).filter((row) => (employeeId === "all" || row.employee.id === employeeId) && (!territory || row.employee.territory === territory));
+  const grouped = new Map<string, number>();
+  if (groupBy === "Lead Stage") for (const lead of leads) grouped.set(lead.stage, (grouped.get(lead.stage) ?? 0) + 1);
+  else for (const activity of activities) {
+    const key = groupBy === "Employee" ? activity.employeeName : groupBy === "Territory" ? activity.territory ?? "Unassigned" : groupBy === "Customer" ? activity.subjectName ?? "Unassigned" : groupBy === "Activity Type" ? activity.activityType.replaceAll("_", " ") : businessDate(new Date(activity.occurredAt));
+    grouped.set(key, (grouped.get(key) ?? 0) + 1);
+  }
+  const data: MarketingReportData = {
+    period,
+    filters: { employeeId, territory, activityType, subjectId, verification, status, groupBy, mode },
+    summary: [{ label: "Activities", value: String(activities.length) }, { label: "New Leads", value: String(leads.length) }, { label: "Follow-ups", value: String(followUps.length) }, { label: "Verified Visits", value: String(visits.filter((visit) => visit.status === "Completed" && ["GPS_VERIFIED", "SYSTEM_VERIFIED"].includes(visit.verification ?? "UNVERIFIED")).length) }, { label: "Activity Score", value: String(performance.reduce((sum, row) => sum + row.activityScore, 0)) }],
+    tables: [
+      { id: "marketing-activity", title: "Daily Marketing Activity", columns: [{ key: "date", label: "Date / Time" }, { key: "employee", label: "Employee" }, { key: "territory", label: "Territory" }, { key: "activity", label: "Activity" }, { key: "subject", label: "Customer / Lead" }, { key: "verification", label: "Verification" }, { key: "reference", label: "ERP Reference" }], rows: activities.map((activity) => ({ date: activity.occurredAt, employee: activity.employeeName, territory: activity.territory ?? "-", activity: activity.activityType.replaceAll("_", " "), subject: activity.subjectName ?? "-", verification: activity.verification.replaceAll("_", " "), reference: activity.referenceNumber ?? "Manual" })) },
+      { id: "marketing-grouped", title: `Activity by ${groupBy}`, columns: [{ key: "group", label: groupBy }, { key: "count", label: "Activities", align: "right" as const }], rows: [...grouped].sort(([left], [right]) => left.localeCompare(right)).map(([group, count]) => ({ group, count: String(count) })) },
+      { id: "lead-funnel", title: "Lead Funnel", columns: [{ key: "lead", label: "Lead" }, { key: "organization", label: "Organization" }, { key: "employee", label: "Assigned Employee" }, { key: "stage", label: "Stage" }, { key: "next", label: "Next Follow-up" }], rows: leads.map((lead) => ({ lead: lead.leadNumber, organization: lead.organizationName, employee: demoUsers.find((entry) => entry.id === lead.assignedUserId)?.name ?? lead.assignedUserId, stage: lead.stage, next: lead.nextFollowUpAt ?? "-" })) },
+      { id: "follow-up-status", title: "Follow-up Status", columns: [{ key: "due", label: "Due" }, { key: "employee", label: "Employee" }, { key: "subject", label: "Customer / Lead" }, { key: "purpose", label: "Purpose" }, { key: "status", label: "Status" }], rows: followUps.map((followUp) => ({ due: followUp.dueAt, employee: demoUsers.find((entry) => entry.id === followUp.assignedUserId)?.name ?? followUp.assignedUserId, subject: followUp.subjectName, purpose: followUp.purpose, status: followUp.status })) },
+      { id: "target-actual", title: "Target vs Actual", columns: [{ key: "employee", label: "Employee" }, { key: "sales", label: "Delivered Sales" }, { key: "collection", label: "Collections" }, { key: "visits", label: "Verified Visits" }, { key: "customers", label: "New Customers" }, { key: "progress", label: "Overall", align: "right" as const }], rows: performance.map((row) => ({ employee: row.employee.name, sales: `${row.deliveredSalesBdt} / ${row.targets.salesTargetBdt}`, collection: `${row.collectionsBdt} / ${row.targets.collectionTargetBdt}`, visits: `${row.verifiedVisits} / ${row.targets.visitTarget}`, customers: `${row.convertedCustomers} / ${row.targets.newCustomerTarget}`, progress: `${row.progress.overall}%` })) },
+      { id: "activity-score", title: "Activity Score", columns: [{ key: "employee", label: "Employee" }, { key: "verified", label: "Verified Visits", align: "right" as const }, { key: "leads", label: "Qualified Leads", align: "right" as const }, { key: "quotes", label: "Quotes", align: "right" as const }, { key: "orders", label: "Orders", align: "right" as const }, { key: "followups", label: "Follow-ups", align: "right" as const }, { key: "score", label: "Score", align: "right" as const }], rows: performance.map((row) => ({ employee: row.employee.name, verified: String(row.verifiedVisits), leads: String(row.qualifiedLeads), quotes: String(row.quotations), orders: String(row.orders), followups: String(row.followUpsCompleted), score: String(row.activityScore) })) },
+      { id: "visit-verification", title: "Visit Verification", columns: [{ key: "date", label: "Planned" }, { key: "employee", label: "Employee" }, { key: "customer", label: "Customer / Lead" }, { key: "status", label: "Visit Status" }, { key: "verification", label: "Verification" }, { key: "distance", label: "Distance" }, { key: "submitted", label: "Submitted" }], rows: visits.map((visit) => ({ date: visit.plannedAt, employee: demoUsers.find((entry) => entry.id === visit.userId)?.name ?? visit.userId, customer: visit.customerName, status: visit.status, verification: visit.verification ?? "UNVERIFIED", distance: visit.checkInDistanceMeters === undefined ? "-" : `${visit.checkInDistanceMeters} m${visit.distanceWarning ? " WARNING" : ""}`, submitted: visit.submittedAt ?? "-" })) }
+    ],
+    performance
+  };
+  res.json(ok(data, `Marketing reports loaded for ${period.from} to ${period.to}`));
+});
+
+app.get("/api/reports/marketing/export-authorization", (req, res) => {
+  const user = requirePermission(req, res, "marketing", "export");
+  if (!user) return;
+  res.json(ok({ authorized: true as const }, "Marketing report export authorized"));
+});
+
 app.get("/api/field-team/current", (req, res) => {
   const user = requireFieldTeam(req, res);
   if (!user) return;
@@ -939,6 +1732,15 @@ app.post("/api/field-team/tracking/start", (req, res) => {
   if (existing) return res.json(ok(existing, "Tracking session is already active"));
   const session: TrackingSession = { id: id("track"), userId: user.id, startedAt: new Date().toISOString(), source: "WEB_FOREGROUND", status: "Active" };
   trackingSessions.unshift(session);
+  const current = currentEmployeeLocations.find((location) => location.userId === user.id);
+  if (current) {
+    current.sessionId = session.id;
+    current.sessionStartedAt = session.startedAt;
+    current.recordedAt = session.startedAt;
+    current.status = "LIVE";
+    current.source = "WEB_FOREGROUND";
+    locationHistory.push({ id: id("loc"), userId: user.id, latitude: current.latitude, longitude: current.longitude, accuracyMeters: current.accuracyMeters, recordedAt: session.startedAt, source: "WEB_FOREGROUND", event: "TRACKING_STARTED" });
+  }
   audit(req, "Tracking Started", "TrackingSession", session.id, `${user.name} started foreground web tracking.`);
   res.status(201).json(ok(session, "Foreground tracking started"));
 });
@@ -954,7 +1756,8 @@ app.post("/api/field-team/tracking/location", (req, res) => {
   const point: LocationHistoryPoint = { id: id("loc"), userId: user.id, latitude: input.latitude, longitude: input.longitude, accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt, source: input.source, event: "LOCATION" };
   locationHistory.push(point);
   const existing = currentEmployeeLocations.find((location) => location.userId === user.id);
-  const next: CurrentEmployeeLocation = { userId: user.id, employee: fieldEmployee(user), latitude: input.latitude, longitude: input.longitude, accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt, status: "LIVE", source: input.source, sessionId: session.id, sessionStartedAt: session.startedAt };
+  const currentVisit = fieldVisits.find((visit) => visit.userId === user.id && visit.status === "Checked In");
+  const next: CurrentEmployeeLocation = { userId: user.id, employee: fieldEmployee(user), latitude: input.latitude, longitude: input.longitude, accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt, status: "LIVE", source: input.source, sessionId: session.id, sessionStartedAt: session.startedAt, currentVisit };
   if (existing) Object.assign(existing, next); else currentEmployeeLocations.push(next);
   res.status(201).json(ok(next, "Current location updated"));
 });
@@ -967,6 +1770,14 @@ app.post("/api/field-team/tracking/stop", (req, res) => {
   if (!session) return fail(res, 409, "No active tracking session exists.");
   session.status = "Completed";
   session.endedAt = new Date().toISOString();
+  const current = currentEmployeeLocations.find((location) => location.userId === user.id);
+  if (current) {
+    current.status = "OFFLINE";
+    current.recordedAt = session.endedAt;
+    current.sessionId = undefined;
+    current.sessionStartedAt = undefined;
+    locationHistory.push({ id: id("loc"), userId: user.id, latitude: current.latitude, longitude: current.longitude, accuracyMeters: current.accuracyMeters, recordedAt: session.endedAt, source: "WEB_FOREGROUND", event: "TRACKING_ENDED" });
+  }
   audit(req, "Tracking Ended", "TrackingSession", session.id, `${user.name} ended foreground web tracking.`);
   res.json(ok(session, "Tracking stopped"));
 });
@@ -979,21 +1790,74 @@ for (const action of ["check-in", "check-out"] as const) app.post(`/api/field-te
   if (user.role !== "Sales Executive" || visit.userId !== user.id) return fail(res, 403, "Only the assigned salesperson can verify this visit.");
   const now = new Date().toISOString();
   if (action === "check-in") {
+    if (visit.status === "Completed" || visit.status === "Missed") return fail(res, 409, "Only a planned visit can be checked in.");
     const latitude = Number(req.body?.latitude);
     const longitude = Number(req.body?.longitude);
     const accuracyMeters = Number(req.body?.accuracyMeters);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isFinite(accuracyMeters) || accuracyMeters < 0) return fail(res, 422, "Visit check-in requires valid coordinates and GPS accuracy.");
+    if (visit.status === "Checked In") return res.json(ok(visit, "Visit is already checked in"));
     visit.status = "Checked In";
     visit.checkInAt = now;
     visit.checkInLatitude = latitude;
     visit.checkInLongitude = longitude;
     visit.checkInAccuracyMeters = accuracyMeters;
+    visit.checkInDistanceMeters = distanceMeters(visit.customerLatitude, visit.customerLongitude, latitude, longitude);
+    visit.distanceWarning = visit.checkInDistanceMeters > 250;
+    visit.verification = "GPS_VERIFIED";
+    visit.submittedAt = now;
+    const current = currentEmployeeLocations.find((location) => location.userId === user.id);
+    if (current) {
+      current.latitude = latitude;
+      current.longitude = longitude;
+      current.accuracyMeters = accuracyMeters;
+      current.recordedAt = now;
+      current.currentVisit = visit;
+      current.source = "WEB_FOREGROUND";
+    }
+    locationHistory.push({ id: id("loc"), userId: user.id, latitude, longitude, accuracyMeters, recordedAt: now, source: "WEB_FOREGROUND", event: "VISIT_CHECK_IN" });
     audit(req, "Visit Check-In", "FieldVisit", visit.id, `${user.name} checked in at ${visit.customerName}.`);
   } else {
     if (!visit.checkInAt) return fail(res, 409, "Check in before completing the visit.");
+    if (visit.status === "Completed") return res.json(ok(visit, "Visit is already completed"));
+    const outcome = String(req.body?.outcome ?? "").trim();
+    if (!outcome) return fail(res, 422, "Visit outcome is required before check-out.");
+    const latitude = Number(req.body?.checkOutLatitude);
+    const longitude = Number(req.body?.checkOutLongitude);
+    const accuracyMeters = Number(req.body?.checkOutAccuracyMeters);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isFinite(accuracyMeters) || accuracyMeters < 0) return fail(res, 422, "Visit check-out requires valid coordinates and GPS accuracy.");
     visit.status = "Completed";
     visit.checkOutAt = now;
-    visit.outcome = String(req.body?.outcome ?? "Visit completed");
+    visit.outcome = outcome;
+    visit.checkOutLatitude = latitude;
+    visit.checkOutLongitude = longitude;
+    visit.checkOutAccuracyMeters = accuracyMeters;
+    visit.productIds = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : visit.productIds;
+    visit.nextFollowUpAt = String(req.body?.nextFollowUpAt ?? "").trim() || visit.nextFollowUpAt;
+    visit.remarks = String(req.body?.remarks ?? "").trim() || visit.remarks;
+    visit.submittedAt = now;
+    if (req.body?.attachmentUpload) {
+      try {
+        visit.attachments = [...(visit.attachments ?? []), uploadedDocument(req, req.body.attachmentUpload as DocumentUpload, "field-visit", visit.id, "Visit Evidence", false)];
+      } catch (error) {
+        return fail(res, 422, error instanceof Error ? error.message : "Visit evidence is invalid.");
+      }
+    }
+    if (visit.nextFollowUpAt) marketingFollowUps.unshift({ id: id("follow"), assignedUserId: visit.userId, leadId: visit.leadId, customerId: visit.customerId, subjectName: visit.customerName, dueAt: visit.nextFollowUpAt, purpose: visit.outcome, status: "PENDING", createdAt: now });
+    if (visit.leadId) advanceLead(visit.leadId, "CONTACTED", now);
+    const current = currentEmployeeLocations.find((location) => location.userId === user.id);
+    if (current) {
+      current.latitude = latitude;
+      current.longitude = longitude;
+      current.accuracyMeters = accuracyMeters;
+      current.recordedAt = now;
+      current.currentVisit = undefined;
+      current.source = "WEB_FOREGROUND";
+      locationHistory.push({ id: id("loc"), userId: user.id, latitude, longitude, accuracyMeters, recordedAt: now, source: "WEB_FOREGROUND", event: "VISIT_CHECK_OUT" });
+    }
+    const plan = dailyMarketingPlans.find((entry) => entry.userId === user.id && entry.date === businessDate());
+    const plannedVisit = plan?.plannedVisits.find((entry) => !entry.completed && (entry.customerId === visit.customerId || (visit.leadId && entry.leadId === visit.leadId) || entry.subjectName.toLowerCase() === visit.customerName.toLowerCase()));
+    if (plannedVisit) plannedVisit.completed = true;
+    if (plan?.plannedVisits.length && plan.plannedVisits.every((entry) => entry.completed)) plan.status = "COMPLETED";
     audit(req, "Visit Check-Out", "FieldVisit", visit.id, `${user.name} completed the visit at ${visit.customerName}.`);
   }
   res.json(ok(visit, action === "check-in" ? "Visit check-in recorded" : "Visit check-out recorded"));
@@ -1054,7 +1918,7 @@ app.post("/api/ai/chat", (req, res) => {
   if ((asksForCost && !hasCapability(req, "view_sensitive_cost")) || (asksForProfit && !hasCapability(req, "view_profit"))) {
     return res.json(ok({ answer: `I cannot provide supplier pricing, landed cost or profit to the ${user.role} role. I can still help with allowed status, stock, customer, due and workflow information.`, contextLabel: `${user.role} · permission-safe response`, suggestions, sources: [], restricted: true }, "Sensitive request safely restricted"));
   }
-  if ((context.entityType === "import" && !canAccessArea(user, "imports")) || (context.entityType === "inventory" && !canAccessArea(user, "inventory")) || (context.entityType === "reports" && !canAccessArea(user, "reports")) || (context.entityType === "field-team" && !fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive")) {
+  if ((context.entityType === "import" && !canAccessArea(user, "imports")) || (context.entityType === "inventory" && !canAccessArea(user, "inventory")) || (context.entityType === "reports" && !canAccessArea(user, "reports")) || (context.entityType === "marketing" && !hasEffectivePermission(user, "marketing", "view")) || (context.entityType === "field-team" && !fieldManagementRoles.includes(user.role) && user.role !== "Sales Executive")) {
     return res.json(ok({ answer: `The ${context.entityType} workspace is outside the ${user.role} role, so I cannot read or summarize its records.`, contextLabel: `${user.role} · access restricted`, suggestions: aiSuggestionsFor(user, { route: "/app/dashboard", entityType: "dashboard" }), sources: [], restricted: true }, "Context safely restricted"));
   }
 
@@ -1083,6 +1947,23 @@ app.post("/api/ai/chat", (req, res) => {
     const openQuotes = salesScoped(quotations, req).filter((quote) => ["Draft", "Sent", "Accepted"].includes(quote.status));
     answer = topDue ? `${topDue.name} has the largest visible due at Tk ${money(topDue.currentDue)}. ${openQuotes.length} quotation${openQuotes.length === 1 ? " is" : "s are"} still open in your permitted sales scope.` : "There are no visible customer dues in your current sales scope.";
     sources = [{ label: "Sales workspace", path: "/app/sales" }];
+  } else if (context.entityType === "marketing" && hasEffectivePermission(user, "marketing", "view")) {
+    const allowed = marketingEmployeeIds(user);
+    const namedEmployee = demoUsers.find((employee) => allowed.has(employee.id) && question.toLowerCase().includes(employee.name.split(" ")[0].toLowerCase()));
+    const selectedEmployeeId = context.employeeId ?? namedEmployee?.id;
+    if (selectedEmployeeId && !canAccessMarketingEmployee(user, selectedEmployeeId)) return res.json(ok({ answer: "That employee is outside your permitted marketing scope, so I cannot expose their activity or targets.", contextLabel: `${user.role} · marketing access restricted`, suggestions, sources: [], restricted: true }, "Marketing scope safely restricted"));
+    const activities = unifiedMarketingActivities(req, businessDate(), businessDate()).filter((activity) => !selectedEmployeeId || activity.userId === selectedEmployeeId);
+    const followUps = visibleMarketingFollowUps(req).filter((followUp) => !selectedEmployeeId || followUp.assignedUserId === selectedEmployeeId);
+    const overdue = followUps.filter((followUp) => followUp.status === "OVERDUE");
+    const monthFrom = `${businessDate().slice(0, 7)}-01`;
+    const performance = performanceRowsFor(req, monthFrom, businessDate()).filter((row) => !selectedEmployeeId || row.employee.id === selectedEmployeeId);
+    const focus = performance[0];
+    if (/overdue|follow.?up/i.test(question)) answer = overdue.length ? `${overdue.length} permitted follow-up${overdue.length === 1 ? " is" : "s are"} overdue. The oldest visible item is ${overdue.sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0].subjectName}, due ${overdue[0].dueAt}.` : "No permitted marketing follow-up is currently overdue.";
+    else if (/target|below|progress/i.test(question)) answer = focus ? `${focus.employee.name} is at ${focus.progress.overall}% overall target progress this month, with ${focus.verifiedVisits} verified visits, ${focus.orders} orders and Tk ${focus.collectionsBdt} in posted collections.` : "No target performance row is available in your permitted marketing scope.";
+    else if (/lead|negotiation|contact/i.test(question)) { const visibleLeads = visibleMarketingLeads(req).filter((lead) => !selectedEmployeeId || lead.assignedUserId === selectedEmployeeId); const negotiation = visibleLeads.filter((lead) => lead.stage === "NEGOTIATION"); answer = `${visibleLeads.length} lead${visibleLeads.length === 1 ? " is" : "s are"} visible in this scope; ${negotiation.length} ${negotiation.length === 1 ? "is" : "are"} in negotiation. Funnel stages advance only from saved activity and ERP transactions.`; }
+    else answer = `${activities.length} marketing activit${activities.length === 1 ? "y is" : "ies are"} recorded today in this scope. ${overdue.length} follow-up${overdue.length === 1 ? " is" : "s are"} overdue.${focus ? ` ${focus.employee.name}'s current activity score is ${focus.activityScore}.` : ""}`;
+    contextLabel = selectedEmployeeId ? `${demoUsers.find((employee) => employee.id === selectedEmployeeId)?.name ?? "Employee"} · Marketing` : `${user.role} · Marketing`;
+    sources = [{ label: "Marketing activity hub", path: `/app/sales?view=marketing${selectedEmployeeId ? `&employee=${selectedEmployeeId}` : ""}` }, { label: "Marketing reports", path: `/app/reports?view=marketing${selectedEmployeeId ? `&employee=${selectedEmployeeId}` : ""}` }];
   } else if (context.entityType === "field-team" && (fieldManagementRoles.includes(user.role) || user.role === "Sales Executive")) {
     const locations = currentFieldLocations(user);
     const selected = context.employeeId ? locations.find((location) => location.userId === context.employeeId) : undefined;
@@ -1094,7 +1975,7 @@ app.post("/api/ai/chat", (req, res) => {
     const stale = locations.filter((location) => ["STALE", "OFFLINE", "NOT_TRACKING"].includes(location.status));
     answer = selected ? `${selected.employee.name} is ${selected.status.toLowerCase().replace("_", " ")}. The last coordinate was recorded at ${selected.recordedAt} with ${selected.accuracyMeters} m accuracy.${selected.currentVisit ? ` Current visit: ${selected.currentVisit.customerName}, checked in at ${selected.currentVisit.checkInAt}.` : " No active customer check-in is attached."}` : `${live} visible employee${live === 1 ? " is" : "s are"} live. ${stale.length} location feed${stale.length === 1 ? " needs" : "s need"} timestamp attention. This is a labelled demo feed, not production tracking.`;
     contextLabel = selected ? `${selected.employee.employeeCode} · ${selected.status}` : `${user.role} · Field Team`;
-    sources = [{ label: selected ? `${selected.employee.name} field activity` : "Field Team", path: `/app/sales?view=field-team${selected ? `&employee=${selected.userId}` : ""}` }];
+    sources = [{ label: selected ? `${selected.employee.name} field activity` : "Field Team", path: `/app/sales?view=marketing&marketing=field-team${selected ? `&employee=${selected.userId}` : ""}` }];
   } else if (context.entityType === "reports" && canAccessArea(user, "reports")) {
     const from = context.reportFrom && /^\d{4}-\d{2}-\d{2}$/.test(context.reportFrom) ? context.reportFrom : `${businessDate().slice(0, 7)}-01`;
     const to = context.reportTo && /^\d{4}-\d{2}-\d{2}$/.test(context.reportTo) ? context.reportTo : businessDate();
@@ -1225,6 +2106,28 @@ app.get(["/api/dashboard", "/api/dashboard/summary"], (req, res) => {
     imports: canSeeImports, pi: canSeeImports, shipment: canSeeImports, costing: canSeeImports,
     receiving: canSeeImports || canSeeInventory
   };
+  const canSeeMarketing = hasEffectivePermission(user, "marketing", "view");
+  const today = businessDate();
+  const marketingToday = canSeeMarketing ? unifiedMarketingActivities(req, today, today) : [];
+  const marketingFollowUpRows = canSeeMarketing ? visibleMarketingFollowUps(req) : [];
+  const marketingDashboard = canSeeMarketing ? {
+    title: user.role === "Sales Executive" ? "My Day" : "Today's Marketing",
+    metrics: user.role === "Sales Executive"
+      ? [
+          { id: "activities", label: "Activities", value: String(marketingToday.length), unit: "today" },
+          { id: "overdue", label: "Overdue Follow-ups", value: String(marketingFollowUpRows.filter((followUp) => followUp.status === "OVERDUE").length), unit: "items" },
+          { id: "plan", label: "Plan Remaining", value: String(dailyMarketingPlans.find((plan) => plan.userId === user.id && plan.date === today)?.plannedVisits.filter((visit) => !visit.completed).length ?? 0), unit: "visits" }
+        ]
+      : [
+          { id: "active", label: "Active Employees", value: String(currentFieldLocations(user).filter((location) => marketingEmployeeIds(user).has(location.userId) && ["LIVE", "RECENT"].includes(location.status)).length), unit: "people" },
+          { id: "visits", label: "Visits", value: String(fieldVisits.filter((visit) => marketingEmployeeIds(user).has(visit.userId) && inTimestampPeriod(visit.plannedAt, today, today)).length), unit: "today" },
+          { id: "leads", label: "New Leads", value: String(visibleMarketingLeads(req).filter((lead) => inTimestampPeriod(lead.createdAt, today, today)).length), unit: "today" },
+          { id: "followups", label: "Follow-ups", value: String(marketingFollowUpRows.filter((followUp) => businessDate(new Date(followUp.dueAt)) === today).length), unit: "today" },
+          { id: "quotes", label: "Quotations", value: String(marketingToday.filter((activity) => activity.activityType === "QUOTATION_SUBMITTED").length), unit: "today" },
+          { id: "orders", label: "Orders", value: String(marketingToday.filter((activity) => activity.activityType === "ORDER_RECEIVED").length), unit: "today" }
+        ],
+    actionPath: "/app/sales?view=marketing"
+  } : undefined;
   res.json(ok({
     role: user.role,
     metrics: metricsByRole[user.role].filter((metric) => metricArea[metric.id] ?? false),
@@ -1233,7 +2136,8 @@ app.get(["/api/dashboard", "/api/dashboard/summary"], (req, res) => {
     customerDues: canSeeCustomers ? visibleCustomers.filter((customer) => decimal(customer.currentDue).gt(0)).sort((a, b) => decimal(b.currentDue).comparedTo(a.currentDue)).slice(0, 5) : [],
     recentSales: canSeeSales ? visibleOrders.slice(0, 5) : [],
     recentCollections: canSeeSales ? visibleCollections.slice(0, 5) : [],
-    recentExpenses: canSeeAccounts ? expenses.filter((expense) => expense.status === "Posted").slice(0, 5) : []
+    recentExpenses: canSeeAccounts ? expenses.filter((expense) => expense.status === "Posted").slice(0, 5) : [],
+    marketing: marketingDashboard
   }, "Dashboard loaded"));
 });
 
@@ -1796,6 +2700,8 @@ app.post("/api/quotations", (req, res) => {
   if (!user) return;
   if (!ownsCustomer(req, req.body.customerId)) return fail(res, 403, "You can create quotations only for customers assigned to you.");
   const customer = customers.find((entry) => entry.id === req.body.customerId)!;
+  const linkedLead = req.body.leadId ? marketingLeads.find((entry) => entry.id === req.body.leadId) : undefined;
+  if (req.body.leadId && (!linkedLead || linkedLead.customerId !== customer.id || !canAccessMarketingEmployee(user, linkedLead.assignedUserId))) return fail(res, 422, "The selected lead must first be converted to this customer and remain inside your marketing scope.");
   let lines;
   try {
     lines = normalizeSalesLines(req.body.lines);
@@ -1806,6 +2712,7 @@ app.post("/api/quotations", (req, res) => {
   const discount = lines.reduce((sum, line) => sum.plus(line.discount), new Decimal(0));
   const quote: Quotation = { ...req.body, id: id("quo"), quotationNumber: nextReference("QT", quotations.length), customerId: customer.id, customerName: customer.name, customerAddressSnapshot: customer.address, customerPhoneSnapshot: customer.phone, customerContactSnapshot: customer.contactPerson, ownerId: user.role === "Sales Executive" ? user.id : req.body.ownerId ?? customer.assignedSalesUserId ?? user.id, createdByUserId: user.id, lines, subtotal: money(subtotal), discountTotal: money(discount), total: money(subtotal.minus(discount)), status: "Draft" };
   quotations.unshift(quote);
+  advanceLead(quote.leadId, "QUOTATION", timestampForDate(quote.date, 12));
   audit(req, "Quotation created", "Quotation", quote.id, `${quote.quotationNumber} created for ${quote.customerName}.`);
   res.status(201).json(ok(quote, "Quotation created"));
 });
@@ -1857,6 +2764,7 @@ app.post("/api/quotations/:quoteId/convert", (req, res) => {
   quote.status = "Converted";
   const order: SalesOrder = { id: id("order"), orderNumber: nextReference("SO", orders.length), quotationId: quote.id, date: businessDate(), customerId: quote.customerId, customerName: quote.customerName, customerAddressSnapshot: quote.customerAddressSnapshot, customerPhoneSnapshot: quote.customerPhoneSnapshot, customerContactSnapshot: quote.customerContactSnapshot, ownerId: quote.ownerId, createdByUserId: user.id, paymentConditions: quote.paymentTerms, deliveryInstruction: req.body?.deliveryInstruction ?? "Confirm with customer before dispatch", requestedDeliveryDate: req.body?.requestedDeliveryDate, orderReceivedByName: req.body?.orderReceivedByName, orderReceivedByDesignation: req.body?.orderReceivedByDesignation, orderGivenBy: req.body?.orderGivenBy, paymentConfirmation: req.body?.paymentConfirmation, paymentReference: req.body?.paymentReference, paymentDate: req.body?.paymentDate, headOfSalesSignoff: req.body?.headOfSalesSignoff, coeSignoff: req.body?.coeSignoff, mdSignoff: req.body?.mdSignoff, amountReceived: "0.00", due: "0.00", status: "Placed", lines: structuredClone(quote.lines), total: quote.total };
   orders.unshift(order);
+  advanceLead(quote.leadId, "ORDER", timestampForDate(order.date, 13));
   audit(req, "Quotation converted", "SalesOrder", order.id, `${quote.quotationNumber} converted to ${order.orderNumber}.`);
   res.status(201).json(ok(order, "Quotation converted to order"));
 });
@@ -1969,6 +2877,7 @@ app.post("/api/deliveries", (req, res) => {
     for (const line of postedDelivery.lines) deliveredByProduct.set(line.productId, (deliveredByProduct.get(line.productId) ?? new Decimal(0)).plus(line.quantity));
   }
   order.status = order.lines.every((line) => (deliveredByProduct.get(line.productId) ?? new Decimal(0)).gte(line.quantity)) ? "Delivered" : "Partially Delivered";
+  advanceLead(leadIdForOrder(order), "DELIVERED", timestampForDate(delivery.date, 14));
   if (usedOverride) audit(req, "FIFO overridden", "Delivery", delivery.id, `${delivery.challanNumber} used a newer batch.`, delivery.overrideReason);
   audit(req, "Delivery dispatched", "Delivery", delivery.id, `${delivery.challanNumber} posted and stock reduced.`);
   res.status(201).json(ok(delivery, "Delivery dispatched"));
@@ -2013,6 +2922,7 @@ app.post("/api/collections", (req, res) => {
   if (linkedOrder) {
     linkedOrder.amountReceived = money(decimal(linkedOrder.amountReceived).plus(amount));
     linkedOrder.due = money(Decimal.max(0, decimal(linkedOrder.due).minus(amount)));
+    advanceLead(leadIdForOrder(linkedOrder), "PAYMENT", timestampForDate(collection.date, 15));
   }
   audit(req, "Collection posted", "Collection", collection.id, `${collection.receiptNumber}: Tk ${collection.amount} from ${customer.name}.`);
   res.status(201).json(ok(collection, "Collection posted and customer due updated"));
@@ -2028,7 +2938,7 @@ app.post("/api/expenses", (req, res) => {
   let amount: Decimal;
   try {
     if (req.body.subtype === "TA/DA") {
-      if (!String(req.body.employee ?? "").trim()) return fail(res, 422, "Select or enter the employee for a TA/DA expense.");
+      req.body.expenseFor = "Employee";
       const ta = requiredDecimal(req.body.taAmount ?? "0", "TA amount", { allowZero: true });
       const da = requiredDecimal(req.body.daAmount ?? "0", "DA amount", { allowZero: true });
       amount = ta.plus(da);
@@ -2045,8 +2955,20 @@ app.post("/api/expenses", (req, res) => {
   if (!category?.active) return fail(res, 422, "Select a valid active expense category.");
   const account = accounts.find((entry) => entry.id === req.body.paidFromAccountId && entry.active);
   if (!account || decimal(account.balance).lt(amount)) return fail(res, 422, "Selected account has insufficient balance.");
+  const expenseFor = String(req.body.expenseFor ?? "Company / General") as Expense["expenseFor"];
+  const validExpenseFor: Expense["expenseFor"][] = ["Employee", "Office", "Warehouse", "Company / General"];
+  if (!validExpenseFor.includes(expenseFor)) return fail(res, 422, "Select who or which operating unit the expense is for.");
+  const employee = expenseFor === "Employee" ? demoUsers.find((entry) => entry.id === req.body.employeeId && entry.status === "Active") : undefined;
+  if (expenseFor === "Employee" && !employee) return fail(res, 422, "Select an active employee from the employee directory.");
+  const attribution = expenseFor === "Employee"
+    ? { expenseForId: employee!.id, expenseForName: employee!.name, employeeId: employee!.id, employee: employee!.name, employeeCode: employee!.employeeCode ?? employee!.id.toUpperCase(), designation: employee!.title, department: employee!.department }
+    : expenseFor === "Office"
+      ? { expenseForId: "head-office", expenseForName: "Head Office" }
+      : expenseFor === "Warehouse"
+        ? { expenseForId: warehouseConfig.id, expenseForName: warehouseConfig.name }
+        : { expenseForId: "company", expenseForName: "MIPRO HealthCare Corporation" };
   const { attachmentUpload, ...expensePayload } = req.body as Record<string, unknown> & { attachmentUpload?: DocumentUpload };
-  const expense: Expense = { ...(expensePayload as unknown as Expense), amount: money(amount), id: id("expense"), categoryName: category.name, status: "Posted" };
+  const expense: Expense = { ...(expensePayload as unknown as Expense), ...attribution, amount: money(amount), id: id("expense"), categoryName: category.name, expenseFor, enteredByUserId: user.id, enteredByName: user.name, status: "Posted" };
   if (attachmentUpload) {
     try {
       expense.attachment = uploadedDocument(req, attachmentUpload, "expense", expense.id, "Expense Receipt", false);
@@ -2156,6 +3078,15 @@ app.get("/api/reports", (req, res) => {
   }, { revenue: new Decimal(0), cogs: new Decimal(0) });
   const categoryTotals = new Map<string, Decimal>();
   for (const expense of periodExpenses) categoryTotals.set(expense.categoryName, (categoryTotals.get(expense.categoryName) ?? new Decimal(0)).plus(expense.amount));
+  const expenseByPerson = new Map<string, Decimal>();
+  const expenseByUnit = new Map<string, Decimal>();
+  const expenseByMonth = new Map<string, Decimal>();
+  for (const expense of periodExpenses) {
+    if (expense.employeeId) expenseByPerson.set(expense.expenseForName, (expenseByPerson.get(expense.expenseForName) ?? new Decimal(0)).plus(expense.amount));
+    else expenseByUnit.set(expense.expenseForName, (expenseByUnit.get(expense.expenseForName) ?? new Decimal(0)).plus(expense.amount));
+    const month = expense.date.slice(0, 7);
+    expenseByMonth.set(month, (expenseByMonth.get(month) ?? new Decimal(0)).plus(expense.amount));
+  }
   const salesByCustomer = new Map<string, { customer: string; quantity: Decimal; value: Decimal }>();
   const salesByProduct = new Map<string, { product: string; quantity: Decimal; value: Decimal }>();
   const salesByMonth = new Map<string, { deliveries: number; value: Decimal }>();
@@ -2206,8 +3137,11 @@ app.get("/api/reports", (req, res) => {
         { id: "customer-ledger", title: "Customer Running Ledger", columns: [{ key: "date", label: "Date" }, { key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "reference", label: "Reference" }, { key: "debit", label: "Debit / Sale", align: "right" as const }, { key: "credit", label: "Credit / Collection", align: "right" as const }, { key: "runningDue", label: "Running Due", align: "right" as const }], rows: reportCustomers.flatMap((customer) => (customerLedger(customer.id)?.entries ?? []).filter((entry) => inPeriod(entry.date, from, to)).map((entry) => ({ date: entry.date, customer: customer.name, type: entry.type, reference: entry.reference, debit: entry.debit, credit: entry.credit, runningDue: entry.runningDue }))) }
       ],
       expenses: [
-        { id: "daily-expenditure", title: "Daily Expenditure", columns: [{ key: "date", label: "Date" }, { key: "category", label: "Category / Detail" }, { key: "remarks", label: "Remarks" }, { key: "paidFrom", label: "Paid From" }, { key: "amount", label: "Cost", align: "right" as const }], rows: periodExpenses.map((expense) => ({ date: expense.date, category: `${expense.categoryName}${expense.subtype === "TA/DA" ? ` · ${expense.employee ?? "Employee"}` : ""}`, remarks: expense.remarks, paidFrom: accounts.find((account) => account.id === expense.paidFromAccountId)?.name ?? expense.paidFromAccountId, amount: expense.amount })) },
+        { id: "daily-expenditure", title: "Daily Expenditure", columns: [{ key: "date", label: "Date" }, { key: "category", label: "Category / Detail" }, { key: "expenseFor", label: "Expense For" }, { key: "enteredBy", label: "Entered By" }, { key: "remarks", label: "Remarks" }, { key: "paidFrom", label: "Paid From" }, { key: "amount", label: "Cost", align: "right" as const }], rows: periodExpenses.map((expense) => ({ date: expense.date, category: expense.categoryName, expenseFor: expense.expenseForName, enteredBy: expense.enteredByName, remarks: expense.remarks, paidFrom: accounts.find((account) => account.id === expense.paidFromAccountId)?.name ?? expense.paidFromAccountId, amount: expense.amount })) },
         { id: "monthly-category", title: "Expense Category Summary", columns: [{ key: "category", label: "Category" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...categoryTotals].sort(([a], [b]) => a.localeCompare(b)).map(([category, amount]) => ({ category, amount: money(amount) })) },
+        { id: "expense-by-person", title: "Expense by Person", columns: [{ key: "employee", label: "Employee" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByPerson].sort(([a], [b]) => a.localeCompare(b)).map(([employee, amount]) => ({ employee, amount: money(amount) })) },
+        { id: "expense-by-unit", title: "Expense by Office / Warehouse / Company", columns: [{ key: "unit", label: "Operating Unit" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByUnit].sort(([a], [b]) => a.localeCompare(b)).map(([unit, amount]) => ({ unit, amount: money(amount) })) },
+        { id: "monthly-expense", title: "Monthly Expense", columns: [{ key: "month", label: "Month" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, amount]) => ({ month, amount: money(amount) })) },
         { id: "ta-da", title: "TA/DA Approved Sheet Data", columns: [{ key: "date", label: "Date" }, { key: "employee", label: "Employee" }, { key: "designation", label: "Designation" }, { key: "ta", label: "TA", align: "right" as const }, { key: "da", label: "DA", align: "right" as const }, { key: "remarks", label: "Remarks" }], rows: periodExpenses.filter((expense) => expense.subtype === "TA/DA").map((expense) => ({ date: expense.date, employee: expense.employee ?? "-", designation: expense.designation ?? "-", ta: expense.taAmount ?? "0.00", da: expense.daAmount ?? "0.00", remarks: expense.remarks })) },
         { id: "account-transactions", title: "Cash / Bank Transactions", columns: [{ key: "date", label: "Date" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: accountTransactions.filter((transaction) => inPeriod(transaction.date, from, to)).map((transaction) => ({ date: transaction.date, account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, description: transaction.description, amount: transaction.amount })) }
       ]
@@ -2478,10 +3412,44 @@ app.patch("/api/settings/website/inquiries/:inquiryId", (req, res) => {
   res.json(ok(inquiry, "Website inquiry updated"));
 });
 
+app.post("/api/settings/website/inquiries/:inquiryId/convert-to-lead", (req, res) => {
+  const user = requireWebsiteAdmin(req, res);
+  if (!user) return;
+  const inquiry = publicInquiries.find((entry) => entry.inquiryId === req.params.inquiryId);
+  if (!inquiry) return fail(res, 404, "Website inquiry not found.");
+  if (inquiry.status !== "Qualified") return fail(res, 422, "Mark the inquiry Qualified before converting it to a marketing lead.");
+  if (inquiry.leadId) return res.json(ok(inquiry, `Inquiry is already linked to ${inquiry.leadNumber ?? inquiry.leadId}`));
+  const assignedUserId = String(req.body?.assignedUserId ?? "");
+  if (!marketingEmployeeIds(user).has(assignedUserId)) return fail(res, 422, "Assign an active Sales Executive inside your marketing scope.");
+  const productIds: string[] = Array.isArray(req.body?.productIds) ? Array.from(new Set<string>((req.body.productIds as unknown[]).map(String))) : [];
+  if (productIds.some((productId) => !products.some((product) => product.id === productId && product.active))) return fail(res, 422, "One or more selected ERP products are invalid.");
+  const now = new Date().toISOString();
+  const organization = inquiry.organization || `${inquiry.name} inquiry`;
+  const organizationText = organization.toLowerCase();
+  const organizationType: MarketingLead["organizationType"] = organizationText.includes("hospital") ? "Hospital" : organizationText.includes("clinic") || organizationText.includes("dialysis") ? "Clinic" : organizationText.includes("pharmacy") ? "Pharmacy" : organizationText.includes("dealer") || organizationText.includes("medical services") ? "Dealer" : "Other";
+  const nextFollowUpAt = String(req.body?.nextFollowUpAt ?? "").trim() || undefined;
+  if (nextFollowUpAt && !Number.isFinite(new Date(nextFollowUpAt).getTime())) return fail(res, 422, "Enter a valid first follow-up date and time.");
+  const lead: MarketingLead = {
+    id: id("lead"), leadNumber: nextReference("LEAD", marketingLeads.length), organizationName: organization, organizationType,
+    contactPerson: inquiry.name, contactRole: "Procurement", mobile: inquiry.phone, email: inquiry.email,
+    interestedProductIds: productIds, leadSource: "Website Inquiry", assignedUserId, stage: "NEW", nextFollowUpAt,
+    notes: [inquiry.subject, inquiry.productInterest, inquiry.message, inquiry.internalNotes].filter(Boolean).join(" | "), createdAt: now, updatedAt: now
+  };
+  marketingLeads.unshift(lead);
+  const employee = demoUsers.find((entry) => entry.id === assignedUserId)!;
+  marketingActivities.unshift({ id: id("activity"), userId: assignedUserId, employeeCode: employee.employeeCode ?? employee.id.toUpperCase(), employeeName: employee.name, territory: employee.territory, activityType: "LEAD_CREATED", source: "LEAD", occurredAt: now, submittedAt: now, leadId: lead.id, subjectName: lead.organizationName, productIds, purpose: "Qualified website inquiry converted to lead", referenceType: "Lead", referenceId: lead.id, referenceNumber: lead.leadNumber, verification: "SYSTEM_VERIFIED", createdByUserId: user.id });
+  if (nextFollowUpAt) marketingFollowUps.unshift({ id: id("follow"), assignedUserId, leadId: lead.id, subjectName: lead.organizationName, dueAt: nextFollowUpAt, purpose: "Website inquiry follow-up", status: "PENDING", createdAt: now });
+  inquiry.leadId = lead.id;
+  inquiry.leadNumber = lead.leadNumber;
+  audit(req, "Website inquiry converted", "MarketingLead", lead.id, `${inquiry.inquiryId} converted to ${lead.leadNumber} and assigned to ${employee.name}.`);
+  res.status(201).json(ok(inquiry, `${inquiry.inquiryId} converted to ${lead.leadNumber}`));
+});
+
 app.delete("/api/settings/website/inquiries/:inquiryId", (req, res) => {
   if (!requireWebsiteAdmin(req, res)) return;
   const index = publicInquiries.findIndex((entry) => entry.inquiryId === req.params.inquiryId);
   if (index < 0) return fail(res, 404, "Website inquiry not found.");
+  if (publicInquiries[index].leadId) return fail(res, 409, "A converted inquiry is linked to marketing history and cannot be deleted.");
   const [removed] = publicInquiries.splice(index, 1);
   audit(req, "Website inquiry deleted", "WebsiteInquiry", removed.inquiryId, `${removed.organization || removed.name} inquiry removed from the prototype queue.`);
   res.json(ok({ id: removed.inquiryId }, "Website inquiry deleted"));

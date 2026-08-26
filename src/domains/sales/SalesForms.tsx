@@ -52,6 +52,8 @@ type EditableLine = Pick<SalesLine, "id" | "productId" | "quantity" | "unitPrice
 
 export function QuotationForm({
   quotation,
+  initialCustomerId,
+  leadId,
   customers,
   products,
   canViewProfit,
@@ -59,16 +61,18 @@ export function QuotationForm({
   onSubmit
 }: {
   quotation?: Quotation;
+  initialCustomerId?: string;
+  leadId?: string;
   customers: Customer[];
   products: Product[];
   canViewProfit: boolean;
   busy: boolean;
   onSubmit: (payload: Partial<Quotation>) => void;
 }) {
-  const [customerId, setCustomerId] = useState(quotation?.customerId ?? "");
+  const [customerId, setCustomerId] = useState(quotation?.customerId ?? initialCustomerId ?? "");
   const [date, setDate] = useState(quotation?.date ?? businessDate());
   const [validityDays, setValidityDays] = useState(String(quotation?.validityDays ?? 15));
-  const [paymentTerms, setPaymentTerms] = useState(quotation?.paymentTerms ?? "30 days");
+  const [paymentTerms, setPaymentTerms] = useState(quotation?.paymentTerms ?? customers.find((entry) => entry.id === initialCustomerId)?.paymentTerms ?? "30 days");
   const [remarks, setRemarks] = useState(quotation?.remarks ?? "");
   const [status, setStatus] = useState(quotation?.status ?? "Draft");
   const [lines, setLines] = useState<EditableLine[]>(quotation?.lines.map((line) => ({ id: line.id, productId: line.productId, quantity: line.quantity, unitPrice: line.unitPrice, discount: line.discount })) ?? [{ id: "line-" + Date.now(), productId: "", quantity: "1", unitPrice: "", discount: "0" }]);
@@ -94,7 +98,7 @@ export function QuotationForm({
     event.preventDefault();
     if (!customer || lines.some((line) => !line.productId || Number(line.quantity) <= 0 || Number(line.unitPrice) <= 0)) return;
     const normalized: SalesLine[] = normalizedLines();
-    onSubmit({ customerId: customer.id, customerName: customer.name, date, validityDays: Number(validityDays), paymentTerms, remarks, status, lines: normalized, subtotal: totals.subtotal.toFixed(2), discountTotal: totals.discount.toFixed(2), total: totals.total.toFixed(2) });
+    onSubmit({ customerId: customer.id, customerName: customer.name, leadId: quotation?.leadId ?? leadId, date, validityDays: Number(validityDays), paymentTerms, remarks, status, lines: normalized, subtotal: totals.subtotal.toFixed(2), discountTotal: totals.discount.toFixed(2), total: totals.total.toFixed(2) });
   };
   return (
     <form className="grid gap-4" onSubmit={submit}>
@@ -194,11 +198,11 @@ export function DeliveryForm({
   );
 }
 
-export function CollectionForm({ customers, orders, accounts, busy, onSubmit }: { customers: Customer[]; orders: SalesOrder[]; accounts: CashBankAccount[]; busy: boolean; onSubmit: (payload: Partial<Collection>) => void }) {
-  const [customerId, setCustomerId] = useState("");
+export function CollectionForm({ initialCustomerId, customers, orders, accounts, busy, onSubmit }: { initialCustomerId?: string; customers: Customer[]; orders: SalesOrder[]; accounts: CashBankAccount[]; busy: boolean; onSubmit: (payload: Partial<Collection>) => void }) {
+  const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [orderId, setOrderId] = useState("");
   const [date, setDate] = useState(businessDate());
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(() => customers.find((entry) => entry.id === initialCustomerId)?.currentDue ?? "");
   const [paymentMode, setPaymentMode] = useState<Collection["paymentMode"]>("Bank Transfer");
   const [accountId, setAccountId] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");

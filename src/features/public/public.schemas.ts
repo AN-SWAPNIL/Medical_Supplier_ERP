@@ -110,7 +110,9 @@ export const PublicInquiryRecordSchema = z.object({
   subject: z.string().optional(),
   productInterest: z.string().optional(),
   message: nonEmpty,
-  internalNotes: z.string().optional()
+  internalNotes: z.string().optional(),
+  leadId: z.string().optional(),
+  leadNumber: z.string().optional()
 });
 
 export const PublicContentAdminSnapshotSchema = z.object({

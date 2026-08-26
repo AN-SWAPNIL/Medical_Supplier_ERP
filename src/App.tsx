@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
-import { ProtectedRoute, RequirePermission, RequireSettingsAccess } from "./components/layout/RouteGuards";
+import { ProtectedRoute, RequireAnyPermission, RequirePermission, RequireSettingsAccess } from "./components/layout/RouteGuards";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import LoginPage from "./features/auth/LoginPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -65,7 +65,7 @@ function App() {
           <Route path="imports/new" element={<RequirePermission permission="import" action="create">{deferred(<NewImportPage />)}</RequirePermission>} />
           <Route path="imports/:importId" element={guarded("import", <ImportWorkspacePage />)} />
           <Route path="inventory" element={guarded("inventory", <InventoryPage />)} />
-          <Route path="sales" element={guarded("sales", <SalesPage />)} />
+          <Route path="sales" element={<RequireAnyPermission permissions={["sales", "marketing"]}>{deferred(<SalesPage />)}</RequireAnyPermission>} />
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />
           <Route path="settings" element={<RequireSettingsAccess>{deferred(<SettingsPage />)}</RequireSettingsAccess>} />

@@ -6,6 +6,7 @@ import {
   Building2,
   CheckCircle2,
   FileText,
+  History,
   Pencil,
   Plus,
   Printer,
@@ -15,7 +16,7 @@ import {
   Trash2,
   Truck
 } from "lucide-react";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
@@ -41,9 +42,9 @@ import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency, formatNumber } from "../../utils/format";
 import { CollectionForm, CustomerForm, DeliveryForm, QuotationForm } from "./SalesForms";
 
-const FieldTeamPage = lazy(() => import("../../components/field-team/FieldTeamPage"));
+const MarketingHub = lazy(() => import("../marketing/MarketingHub"));
 
-type View = "customers" | "orders" | "deliveries" | "collections" | "field-team";
+type View = "customers" | "marketing" | "orders" | "deliveries" | "collections";
 type ModalType = "customer" | "quotation" | "convert" | "delivery" | "collection" | "order-details" | null;
 type Task = { run: () => Promise<unknown>; success: string };
 
@@ -52,10 +53,10 @@ export default function SalesPage() {
   const session = useAuthStore((state) => state.session);
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const defaultView: View = role === "Accounts" ? "collections" : role === "Warehouse Manager" ? "deliveries" : "customers";
-  const requested = params.get("view") as View | null;
-  const requestedAllowed = requested !== "field-team" || ["Super Admin", "Managing Director", "Sales Manager", "Sales Executive"].includes(role);
-  const [view, setViewState] = useState<View>(requestedAllowed ? requested ?? defaultView : defaultView);
+  const defaultView: View = role === "Accounts" ? "collections" : role === "Warehouse Manager" ? "deliveries" : ["Sales Manager", "Sales Executive"].includes(role) ? "marketing" : "customers";
+  const requestedValue = params.get("view");
+  const requested = (requestedValue === "field-team" ? "marketing" : requestedValue) as View | null;
+  const [view, setViewState] = useState<View>(requested ?? defaultView);
   const [modal, setModal] = useState<ModalType>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | undefined>();
   const [editingQuotation, setEditingQuotation] = useState<Quotation | undefined>();
@@ -63,12 +64,18 @@ export default function SalesPage() {
   const [converting, setConverting] = useState<Quotation | undefined>();
   const [orderDetails, setOrderDetails] = useState<SalesOrder | undefined>();
   const [deliveryInstruction, setDeliveryInstruction] = useState("");
+  const [quotationContext, setQuotationContext] = useState<{ customerId: string; leadId?: string }>();
+  const [collectionCustomerId, setCollectionCustomerId] = useState<string>();
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ type: "customer" | "quotation"; id: string; label: string } | null>(null);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
 
   const canCreateQuote = hasEffectivePermission(session?.user, "sales", "create");
+  const canViewSales = hasEffectivePermission(session?.user, "sales", "view");
+  const canViewCustomers = hasEffectivePermission(session?.user, "customers", "view");
+  const canViewMarketing = hasEffectivePermission(session?.user, "marketing", "view");
+  const canViewReports = hasEffectivePermission(session?.user, "reports", "view");
   const canEditQuote = hasEffectivePermission(session?.user, "sales", "edit");
   const canDeleteQuote = hasEffectivePermission(session?.user, "sales", "delete");
   const canConvertQuote = hasEffectivePermission(session?.user, "sales", "post");
@@ -78,14 +85,12 @@ export default function SalesPage() {
   const canEditCustomer = hasEffectivePermission(session?.user, "customers", "edit");
   const canDeleteCustomer = hasEffectivePermission(session?.user, "customers", "delete");
   const canPrint = hasEffectivePermission(session?.user, "print", "view");
-  const canViewFieldTeam = ["Super Admin", "Managing Director", "Sales Manager", "Sales Executive"].includes(role);
-
-  const customersQuery = useQuery({ queryKey: ["sales", "customers", session?.user.id], queryFn: salesService.customers });
-  const quotationsQuery = useQuery({ queryKey: ["sales", "quotations", session?.user.id], queryFn: salesService.quotations });
-  const ordersQuery = useQuery({ queryKey: ["sales", "orders", session?.user.id], queryFn: salesService.orders });
-  const deliveriesQuery = useQuery({ queryKey: ["sales", "deliveries", session?.user.id], queryFn: salesService.deliveries });
-  const collectionsQuery = useQuery({ queryKey: ["sales", "collections", session?.user.id], queryFn: salesService.collections });
-  const productsQuery = useQuery({ queryKey: ["products"], queryFn: settingsService.products });
+  const customersQuery = useQuery({ queryKey: ["sales", "customers", session?.user.id], queryFn: salesService.customers, enabled: canViewCustomers });
+  const quotationsQuery = useQuery({ queryKey: ["sales", "quotations", session?.user.id], queryFn: salesService.quotations, enabled: canViewSales });
+  const ordersQuery = useQuery({ queryKey: ["sales", "orders", session?.user.id], queryFn: salesService.orders, enabled: canViewSales });
+  const deliveriesQuery = useQuery({ queryKey: ["sales", "deliveries", session?.user.id], queryFn: salesService.deliveries, enabled: canViewSales });
+  const collectionsQuery = useQuery({ queryKey: ["sales", "collections", session?.user.id], queryFn: salesService.collections, enabled: canViewSales });
+  const productsQuery = useQuery({ queryKey: ["products"], queryFn: settingsService.products, enabled: canViewSales });
   const batchesQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches, enabled: canDispatch });
   const accountsQuery = useQuery({ queryKey: ["sales", "payment-accounts"], queryFn: salesService.paymentAccounts, enabled: canCollect });
   const ledgerQuery = useQuery({ queryKey: ["sales", "customer-ledger", ledgerCustomer?.id], queryFn: () => salesService.customerLedger(ledgerCustomer!.id), enabled: Boolean(ledgerCustomer) });
@@ -99,6 +104,7 @@ export default function SalesPage() {
     void queryClient.invalidateQueries({ queryKey: ["inventory"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    void queryClient.invalidateQueries({ queryKey: ["marketing"] });
   };
   const action = useMutation({
     mutationFn: (task: Task) => task.run(),
@@ -109,6 +115,8 @@ export default function SalesPage() {
       setEditingQuotation(undefined);
       setConverting(undefined);
       setOrderDetails(undefined);
+      setQuotationContext(undefined);
+      setCollectionCustomerId(undefined);
       setDeleteTarget(null);
       pushToast({ kind: "success", title: task.success });
     },
@@ -122,10 +130,21 @@ export default function SalesPage() {
   const visibleOptions = useMemo(() => {
     if (role === "Accounts") return [{ value: "customers" as const, label: "Customer Dues", count: customersQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
     if (role === "Warehouse Manager") return [{ value: "deliveries" as const, label: "Deliveries", count: deliveriesQuery.data?.length }];
-    if (role === "Sales Executive") return [{ value: "customers" as const, label: "My Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "My Quotes & Orders", count: quotationsQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }, { value: "field-team" as const, label: "My Activity" }];
-    const core = [{ value: "customers" as const, label: "Customers", count: customersQuery.data?.length }, { value: "orders" as const, label: "Quotations & Orders", count: quotationsQuery.data?.length }, { value: "deliveries" as const, label: "Deliveries", count: deliveriesQuery.data?.length }, { value: "collections" as const, label: "Collections", count: collectionsQuery.data?.length }];
-    return canViewFieldTeam ? [...core, { value: "field-team" as const, label: "Field Team" }] : core;
-  }, [role, canViewFieldTeam, customersQuery.data, collectionsQuery.data, deliveriesQuery.data, quotationsQuery.data]);
+    const options: Array<{ value: View; label: string; count?: number }> = [];
+    if (canViewCustomers) options.push({ value: "customers", label: role === "Sales Executive" ? "My Customers" : "Customers", count: customersQuery.data?.length });
+    if (canViewMarketing) options.push({ value: "marketing", label: "Marketing" });
+    if (canViewSales) options.push({ value: "orders", label: role === "Sales Executive" ? "My Quotes & Orders" : "Quotations & Orders", count: quotationsQuery.data?.length });
+    if (canViewSales && role !== "Sales Executive") options.push({ value: "deliveries", label: "Deliveries", count: deliveriesQuery.data?.length });
+    if (canViewSales) options.push({ value: "collections", label: "Collections", count: collectionsQuery.data?.length });
+    return options;
+  }, [role, canViewCustomers, canViewMarketing, canViewSales, customersQuery.data, collectionsQuery.data, deliveriesQuery.data, quotationsQuery.data]);
+
+  useEffect(() => {
+    if (visibleOptions.length && !visibleOptions.some((option) => option.value === view)) {
+      setViewState(visibleOptions[0].value);
+      setParams({ view: visibleOptions[0].value }, { replace: true });
+    }
+  }, [setParams, view, visibleOptions]);
 
   if (loading) return <LoadingBlock label="Loading connected sales workspace" />;
   if (error) return <ErrorBlock error={error} onRetry={() => queries.forEach((query) => void query.refetch())} />;
@@ -146,25 +165,25 @@ export default function SalesPage() {
       <PageHeader
         eyebrow={role === "Sales Executive" ? "Own-record sales workspace" : "Commercial operations"}
         title="Sales"
-        subtitle={view === "field-team" ? "Live and historical field activity connects salesperson location, customer visits and performance without creating another main module." : "Customer ledger, quotation, order, actual batch delivery and collection remain connected without re-entering line items."}
+        subtitle={view === "marketing" ? "Daily activity, leads, follow-ups, field verification, targets and performance connect directly into the existing sales transaction flow." : "Customer ledger, quotation, order, actual batch delivery and collection remain connected without re-entering line items."}
         actions={
           <>
             {view === "customers" && canCreateCustomer ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingCustomer(undefined); setModal("customer"); }}>New Customer</Button> : null}
             {view === "orders" && canCreateQuote ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingQuotation(undefined); setModal("quotation"); }}>New Quotation</Button> : null}
             {view === "deliveries" && canDispatch ? <Button variant="primary" icon={<Truck className="h-4 w-4" />} onClick={() => setModal("delivery")}>New Delivery</Button> : null}
-            {view === "collections" && canCollect ? <Button variant="primary" icon={<Banknote className="h-4 w-4" />} onClick={() => setModal("collection")}>Post Collection</Button> : null}
+            {view === "collections" && canCollect ? <Button variant="primary" icon={<Banknote className="h-4 w-4" />} onClick={() => { setCollectionCustomerId(undefined); setModal("collection"); }}>Post Collection</Button> : null}
           </>
         }
       />
 
-      {view !== "field-team" ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {view !== "marketing" ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Visible customers</span><strong className="mt-1 block text-2xl">{formatNumber(customers.length)}</strong><small className="text-slate-400">{role === "Sales Executive" ? "assigned to you" : "normalized ledger"}</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Outstanding due</span><strong className="mt-1 block text-2xl text-red-700">{formatCurrency(totalDue, true)}</strong><small className="text-slate-400">current visible balance</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Open orders</span><strong className="mt-1 block text-2xl">{formatNumber(orders.filter((order) => !["Delivered", "Cancelled"].includes(order.status)).length)}</strong><small className="text-slate-400">awaiting or in delivery</small></div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs text-slate-500">Collections shown</span><strong className="mt-1 block text-2xl text-emerald-700">{formatCurrency(totalCollections, true)}</strong><small className="text-slate-400">cash and banking channels</small></div>
       </div> : null}
 
-      {view !== "field-team" && recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Sales follow-up suggestions">{recommendationsQuery.data.filter((item) => item.id.startsWith("due-") || item.id.startsWith("quote-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
+      {view !== "marketing" && recommendationsQuery.data?.length ? <section className="grid gap-3 lg:grid-cols-2" aria-label="Sales follow-up suggestions">{recommendationsQuery.data.filter((item) => item.id.startsWith("due-") || item.id.startsWith("quote-")).slice(0, 2).map((item) => <AIRecommendationCard recommendation={item} key={item.id} />)}</section> : null}
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <Segmented value={visibleOptions.some((option) => option.value === view) ? view : visibleOptions[0].value} onChange={setView} ariaLabel="Sales views" options={visibleOptions} />
@@ -172,16 +191,33 @@ export default function SalesPage() {
         {view === "orders" && orders.length && canEditQuote ? <label className="w-full xl:w-80"><span className="sr-only">Edit order receiving details</span><select className={inputClass} value="" onChange={(event) => { const selected = orders.find((order) => order.id === event.target.value); if (selected) { setOrderDetails(selected); setModal("order-details"); } }}><option value="">Order receiving / office details...</option>{orders.map((order) => <option value={order.id} key={order.id}>{order.orderNumber} · {order.customerName}</option>)}</select></label> : null}
       </div>
 
-      {view === "field-team" && canViewFieldTeam ? <Suspense fallback={<LoadingBlock label="Loading field-team map" />}><FieldTeamPage /></Suspense> : null}
+      {view === "marketing" && canViewMarketing ? <Suspense fallback={<LoadingBlock label="Loading marketing workspace" />}><MarketingHub onCreateQuotation={(customerId, leadId) => { setQuotationContext({ customerId, leadId }); setEditingQuotation(undefined); setView("orders"); setModal("quotation"); }} /></Suspense> : null}
 
       {view === "customers" ? (
         <Panel title="Customer ledger" subtitle="Spreadsheet customer tabs are normalized into one searchable customer and running transaction ledger." actions={<label><span className="sr-only">Open customer ledger</span><select className={inputClass + " min-w-56"} value="" onChange={(event) => setLedgerCustomer(customers.find((customer) => customer.id === event.target.value))}><option value="">Open detailed ledger...</option>{filteredCustomers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}</select></label>}>
           <TableFrame>
-            <table className="min-w-[1050px] w-full text-left text-sm">
+            <table className="min-w-[1220px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Type / Territory</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3 text-right">Sales</th><th className="px-4 py-3 text-right">Collected</th><th className="px-4 py-3 text-right">Due</th><th className="px-4 py-3">Collection</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100">{filteredCustomers.map((customer) => {
                 const percent = Number(customer.totalSales) ? Math.min(100, Number(customer.totalCollected) / Number(customer.totalSales) * 100) : 0;
-                return <tr key={customer.id}><td className="px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-blue-50 text-blue-700"><Building2 className="h-5 w-5" /></span><div><strong className="block max-w-64 truncate text-slate-900">{customer.name}</strong><small className="text-slate-500">{customer.paymentTerms} · limit {formatCurrency(customer.creditLimit)}</small></div></div></td><td className="px-4 py-3 text-slate-600">{customer.type}<small className="block">{customer.territory}</small></td><td className="px-4 py-3 text-slate-600">{customer.contactPerson}<small className="block">{customer.phone}</small></td><td className="px-4 py-3 text-right">{formatCurrency(customer.totalSales)}</td><td className="px-4 py-3 text-right text-emerald-700">{formatCurrency(customer.totalCollected)}</td><td className="px-4 py-3 text-right font-bold text-red-700">{formatCurrency(customer.currentDue)}</td><td className="px-4 py-3"><div className="h-1.5 w-24 rounded-full bg-slate-100"><span className="block h-full rounded-full bg-emerald-500" style={{ width: percent + "%" }} /></div><small className="text-slate-400">{percent.toFixed(0)}% collected</small></td><td className="px-4 py-3"><div className="flex justify-end gap-1">{canEditCustomer ? <Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => { setEditingCustomer(customer); setModal("customer"); }} aria-label="Edit customer" title="Edit customer" /> : null}{canDeleteCustomer ? <Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-red-600" />} onClick={() => setDeleteTarget({ type: "customer", id: customer.id, label: customer.name })} aria-label="Delete customer" title="Delete customer" /> : null}</div></td></tr>;
+                return (
+                  <tr key={customer.id}>
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-blue-50 text-blue-700"><Building2 className="h-5 w-5" /></span><div><strong className="block max-w-64 truncate text-slate-900">{customer.name}</strong><small className="text-slate-500">{customer.paymentTerms} · limit {formatCurrency(customer.creditLimit)}</small></div></div></td>
+                    <td className="px-4 py-3 text-slate-600">{customer.type}<small className="block">{customer.territory}</small></td>
+                    <td className="px-4 py-3 text-slate-600">{customer.contactPerson}<small className="block">{customer.phone}</small></td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(customer.totalSales)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700">{formatCurrency(customer.totalCollected)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-red-700">{formatCurrency(customer.currentDue)}</td>
+                    <td className="px-4 py-3"><div className="h-1.5 w-24 rounded-full bg-slate-100"><span className="block h-full rounded-full bg-emerald-500" style={{ width: percent + "%" }} /></div><small className="text-slate-400">{percent.toFixed(0)}% collected</small></td>
+                    <td className="px-4 py-3"><div className="flex justify-end gap-1">
+                      {canViewMarketing && canViewReports ? <Button variant="ghost" icon={<History className="h-4 w-4 text-cyan-700" />} onClick={() => navigate(`/app/reports?view=marketing&preset=this-month&subject=${encodeURIComponent(`customer:${customer.id}`)}`)} aria-label={`Open marketing history for ${customer.name}`} title="Marketing history" /> : null}
+                      {canCreateQuote ? <Button variant="ghost" icon={<FileText className="h-4 w-4 text-blue-700" />} onClick={() => { setQuotationContext({ customerId: customer.id }); setEditingQuotation(undefined); setView("orders"); setModal("quotation"); }} aria-label={`Create quotation for ${customer.name}`} title="Create quotation" /> : null}
+                      {canCollect && Number(customer.currentDue) > 0 ? <Button variant="ghost" icon={<Banknote className="h-4 w-4 text-emerald-700" />} onClick={() => { setCollectionCustomerId(customer.id); setView("collections"); setModal("collection"); }} aria-label={`Post collection for ${customer.name}`} title="Post collection" /> : null}
+                      {canEditCustomer ? <Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => { setEditingCustomer(customer); setModal("customer"); }} aria-label="Edit customer" title="Edit customer" /> : null}
+                      {canDeleteCustomer ? <Button variant="ghost" icon={<Trash2 className="h-4 w-4 text-red-600" />} onClick={() => setDeleteTarget({ type: "customer", id: customer.id, label: customer.name })} aria-label="Delete customer" title="Delete customer" /> : null}
+                    </div></td>
+                  </tr>
+                );
               })}</tbody>
             </table>
           </TableFrame>
@@ -232,11 +268,11 @@ export default function SalesPage() {
 
       {ledgerCustomer ? <Modal open title={`${ledgerCustomer.name} · Transaction Ledger`} subtitle="Delivered sales, actual collections and the running due are generated from connected records." onClose={() => setLedgerCustomer(undefined)} width="max-w-6xl">{ledgerQuery.isLoading ? <LoadingBlock label="Building customer ledger" /> : ledgerQuery.isError || !ledgerQuery.data ? <ErrorBlock error={ledgerQuery.error} /> : <div className="grid gap-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-md border border-slate-200 p-3"><span className="text-xs text-slate-500">Current Due</span><strong className="mt-1 block text-xl text-rose-700">{formatCurrency(ledgerQuery.data.currentDue)}</strong></div><div className="rounded-md border border-slate-200 p-3"><span className="text-xs text-slate-500">Delivered Sales</span><strong className="mt-1 block text-xl">{formatCurrency(ledgerQuery.data.deliveredSales)}</strong></div><div className="rounded-md border border-slate-200 p-3"><span className="text-xs text-slate-500">Collections in Ledger</span><strong className="mt-1 block text-xl text-emerald-700">{formatCurrency(ledgerQuery.data.collected)}</strong></div><div className="rounded-md border border-slate-200 p-3"><span className="text-xs text-slate-500">Terms</span><strong className="mt-1 block text-sm">{ledgerQuery.data.customer.paymentTerms}</strong><small className="text-slate-500">{ledgerQuery.data.customer.phone}</small></div></div><div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"><BookOpenText className="mr-2 inline h-4 w-4 text-cyan-700" />{ledgerQuery.data.customer.address} · Assigned territory {ledgerQuery.data.customer.territory}</div><TableFrame><table className="min-w-[900px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Reference</th><th className="px-3 py-2 text-right">Debit / Sale</th><th className="px-3 py-2 text-right">Credit / Collection</th><th className="px-3 py-2 text-right">Running Due</th><th className="px-3 py-2">Remarks</th></tr></thead><tbody className="divide-y divide-slate-100">{ledgerQuery.data.entries.map((entry) => <tr key={entry.id}><td className="px-3 py-3 text-slate-600">{entry.date}</td><td className="px-3 py-3"><StatusBadge status={entry.type} /></td><td className="px-3 py-3 font-semibold">{entry.reference}</td><td className="px-3 py-3 text-right">{Number(entry.debit) ? formatCurrency(entry.debit) : "-"}</td><td className="px-3 py-3 text-right text-emerald-700">{Number(entry.credit) ? formatCurrency(entry.credit) : "-"}</td><td className="px-3 py-3 text-right font-bold text-rose-700">{formatCurrency(entry.runningDue)}</td><td className="max-w-72 px-3 py-3 text-slate-600">{entry.remarks}</td></tr>)}</tbody></table></TableFrame></div>}</Modal> : null}
       {modal === "customer" ? <Modal open title={editingCustomer ? "Edit customer" : "Add customer"} subtitle="All customer-specific spreadsheet histories are represented by one normalized ledger record." onClose={() => { setModal(null); setEditingCustomer(undefined); }}><CustomerForm customer={editingCustomer} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingCustomer ? salesService.updateCustomer(editingCustomer.id, payload) : salesService.createCustomer(payload), success: editingCustomer ? "Customer updated" : "Customer created" })} /></Modal> : null}
-      {modal === "quotation" ? <Modal open title={editingQuotation ? "Edit quotation" : "New quotation"} subtitle="Choose canonical variants; conversion carries every line into the sales order." onClose={() => { setModal(null); setEditingQuotation(undefined); }} width="max-w-5xl"><QuotationForm quotation={editingQuotation} customers={customers} products={products} canViewProfit={hasCapability(session?.user, "view_profit")} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingQuotation ? salesService.updateQuotation(editingQuotation.id, payload) : salesService.createQuotation(payload), success: editingQuotation ? "Quotation updated" : "Quotation created" })} /></Modal> : null}
+      {modal === "quotation" ? <Modal open title={editingQuotation ? "Edit quotation" : "New quotation"} subtitle="Choose canonical variants; conversion carries every line into the sales order." onClose={() => { setModal(null); setEditingQuotation(undefined); setQuotationContext(undefined); }} width="max-w-5xl"><QuotationForm quotation={editingQuotation} initialCustomerId={quotationContext?.customerId} leadId={quotationContext?.leadId} customers={customers} products={products} canViewProfit={hasCapability(session?.user, "view_profit")} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => editingQuotation ? salesService.updateQuotation(editingQuotation.id, payload) : salesService.createQuotation(payload), success: editingQuotation ? "Quotation updated" : "Quotation created" })} /></Modal> : null}
       {modal === "order-details" && orderDetails ? <Modal open title={`${orderDetails.orderNumber} · Order Receiving Details`} subtitle="These optional fields feed the supplied Order Receiving Sheet without cluttering the core quotation flow." onClose={() => { setModal(null); setOrderDetails(undefined); }} width="max-w-4xl"><OrderReceivingDetailsForm order={orderDetails} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => salesService.updateOrder(orderDetails.id, payload), success: "Order receiving details updated" })} /></Modal> : null}
       {modal === "convert" && converting ? <Modal open title={"Convert " + converting.quotationNumber + " to order"} subtitle="Products, quantities, prices, discount and customer carry forward without re-entry." onClose={() => { setModal(null); setConverting(undefined); }}><form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); action.mutate({ run: () => salesService.convertQuotation(converting.id, deliveryInstruction), success: "Quotation converted to sales order" }); }}><div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><strong>{converting.lines.length} product lines · {formatCurrency(converting.total)}</strong><p className="mt-1">The original quotation becomes locked and linked to the new order.</p></div><label><span className={labelClass}>Delivery Instruction</span><textarea className={textareaClass} required value={deliveryInstruction} onChange={(event) => setDeliveryInstruction(event.target.value)} /></label><div className="flex justify-end"><Button type="submit" variant="primary" icon={<ArrowRight className="h-4 w-4" />} disabled={action.isPending || !deliveryInstruction.trim()}>Create Sales Order</Button></div></form></Modal> : null}
       {modal === "delivery" ? <Modal open title="Create delivery challan" subtitle="Choose actual batches. The API validates FIFO and posts stock-out only after confirmation." onClose={() => setModal(null)} width="max-w-5xl"><DeliveryForm orders={orders} deliveries={deliveries} batches={batchesQuery.data ?? []} canOverride={hasCapability(session?.user, "approve_stock_override")} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => salesService.createDelivery(payload), success: "Delivery posted and stock reduced" })} /></Modal> : null}
-      {modal === "collection" ? <Modal open title="Post customer collection" subtitle="Every received payment posts to a real active cash, bank or mobile-banking ledger." onClose={() => setModal(null)}><CollectionForm customers={customers} orders={orders} accounts={accountsQuery.data ?? []} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => salesService.createCollection(payload), success: "Collection posted and dues updated" })} /></Modal> : null}
+      {modal === "collection" ? <Modal open title="Post customer collection" subtitle="Every received payment posts to a real active cash, bank or mobile-banking ledger." onClose={() => { setModal(null); setCollectionCustomerId(undefined); }}><CollectionForm initialCustomerId={collectionCustomerId} customers={customers} orders={orders} accounts={accountsQuery.data ?? []} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => salesService.createCollection(payload), success: "Collection posted and dues updated" })} /></Modal> : null}
 
       <ConfirmDialog open={Boolean(deleteTarget)} title={"Delete " + (deleteTarget?.type ?? "record") + "?"} message={(deleteTarget?.label ?? "") + " can be removed only when no protected transaction history exists."} confirmLabel="Delete" onCancel={() => setDeleteTarget(null)} onConfirm={() => deleteTarget && action.mutate({ run: () => deleteTarget.type === "customer" ? salesService.removeCustomer(deleteTarget.id) : salesService.removeQuotation(deleteTarget.id), success: "Draft record removed" })} />
     </>

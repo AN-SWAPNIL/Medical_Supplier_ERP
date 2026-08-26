@@ -1,7 +1,7 @@
 import type { PermissionAction, PermissionKey, Role } from "../../types/index.js";
 
 export const permissionActions: PermissionAction[] = ["view", "create", "edit", "delete", "approve", "post", "export"];
-export const permissionKeys: PermissionKey[] = ["dashboard", "users", "suppliers", "customers", "products", "import", "inventory", "sales", "accounts", "reports", "settings", "print"];
+export const permissionKeys: PermissionKey[] = ["dashboard", "users", "suppliers", "customers", "products", "import", "inventory", "sales", "marketing", "accounts", "reports", "settings", "print"];
 
 const all = permissionActions;
 const read: PermissionAction[] = ["view", "export"];
@@ -14,6 +14,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
     import: all,
     inventory: all,
     sales: all,
+    marketing: all,
     accounts: all,
     reports: all,
     settings: all,
@@ -27,6 +28,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
     import: ["view", "approve", "export"],
     inventory: read,
     sales: ["view", "approve", "export"],
+    marketing: ["view", "approve", "export"],
     customers: read,
     accounts: read,
     reports: read,
@@ -57,6 +59,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
     dashboard: ["view"],
     inventory: read,
     sales: work,
+    marketing: ["view", "create", "edit", "approve", "export"],
     customers: work,
     reports: read,
     print: read
@@ -64,6 +67,7 @@ export const permissionMatrix: Record<Role, Partial<Record<PermissionKey, Permis
   "Sales Executive": {
     dashboard: ["view"],
     sales: ["view", "create", "edit", "post"],
+    marketing: ["view", "create", "edit"],
     customers: ["view", "create", "edit"],
     reports: ["view", "export"],
     print: ["view"]

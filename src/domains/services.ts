@@ -12,14 +12,19 @@ import type {
   CashBankAccount,
   Collection,
   CostPreset,
+  CurrentEmployeeLocation,
   Customer,
   CustomerLedger,
   CustomerOpeningBalance,
+  DailyMarketingPlan,
   DashboardData,
   Delivery,
   DocumentRecord,
   DocumentUpload,
   Expense,
+  EmployeeDirectoryEntry,
+  EmployeeMarketingSnapshot,
+  EmployeeMarketingTarget,
   FieldEmployee,
   FieldTeamCurrentData,
   FieldTeamHistoryData,
@@ -29,6 +34,15 @@ import type {
   ImportDocument,
   ImportItem,
   LandedCostPreview,
+  MarketingActivity,
+  MarketingDashboardData,
+  MarketingFollowUp,
+  MarketingLead,
+  MarketingPerformanceRow,
+  MarketingReportData,
+  MarketingScoreRule,
+  MonthlyMarketingPlan,
+  LocationUpdateInput,
   ProductAlias,
   ProfitPreview,
   PrintConfiguration,
@@ -54,6 +68,7 @@ import {
   AIRecommendationSchema,
   CollectionSchema,
   CostPresetSchema,
+  CurrentEmployeeLocationSchema,
   CustomerSchema,
   CustomerLedgerSchema,
   CustomerOpeningBalanceSchema,
@@ -62,6 +77,9 @@ import {
   DispatchPreviewSchema,
   ExpenseCategorySchema,
   ExpenseSchema,
+  EmployeeDirectoryEntrySchema,
+  EmployeeMarketingSnapshotSchema,
+  EmployeeMarketingTargetSchema,
   FieldEmployeeSchema,
   FieldTeamCurrentSchema,
   FieldTeamHistorySchema,
@@ -69,6 +87,15 @@ import {
   ImportCaseSchema,
   ImportDocumentSchema,
   LandedCostPreviewSchema,
+  MarketingActivitySchema,
+  MarketingDashboardSchema,
+  MarketingFollowUpSchema,
+  MarketingLeadSchema,
+  MarketingPerformanceRowSchema,
+  MarketingReportSchema,
+  MarketingScoreRuleSchema,
+  MonthlyMarketingPlanSchema,
+  DailyMarketingPlanSchema,
   PrintConfigurationSchema,
   ProductAliasSchema,
   ProfitPreviewSchema,
@@ -175,6 +202,39 @@ export const salesService = {
   paymentAccounts: () => get<CashBankAccount[]>("/api/payment-accounts", z.array(AccountSchema))
 };
 
+export const employeeService = {
+  directory: (scope: "all" | "marketing" = "all") => get<EmployeeDirectoryEntry[]>(`/api/employees/directory?scope=${scope}`, z.array(EmployeeDirectoryEntrySchema))
+};
+
+export const marketingService = {
+  dashboard: () => get<MarketingDashboardData>("/api/marketing/dashboard", MarketingDashboardSchema),
+  subjects: () => get<Array<{ value: string; label: string; type: "Lead" | "Customer" }>>("/api/marketing/subjects", z.array(z.object({ value: z.string(), label: z.string(), type: z.enum(["Lead", "Customer"]) }))),
+  activities: (filters: { from?: string; to?: string; employeeId?: string; activityType?: string } = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+    return get<MarketingActivity[]>(`/api/marketing/activities${params.size ? `?${params}` : ""}`, z.array(MarketingActivitySchema));
+  },
+  createActivity: (payload: Partial<MarketingActivity> & { attachmentUpload?: DocumentUpload }) => post<MarketingActivity>("/api/marketing/activities", payload, MarketingActivitySchema),
+  leads: () => get<MarketingLead[]>("/api/marketing/leads", z.array(MarketingLeadSchema)),
+  createLead: (payload: Partial<MarketingLead>) => post<MarketingLead>("/api/marketing/leads", payload, MarketingLeadSchema),
+  updateLead: (id: string, payload: Partial<MarketingLead>) => patch<MarketingLead>(`/api/marketing/leads/${id}`, payload, MarketingLeadSchema),
+  convertLead: (id: string, payload: { paymentTerms: string; creditLimit: string }) => post<Customer>(`/api/marketing/leads/${id}/convert`, payload, CustomerSchema),
+  followUps: (status = "") => get<MarketingFollowUp[]>(`/api/marketing/follow-ups${status ? `?status=${encodeURIComponent(status)}` : ""}`, z.array(MarketingFollowUpSchema)),
+  createFollowUp: (payload: Partial<MarketingFollowUp>) => post<MarketingFollowUp>("/api/marketing/follow-ups", payload, MarketingFollowUpSchema),
+  updateFollowUp: (id: string, payload: Partial<MarketingFollowUp>) => patch<MarketingFollowUp>(`/api/marketing/follow-ups/${id}`, payload, MarketingFollowUpSchema),
+  dailyPlans: (date: string, employeeId = "all") => get<DailyMarketingPlan[]>(`/api/marketing/plans/daily?date=${encodeURIComponent(date)}&employeeId=${encodeURIComponent(employeeId)}`, z.array(DailyMarketingPlanSchema)),
+  saveDailyPlan: (payload: Partial<DailyMarketingPlan>) => post<DailyMarketingPlan>("/api/marketing/plans/daily", payload, DailyMarketingPlanSchema),
+  monthlyPlans: (month: string) => get<MonthlyMarketingPlan[]>(`/api/marketing/plans/monthly?month=${encodeURIComponent(month)}`, z.array(MonthlyMarketingPlanSchema)),
+  saveMonthlyPlan: (payload: Partial<MonthlyMarketingPlan>) => post<MonthlyMarketingPlan>("/api/marketing/plans/monthly", payload, MonthlyMarketingPlanSchema),
+  targets: (month: string) => get<EmployeeMarketingTarget[]>(`/api/marketing/targets?month=${encodeURIComponent(month)}`, z.array(EmployeeMarketingTargetSchema)),
+  saveTarget: (payload: Partial<EmployeeMarketingTarget>) => post<EmployeeMarketingTarget>("/api/marketing/targets", payload, EmployeeMarketingTargetSchema),
+  updateTarget: (id: string, payload: Partial<EmployeeMarketingTarget>) => patch<EmployeeMarketingTarget>(`/api/marketing/targets/${id}`, payload, EmployeeMarketingTargetSchema),
+  performance: (from: string, to: string, employeeId = "all") => get<MarketingPerformanceRow[]>(`/api/marketing/performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, z.array(MarketingPerformanceRowSchema)),
+  employeeSnapshot: (employeeId: string) => get<EmployeeMarketingSnapshot>(`/api/marketing/employees/${encodeURIComponent(employeeId)}/snapshot`, EmployeeMarketingSnapshotSchema),
+  scoreRules: () => get<MarketingScoreRule[]>("/api/marketing/score-rules", z.array(MarketingScoreRuleSchema)),
+  updateScoreRule: (id: string, payload: Partial<MarketingScoreRule>) => patch<MarketingScoreRule>(`/api/marketing/score-rules/${id}`, payload, MarketingScoreRuleSchema)
+};
+
 export const accountsService = {
   expenses: () => get<Expense[]>("/api/expenses", z.array(ExpenseSchema)),
   createExpense: (payload: Partial<Expense> & { attachmentUpload?: DocumentUpload }) => post<Expense>("/api/expenses", payload, ExpenseSchema),
@@ -188,7 +248,12 @@ export const accountsService = {
 export const reportService = {
   get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema),
   salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema),
-  authorizeExport: () => get<{ authorized: true }>("/api/reports/export-authorization", z.object({ authorized: z.literal(true) }))
+  marketing: (filters: { from: string; to: string; employeeId?: string; territory?: string; activityType?: string; subjectId?: string; verification?: string; status?: string; groupBy?: string; mode?: "Summary" | "Detail" }) => {
+    const params = new URLSearchParams(filters as Record<string, string>);
+    return get<MarketingReportData>(`/api/reports/marketing?${params}`, MarketingReportSchema);
+  },
+  authorizeExport: () => get<{ authorized: true }>("/api/reports/export-authorization", z.object({ authorized: z.literal(true) })),
+  authorizeMarketingExport: () => get<{ authorized: true }>("/api/reports/marketing/export-authorization", z.object({ authorized: z.literal(true) }))
 };
 
 export const fieldTeamService = {
@@ -198,7 +263,12 @@ export const fieldTeamService = {
     return get<FieldEmployee[]>(`/api/field-team/employees?${params}`, z.array(FieldEmployeeSchema));
   },
   history: (userId: string, date: string) => get<FieldTeamHistoryData>(`/api/field-team/${encodeURIComponent(userId)}/history?date=${encodeURIComponent(date)}`, FieldTeamHistorySchema),
-  visits: (userId: string, from: string, to: string) => get<FieldVisit[]>(`/api/field-team/${encodeURIComponent(userId)}/visits?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, z.array(FieldVisitSchema))
+  visits: (userId: string, from: string, to: string) => get<FieldVisit[]>(`/api/field-team/${encodeURIComponent(userId)}/visits?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, z.array(FieldVisitSchema)),
+  startTracking: () => post("/api/field-team/tracking/start", {}, z.object({ id: z.string(), userId: z.string(), startedAt: z.string(), endedAt: z.string().optional(), source: z.enum(["MOBILE_APP", "WEB_FOREGROUND", "MANUAL", "DEMO"]), status: z.enum(["Active", "Completed"]) })),
+  sendLocation: (payload: LocationUpdateInput) => post<CurrentEmployeeLocation>("/api/field-team/tracking/location", payload, CurrentEmployeeLocationSchema),
+  stopTracking: () => post("/api/field-team/tracking/stop", {}, z.object({ id: z.string(), userId: z.string(), startedAt: z.string(), endedAt: z.string().optional(), source: z.enum(["MOBILE_APP", "WEB_FOREGROUND", "MANUAL", "DEMO"]), status: z.enum(["Active", "Completed"]) })),
+  checkInVisit: (visitId: string, payload: { latitude: number; longitude: number; accuracyMeters: number }) => post<FieldVisit>(`/api/field-team/visits/${visitId}/check-in`, payload, FieldVisitSchema),
+  checkOutVisit: (visitId: string, payload: Partial<FieldVisit> & { attachmentUpload?: DocumentUpload }) => post<FieldVisit>(`/api/field-team/visits/${visitId}/check-out`, payload, FieldVisitSchema)
 };
 
 export const printService = {

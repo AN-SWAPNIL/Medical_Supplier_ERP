@@ -81,6 +81,12 @@ export function RequirePermission({ permission, action = "view", children }: { p
   return <>{children}</>;
 }
 
+export function RequireAnyPermission({ permissions, action = "view", children }: { permissions: PermissionKey[]; action?: PermissionAction; children: ReactNode }) {
+  const user = useAuthStore((state) => state.session?.user);
+  if (!permissions.some((permission) => hasEffectivePermission(user, permission, action))) return <AccessDenied />;
+  return <>{children}</>;
+}
+
 export function RequireSettingsAccess({ children }: { children: ReactNode }) {
   const user = useAuthStore((state) => state.session?.user);
   return canAccessSettings(user) ? <>{children}</> : <AccessDenied permission="settings" />;

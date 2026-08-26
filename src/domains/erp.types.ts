@@ -28,7 +28,7 @@ export type Capability =
   | "manage_user_access"
   | "approve_special_price";
 
-export type DocumentEntityType = "import" | "import-cost" | "expense";
+export type DocumentEntityType = "import" | "import-cost" | "expense" | "marketing-activity" | "field-visit" | "lead";
 export type DocumentSource = "UPLOADED" | "GENERATED";
 
 export type DocumentRecord = {
@@ -293,7 +293,10 @@ export type Customer = {
   type: "Hospital" | "Clinic" | "Dealer" | "Pharmacy" | "Other";
   contactPerson: string;
   phone: string;
+  email?: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
   territory: string;
   assignedSalesUserId?: string;
   paymentTerms: string;
@@ -318,6 +321,7 @@ export type SalesLine = {
 export type Quotation = {
   id: string;
   quotationNumber: string;
+  leadId?: string;
   date: string;
   customerId: string;
   customerName: string;
@@ -413,8 +417,16 @@ export type Expense = {
   subtype: "General" | "TA/DA";
   amount: DecimalString;
   paidFromAccountId: string;
+  expenseFor: "Employee" | "Office" | "Warehouse" | "Company / General";
+  expenseForId?: string;
+  expenseForName: string;
+  employeeId?: string;
   employee?: string;
+  employeeCode?: string;
   designation?: string;
+  department?: string;
+  enteredByUserId: string;
+  enteredByName: string;
   taAmount?: DecimalString;
   daAmount?: DecimalString;
   remarks: string;
@@ -602,6 +614,209 @@ export type PrintConfiguration = {
   defaultLetterheadMode: "Digital" | "Preprinted";
 };
 
+export type EmployeeDirectoryEntry = SalespersonEmployee & {
+  employeeCode: string;
+  department: string;
+  status: "Active" | "Pending" | "Inactive";
+};
+
+export type MarketingVerification = "SYSTEM_VERIFIED" | "GPS_VERIFIED" | "MANUAL" | "UNVERIFIED";
+
+export type MarketingActivityType =
+  | "LEAD_CREATED"
+  | "CUSTOMER_CONTACT"
+  | "CUSTOMER_VISIT"
+  | "PRODUCT_PRESENTATION"
+  | "SAMPLE_DELIVERED"
+  | "FOLLOW_UP_COMPLETED"
+  | "NEGOTIATION_UPDATE"
+  | "GENERAL_NOTE"
+  | "CHECK_IN"
+  | "CHECK_OUT"
+  | "QUOTATION_SUBMITTED"
+  | "ORDER_RECEIVED"
+  | "DELIVERY_POSTED"
+  | "PAYMENT_COLLECTED"
+  | "LEAD_CONVERTED";
+
+export type MarketingActivity = {
+  id: string;
+  userId: string;
+  employeeCode: string;
+  employeeName: string;
+  territory?: string;
+  activityType: MarketingActivityType;
+  source: "MANUAL" | "FIELD_VISIT" | "QUOTATION" | "ORDER" | "DELIVERY" | "COLLECTION" | "LEAD";
+  occurredAt: string;
+  submittedAt: string;
+  leadId?: string;
+  customerId?: string;
+  subjectName?: string;
+  productIds?: string[];
+  purpose?: string;
+  remarks?: string;
+  nextFollowUpAt?: string;
+  referenceType?: string;
+  referenceId?: string;
+  referenceNumber?: string;
+  amountBdt?: DecimalString;
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  verification: MarketingVerification;
+  attachments?: DocumentRecord[];
+  createdByUserId: string;
+};
+
+export type MarketingLeadStage =
+  | "NEW"
+  | "CONTACTED"
+  | "INTERESTED"
+  | "PRESENTATION"
+  | "SAMPLE"
+  | "QUOTATION"
+  | "NEGOTIATION"
+  | "ORDER"
+  | "DELIVERED"
+  | "PAYMENT"
+  | "LOST";
+
+export type MarketingLead = {
+  id: string;
+  leadNumber: string;
+  organizationName: string;
+  organizationType: Customer["type"];
+  contactPerson?: string;
+  contactRole?: "Doctor" | "Procurement" | "Owner" | "Management" | "Other";
+  mobile: string;
+  email?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  interestedProductIds: string[];
+  leadSource: string;
+  assignedUserId: string;
+  stage: MarketingLeadStage;
+  nextFollowUpAt?: string;
+  lastContactAt?: string;
+  customerId?: string;
+  lostReason?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketingFollowUpStatus = "PENDING" | "COMPLETED" | "OVERDUE" | "CANCELLED";
+
+export type MarketingFollowUp = {
+  id: string;
+  assignedUserId: string;
+  leadId?: string;
+  customerId?: string;
+  subjectName: string;
+  dueAt: string;
+  purpose: string;
+  status: MarketingFollowUpStatus;
+  completedAt?: string;
+  outcome?: string;
+  nextFollowUpAt?: string;
+  createdAt: string;
+};
+
+export type DailyMarketingPlan = {
+  id: string;
+  userId: string;
+  date: string;
+  plannedVisits: Array<{ id: string; customerId?: string; leadId?: string; subjectName: string; plannedTime?: string; purpose: string; completed: boolean }>;
+  notes?: string;
+  status: "DRAFT" | "SUBMITTED" | "COMPLETED";
+};
+
+export type MonthlyMarketingPlan = {
+  id: string;
+  userId: string;
+  month: string;
+  territory: string;
+  prioritySubjects: string[];
+  productIds: string[];
+  plannedActivities: number;
+  notes?: string;
+  status: "DRAFT" | "SUBMITTED" | "APPROVED";
+};
+
+export type EmployeeMarketingTarget = {
+  id: string;
+  userId: string;
+  month: string;
+  salesTargetBdt: DecimalString;
+  newCustomerTarget: number;
+  visitTarget: number;
+  collectionTargetBdt: DecimalString;
+  createdByUserId: string;
+  createdAt: string;
+};
+
+export type MarketingScoreRule = {
+  id: string;
+  event: "NEW_QUALIFIED_CUSTOMER" | "VERIFIED_CUSTOMER_VISIT" | "QUALIFIED_LEAD" | "QUOTATION_SUBMITTED" | "ORDER_RECEIVED" | "PAYMENT_COLLECTED" | "FOLLOW_UP_COMPLETED";
+  label: string;
+  points: number;
+  active: boolean;
+};
+
+export type MarketingPerformanceRow = {
+  employee: EmployeeDirectoryEntry;
+  activityCount: number;
+  checkIns: number;
+  completedVisits: number;
+  verifiedVisits: number;
+  newLeads: number;
+  qualifiedLeads: number;
+  followUpsCompleted: number;
+  overdueFollowUps: number;
+  presentations: number;
+  samples: number;
+  quotations: number;
+  orders: number;
+  deliveredSalesBdt: DecimalString;
+  collectionsBdt: DecimalString;
+  convertedCustomers: number;
+  activityScore: number;
+  targets: EmployeeMarketingTarget;
+  progress: { sales: DecimalString; visits: DecimalString; customers: DecimalString; collections: DecimalString; overall: DecimalString };
+};
+
+export type MarketingDashboardData = {
+  scope: "NONE" | "SELF" | "TEAM" | "ALL";
+  businessDate: string;
+  metrics: Array<{ id: string; label: string; value: DecimalString; unit: string }>;
+  activities: MarketingActivity[];
+  followUps: MarketingFollowUp[];
+  leads: MarketingLead[];
+  funnel: Array<{ stage: MarketingLeadStage; count: number }>;
+  fieldTeam: FieldTeamCurrentData["summary"];
+  performance: MarketingPerformanceRow[];
+  dailyPlan?: DailyMarketingPlan;
+  monthlyPlan?: MonthlyMarketingPlan;
+};
+
+export type MarketingReportData = {
+  period: { from: string; to: string };
+  filters: { employeeId: string; territory: string; activityType: string; subjectId: string; verification: string; status: string; groupBy: string; mode: "Summary" | "Detail" };
+  summary: Array<{ label: string; value: DecimalString }>;
+  tables: ReportTable[];
+  performance: MarketingPerformanceRow[];
+};
+
+export type EmployeeMarketingSnapshot = {
+  employee: EmployeeDirectoryEntry;
+  performance: MarketingPerformanceRow;
+  recentActivities: MarketingActivity[];
+  followUps: MarketingFollowUp[];
+  leads: MarketingLead[];
+  dailyPlan?: DailyMarketingPlan;
+};
+
 export type DashboardData = {
   role: Role;
   metrics: { id: string; label: string; value: DecimalString; unit: string; sensitive?: boolean }[];
@@ -611,6 +826,11 @@ export type DashboardData = {
   recentSales: SalesOrder[];
   recentCollections: Collection[];
   recentExpenses: Expense[];
+  marketing?: {
+    title: string;
+    metrics: Array<{ id: string; label: string; value: DecimalString; unit: string }>;
+    actionPath: string;
+  };
 };
 
 export type ReportTable = {
@@ -661,6 +881,17 @@ export type SalespersonPerformanceSummary = {
   conversionRate: DecimalString;
   totalDiscount: DecimalString;
   averageDiscount: DecimalString;
+  checkIns: number;
+  completedVisits: number;
+  verifiedVisits: number;
+  newLeads: number;
+  qualifiedLeads: number;
+  followUpsCompleted: number;
+  overdueFollowUps: number;
+  presentations: number;
+  samples: number;
+  activityScore: number;
+  targetProgress: DecimalString;
 };
 
 export type SalespersonComparisonRow = SalespersonEmployee & SalespersonPerformanceSummary;
@@ -675,6 +906,8 @@ export type SalespersonPerformanceDetail = {
     collections: ReportTable;
     customers: ReportTable;
     products: ReportTable;
+    marketingActivities: ReportTable;
+    followUps: ReportTable;
   };
 };
 
@@ -700,6 +933,7 @@ export type FieldVisit = {
   userId: string;
   customerId: string;
   customerName: string;
+  leadId?: string;
   purpose: string;
   outcome?: string;
   status: "Planned" | "Checked In" | "Completed" | "Missed";
@@ -711,6 +945,17 @@ export type FieldVisit = {
   checkInLatitude?: number;
   checkInLongitude?: number;
   checkInAccuracyMeters?: number;
+  checkOutLatitude?: number;
+  checkOutLongitude?: number;
+  checkOutAccuracyMeters?: number;
+  productIds?: string[];
+  nextFollowUpAt?: string;
+  remarks?: string;
+  verification?: MarketingVerification;
+  checkInDistanceMeters?: number;
+  distanceWarning?: boolean;
+  attachments?: DocumentRecord[];
+  submittedAt?: string;
 };
 
 export type CurrentEmployeeLocation = {
@@ -774,7 +1019,7 @@ export type LocationUpdateInput = {
 
 export type AIContext = {
   route: string;
-  entityType?: "import" | "inventory" | "sales" | "reports" | "dashboard" | "accounts" | "settings" | "field-team" | "insights";
+  entityType?: "import" | "inventory" | "sales" | "marketing" | "reports" | "dashboard" | "accounts" | "settings" | "field-team" | "insights";
   entityId?: string;
   employeeId?: string;
   reportFrom?: string;
@@ -806,7 +1051,7 @@ export type AIInsight = {
 export type AIRecommendation = AIInsight & {
   reason: string;
   recommendedAction: string;
-  category?: "Imports" | "Inventory" | "Sales" | "Collections" | "Finance" | "Field Team";
+  category?: "Imports" | "Inventory" | "Sales" | "Marketing" | "Collections" | "Finance" | "Field Team";
   detectedAt?: string;
 };
 

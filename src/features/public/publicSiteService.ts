@@ -96,5 +96,6 @@ export const websiteContentService = {
   updateResource: (slug: string, payload: PublicResource) => patch(`/api/settings/website/resources/${encodeURIComponent(slug)}`, payload, PublicResourceSchema, true),
   removeResource: (slug: string) => remove(`/api/settings/website/resources/${encodeURIComponent(slug)}`),
   updateInquiry: (id: string, payload: { status: PublicInquiryStatus; internalNotes?: string }) => patch(`/api/settings/website/inquiries/${encodeURIComponent(id)}`, payload, PublicInquiryRecordSchema, true),
+  convertInquiryToLead: (id: string, payload: { assignedUserId: string; productIds: string[]; nextFollowUpAt?: string }) => post(`/api/settings/website/inquiries/${encodeURIComponent(id)}/convert-to-lead`, payload, PublicInquiryRecordSchema, true),
   removeInquiry: (id: string) => remove(`/api/settings/website/inquiries/${encodeURIComponent(id)}`)
 };

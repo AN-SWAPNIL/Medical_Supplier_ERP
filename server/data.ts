@@ -7,11 +7,13 @@ import type {
   CostPreset,
   Customer,
   CustomerOpeningBalance,
+  DailyMarketingPlan,
   Delivery,
   DocumentRecord,
   Expense,
   CurrentEmployeeLocation,
   FieldVisit,
+  EmployeeMarketingTarget,
   ImportCase,
   ImportDocument,
   Product,
@@ -23,6 +25,11 @@ import type {
   WarehouseConfig,
   WarehouseReceipt,
   LocationHistoryPoint,
+  MarketingActivity,
+  MarketingFollowUp,
+  MarketingLead,
+  MarketingScoreRule,
+  MonthlyMarketingPlan,
   TrackingSession,
   PrintConfiguration
 } from "../src/domains/erp.types.js";
@@ -153,13 +160,20 @@ export const demoUsers: User[] = [
 export const passwordByEmail = new Map(demoUsers.map((user) => [user.email, "password123"]));
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+const businessDay = (offset = 0) => {
+  const value = new Date(Date.now() + offset * 86_400_000);
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+const businessTime = (dayOffset: number, hour: number, minute = 0) => `${businessDay(dayOffset)}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+06:00`;
 
 export const fieldVisits: FieldVisit[] = [
-  { id: "visit-rafiq-popular", userId: "sales1", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", purpose: "Stock and collection follow-up", status: "Checked In", plannedAt: minutesAgo(70), checkInAt: minutesAgo(28), customerLatitude: 23.8759, customerLongitude: 90.3795, checkInLatitude: 23.8758, checkInLongitude: 90.3794, checkInAccuracyMeters: 18 },
-  { id: "visit-rafiq-kuwait", userId: "sales1", customerId: "cus-kuwait", customerName: "Kuwait Moitri Hospital", purpose: "Dialyzer demand review", outcome: "Next quotation requested", status: "Completed", plannedAt: minutesAgo(190), checkInAt: minutesAgo(175), checkOutAt: minutesAgo(130), customerLatitude: 23.8702, customerLongitude: 90.4031, checkInLatitude: 23.8701, checkInLongitude: 90.4030, checkInAccuracyMeters: 14 },
-  { id: "visit-shamima-labaid", userId: "sales2", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", purpose: "Outstanding payment follow-up", outcome: "Accounts review scheduled", status: "Completed", plannedAt: minutesAgo(155), checkInAt: minutesAgo(142), checkOutAt: minutesAgo(96), customerLatitude: 23.7392, customerLongitude: 90.3830, checkInLatitude: 23.7391, checkInLongitude: 90.3831, checkInAccuracyMeters: 22 },
-  { id: "visit-sabbir-ark", userId: "sales3", customerId: "cus-ark", customerName: "ARK Hospital", purpose: "Product presentation", status: "Planned", plannedAt: new Date(Date.now() + 45 * 60_000).toISOString(), customerLatitude: 23.8223, customerLongitude: 90.3654 },
-  { id: "visit-nabila-bismillah", userId: "sales4", customerId: "cus-bismillah", customerName: "Bismillah Surgical", purpose: "Dealer stock review", status: "Missed", plannedAt: minutesAgo(210), customerLatitude: 23.7114, customerLongitude: 90.4067 }
+  { id: "visit-rafiq-popular", userId: "sales1", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", purpose: "Stock and collection follow-up", status: "Checked In", plannedAt: minutesAgo(70), checkInAt: minutesAgo(28), customerLatitude: 23.8759, customerLongitude: 90.3795, checkInLatitude: 23.8758, checkInLongitude: 90.3794, checkInAccuracyMeters: 18, productIds: ["prd-d17h", "prd-bts"], verification: "GPS_VERIFIED", checkInDistanceMeters: 15, distanceWarning: false, submittedAt: minutesAgo(27) },
+  { id: "visit-rafiq-kuwait", userId: "sales1", customerId: "cus-kuwait", customerName: "Kuwait Moitri Hospital", purpose: "Dialyzer demand review", outcome: "Next quotation requested", status: "Completed", plannedAt: minutesAgo(190), checkInAt: minutesAgo(175), checkOutAt: minutesAgo(130), customerLatitude: 23.8702, customerLongitude: 90.4031, checkInLatitude: 23.8701, checkInLongitude: 90.4030, checkInAccuracyMeters: 14, productIds: ["prd-d17h", "prd-d15h"], nextFollowUpAt: businessTime(1, 10), remarks: "Procurement requested institutional pricing.", verification: "GPS_VERIFIED", checkInDistanceMeters: 15, distanceWarning: false, submittedAt: minutesAgo(125) },
+  { id: "visit-shamima-labaid", userId: "sales2", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", purpose: "Outstanding payment follow-up", outcome: "Accounts review scheduled", status: "Completed", plannedAt: minutesAgo(155), checkInAt: minutesAgo(142), checkOutAt: minutesAgo(96), customerLatitude: 23.7392, customerLongitude: 90.3830, checkInLatitude: 23.7391, checkInLongitude: 90.3831, checkInAccuracyMeters: 22, productIds: ["prd-d17h"], nextFollowUpAt: businessTime(2, 11), verification: "GPS_VERIFIED", checkInDistanceMeters: 15, distanceWarning: false, submittedAt: minutesAgo(90) },
+  { id: "visit-sabbir-ark", userId: "sales3", customerId: "cus-ark", customerName: "ARK Hospital", purpose: "Product presentation", status: "Planned", plannedAt: new Date(Date.now() + 45 * 60_000).toISOString(), customerLatitude: 23.8223, customerLongitude: 90.3654, productIds: ["prd-av16", "prd-av17"], verification: "UNVERIFIED" },
+  { id: "visit-nabila-bismillah", userId: "sales4", customerId: "cus-bismillah", customerName: "Bismillah Surgical", purpose: "Dealer stock review", status: "Missed", plannedAt: minutesAgo(210), customerLatitude: 23.7114, customerLongitude: 90.4067, verification: "UNVERIFIED", remarks: "Customer contact was unavailable." }
 ];
 
 export const trackingSessions: TrackingSession[] = [
@@ -190,17 +204,76 @@ export const locationHistory: LocationHistoryPoint[] = [
   { id: "loc-s4", userId: "sales2", latitude: 23.7515, longitude: 90.3898, accuracyMeters: 26, recordedAt: minutesAgo(4), source: "DEMO", event: "LOCATION" }
 ];
 
+export const marketingLeads: MarketingLead[] = [
+  { id: "lead-1", leadNumber: "LEAD-2026-031", organizationName: "North Point Dialysis Centre", organizationType: "Clinic", contactPerson: "Dr. Afsana Kabir", contactRole: "Doctor", mobile: "+880 1712 450910", email: "procurement@northpoint.example", address: "Uttara, Dhaka", latitude: 23.8842, longitude: 90.3924, interestedProductIds: ["prd-d17h", "prd-bts"], leadSource: "Website Inquiry", assignedUserId: "sales1", stage: "PRESENTATION", nextFollowUpAt: businessTime(0, 15), lastContactAt: businessTime(0, 10, 20), notes: "Clinical team requested membrane and sterilization documentation.", createdAt: businessTime(-8, 9), updatedAt: businessTime(0, 10, 20) },
+  { id: "lead-2", leadNumber: "LEAD-2026-032", organizationName: "Careline Medical Services", organizationType: "Dealer", contactPerson: "Mohammad Tariqul Islam", contactRole: "Owner", mobile: "+880 1818 620044", email: "tariqul@careline.example", address: "Uttara, Dhaka", interestedProductIds: ["prd-av16", "prd-av17"], leadSource: "Website Inquiry", assignedUserId: "sales1", stage: "QUOTATION", nextFollowUpAt: businessTime(-1, 14), lastContactAt: businessTime(-2, 16), notes: "Monthly volume confirmed; quotation submitted.", createdAt: businessTime(-12, 11), updatedAt: businessTime(-2, 16) },
+  { id: "lead-3", leadNumber: "LEAD-2026-033", organizationName: "Metro Clinical Hospital", organizationType: "Hospital", contactPerson: "Sabina Yasmin", contactRole: "Procurement", mobile: "+880 1911 335508", email: "supply@metroclinical.example", address: "Moghbazar, Dhaka", interestedProductIds: ["prd-cat"], leadSource: "Website Inquiry", assignedUserId: "sales2", stage: "CONTACTED", nextFollowUpAt: businessTime(1, 11), lastContactAt: businessTime(0, 9, 40), createdAt: businessTime(-4, 12), updatedAt: businessTime(0, 9, 40) },
+  { id: "lead-4", leadNumber: "LEAD-2026-034", organizationName: "Uttara Renal Care", organizationType: "Clinic", contactPerson: "Dr. M. Islam", contactRole: "Doctor", mobile: "+880 1710 335901", address: "Sector 7, Uttara", interestedProductIds: ["prd-d15h", "prd-d17h"], leadSource: "Referral", assignedUserId: "sales3", stage: "SAMPLE", nextFollowUpAt: businessTime(3, 12), lastContactAt: businessTime(-1, 15), notes: "Sample evaluation is in progress.", createdAt: businessTime(-18, 10), updatedAt: businessTime(-1, 15) },
+  { id: "lead-5", leadNumber: "LEAD-2026-035", organizationName: "Mirpur Kidney Foundation", organizationType: "Clinic", contactPerson: "Razia Sultana", contactRole: "Management", mobile: "+880 1812 009181", address: "Mirpur 10, Dhaka", interestedProductIds: ["prd-bts"], leadSource: "Field Prospecting", assignedUserId: "sales3", stage: "INTERESTED", nextFollowUpAt: businessTime(0, 16, 30), lastContactAt: businessTime(-1, 12), createdAt: businessTime(-7, 14), updatedAt: businessTime(-1, 12) },
+  { id: "lead-6", leadNumber: "LEAD-2026-036", organizationName: "South City Hospital", organizationType: "Hospital", contactPerson: "Mahin Chowdhury", contactRole: "Procurement", mobile: "+880 1913 801240", address: "Jatrabari, Dhaka", interestedProductIds: ["prd-d16h", "prd-bts"], leadSource: "Conference", assignedUserId: "sales4", stage: "NEGOTIATION", nextFollowUpAt: businessTime(2, 14), lastContactAt: businessTime(-1, 17), createdAt: businessTime(-25, 10), updatedAt: businessTime(-1, 17) },
+  { id: "lead-7", leadNumber: "LEAD-2026-037", organizationName: "Narayanganj Kidney Centre", organizationType: "Clinic", contactPerson: "Asif Mahmud", contactRole: "Owner", mobile: "+880 1718 660451", address: "Chashara, Narayanganj", interestedProductIds: ["prd-d17l"], leadSource: "Field Prospecting", assignedUserId: "sales5", stage: "NEW", nextFollowUpAt: businessTime(1, 10), createdAt: businessTime(0, 8, 35), updatedAt: businessTime(0, 8, 35) },
+  { id: "lead-8", leadNumber: "LEAD-2026-038", organizationName: "Central Surgical Mart", organizationType: "Dealer", contactPerson: "Kamrul Hasan", contactRole: "Owner", mobile: "+880 1705 330922", address: "Mitford, Dhaka", interestedProductIds: ["prd-av16"], leadSource: "Trade Reference", assignedUserId: "sales2", stage: "LOST", lostReason: "Customer selected another brand for this procurement cycle.", lastContactAt: businessTime(-6, 13), createdAt: businessTime(-30, 9), updatedAt: businessTime(-6, 13) }
+];
+
+export const marketingActivities: MarketingActivity[] = [
+  { id: "mkt-act-1", userId: "sales1", employeeCode: "SE-001", employeeName: "Rafiq Ahmed", territory: "Dhaka North", activityType: "PRODUCT_PRESENTATION", source: "MANUAL", occurredAt: businessTime(0, 10, 20), submittedAt: businessTime(0, 10, 34), leadId: "lead-1", subjectName: "North Point Dialysis Centre", productIds: ["prd-d17h", "prd-bts"], purpose: "Clinical product review", remarks: "Demonstrated product specifications and shared regulatory documents.", nextFollowUpAt: businessTime(0, 15), verification: "MANUAL", createdByUserId: "sales1" },
+  { id: "mkt-act-2", userId: "sales2", employeeCode: "SE-014", employeeName: "Shamima Sultana", territory: "Dhaka Central", activityType: "CUSTOMER_CONTACT", source: "MANUAL", occurredAt: businessTime(0, 9, 40), submittedAt: businessTime(0, 9, 43), leadId: "lead-3", subjectName: "Metro Clinical Hospital", productIds: ["prd-cat"], purpose: "Qualification call", remarks: "Procurement requested packaging and delivery details.", nextFollowUpAt: businessTime(1, 11), verification: "MANUAL", createdByUserId: "sales2" },
+  { id: "mkt-act-3", userId: "sales3", employeeCode: "SE-021", employeeName: "Sabbir Hossain", territory: "Mirpur", activityType: "SAMPLE_DELIVERED", source: "MANUAL", occurredAt: businessTime(-1, 15), submittedAt: businessTime(-1, 18, 20), leadId: "lead-4", subjectName: "Uttara Renal Care", productIds: ["prd-d15h"], purpose: "Product evaluation sample", remarks: "Two sealed evaluation units acknowledged by the clinical coordinator.", nextFollowUpAt: businessTime(3, 12), verification: "MANUAL", createdByUserId: "sales3" },
+  { id: "mkt-act-4", userId: "sales4", employeeCode: "SE-027", employeeName: "Nabila Chowdhury", territory: "Dhaka South", activityType: "NEGOTIATION_UPDATE", source: "MANUAL", occurredAt: businessTime(-1, 17), submittedAt: businessTime(-1, 17, 15), leadId: "lead-6", subjectName: "South City Hospital", productIds: ["prd-d16h", "prd-bts"], purpose: "Commercial terms", remarks: "Customer requested a phased delivery option.", nextFollowUpAt: businessTime(2, 14), verification: "MANUAL", createdByUserId: "sales4" },
+  { id: "mkt-act-5", userId: "sales5", employeeCode: "SE-032", employeeName: "Imran Kabir", territory: "Narayanganj", activityType: "LEAD_CREATED", source: "LEAD", occurredAt: businessTime(0, 8, 35), submittedAt: businessTime(0, 8, 35), leadId: "lead-7", subjectName: "Narayanganj Kidney Centre", productIds: ["prd-d17l"], purpose: "New field prospect", verification: "SYSTEM_VERIFIED", referenceType: "Lead", referenceId: "lead-7", referenceNumber: "LEAD-2026-037", createdByUserId: "sales5" },
+  { id: "mkt-act-6", userId: "sales2", employeeCode: "SE-014", employeeName: "Shamima Sultana", territory: "Dhaka Central", activityType: "GENERAL_NOTE", source: "MANUAL", occurredAt: businessTime(-2, 13), submittedAt: businessTime(-1, 8, 30), customerId: "cus-insaf", subjectName: "Insaf Barakah Foundation Hospital", purpose: "Procurement cycle note", remarks: "The next tender document is expected in the first week of September.", verification: "UNVERIFIED", createdByUserId: "sales2" }
+];
+
+export const marketingFollowUps: MarketingFollowUp[] = [
+  { id: "follow-1", assignedUserId: "sales1", leadId: "lead-1", subjectName: "North Point Dialysis Centre", dueAt: businessTime(0, 15), purpose: "Confirm clinical documentation review", status: "PENDING", createdAt: businessTime(-3, 10) },
+  { id: "follow-2", assignedUserId: "sales1", leadId: "lead-2", subjectName: "Careline Medical Services", dueAt: businessTime(-1, 14), purpose: "Review quotation and monthly volume", status: "PENDING", createdAt: businessTime(-5, 12) },
+  { id: "follow-3", assignedUserId: "sales2", leadId: "lead-3", subjectName: "Metro Clinical Hospital", dueAt: businessTime(1, 11), purpose: "Share catheter packaging details", status: "PENDING", createdAt: businessTime(0, 9, 45) },
+  { id: "follow-4", assignedUserId: "sales2", customerId: "cus-labaid", subjectName: "Labaid Specialized Hospital", dueAt: businessTime(-2, 11), purpose: "Confirm accounts review outcome", status: "COMPLETED", completedAt: businessTime(-2, 11, 35), outcome: "Cheque processing initiated", nextFollowUpAt: businessTime(2, 11), createdAt: businessTime(-4, 15) },
+  { id: "follow-5", assignedUserId: "sales3", leadId: "lead-5", subjectName: "Mirpur Kidney Foundation", dueAt: businessTime(0, 16, 30), purpose: "Schedule blood-line presentation", status: "PENDING", createdAt: businessTime(-2, 12) },
+  { id: "follow-6", assignedUserId: "sales3", leadId: "lead-4", subjectName: "Uttara Renal Care", dueAt: businessTime(3, 12), purpose: "Collect sample evaluation", status: "PENDING", createdAt: businessTime(-1, 15) },
+  { id: "follow-7", assignedUserId: "sales4", leadId: "lead-6", subjectName: "South City Hospital", dueAt: businessTime(2, 14), purpose: "Confirm phased delivery terms", status: "PENDING", createdAt: businessTime(-1, 17) },
+  { id: "follow-8", assignedUserId: "sales5", leadId: "lead-7", subjectName: "Narayanganj Kidney Centre", dueAt: businessTime(1, 10), purpose: "Initial qualification call", status: "PENDING", createdAt: businessTime(0, 8, 35) }
+];
+
+export const dailyMarketingPlans: DailyMarketingPlan[] = [
+  { id: "daily-sales1", userId: "sales1", date: businessDay(), plannedVisits: [{ id: "dp-1", customerId: "cus-kuwait", subjectName: "Kuwait Moitri Hospital", plannedTime: "09:30", purpose: "Demand review", completed: true }, { id: "dp-2", customerId: "cus-popular", subjectName: "Popular Medicine & Departmental Store", plannedTime: "12:00", purpose: "Stock and collection follow-up", completed: false }, { id: "dp-3", leadId: "lead-1", subjectName: "North Point Dialysis Centre", plannedTime: "15:00", purpose: "Clinical document follow-up", completed: false }], notes: "Prioritize dialysis accounts in Uttara.", status: "SUBMITTED" },
+  { id: "daily-sales2", userId: "sales2", date: businessDay(), plannedVisits: [{ id: "dp-4", customerId: "cus-labaid", subjectName: "Labaid Specialized Hospital", plannedTime: "10:00", purpose: "Payment follow-up", completed: true }, { id: "dp-5", leadId: "lead-3", subjectName: "Metro Clinical Hospital", plannedTime: "14:30", purpose: "Catheter requirement review", completed: false }], status: "SUBMITTED" }
+];
+
+export const monthlyMarketingPlans: MonthlyMarketingPlan[] = [
+  { id: "monthly-sales1", userId: "sales1", month: businessDay().slice(0, 7), territory: "Dhaka North", prioritySubjects: ["North Point Dialysis Centre", "Kuwait Moitri Hospital", "Popular Medicine"], productIds: ["prd-d17h", "prd-bts"], plannedActivities: 48, notes: "Dialysis consumables and due recovery.", status: "APPROVED" },
+  { id: "monthly-sales2", userId: "sales2", month: businessDay().slice(0, 7), territory: "Dhaka Central", prioritySubjects: ["Labaid Specialized Hospital", "Metro Clinical Hospital"], productIds: ["prd-cat", "prd-d17h"], plannedActivities: 42, notes: "Institutional procurement follow-up.", status: "SUBMITTED" }
+];
+
+export const marketingTargets: EmployeeMarketingTarget[] = [
+  { id: "target-sales1", userId: "sales1", month: businessDay().slice(0, 7), salesTargetBdt: "650000.00", newCustomerTarget: 4, visitTarget: 22, collectionTargetBdt: "500000.00", createdByUserId: "u-sales-manager", createdAt: businessTime(-25, 9) },
+  { id: "target-sales2", userId: "sales2", month: businessDay().slice(0, 7), salesTargetBdt: "800000.00", newCustomerTarget: 5, visitTarget: 24, collectionTargetBdt: "650000.00", createdByUserId: "u-sales-manager", createdAt: businessTime(-25, 9) },
+  { id: "target-sales3", userId: "sales3", month: businessDay().slice(0, 7), salesTargetBdt: "500000.00", newCustomerTarget: 4, visitTarget: 20, collectionTargetBdt: "350000.00", createdByUserId: "u-sales-manager", createdAt: businessTime(-25, 9) },
+  { id: "target-sales4", userId: "sales4", month: businessDay().slice(0, 7), salesTargetBdt: "550000.00", newCustomerTarget: 4, visitTarget: 20, collectionTargetBdt: "400000.00", createdByUserId: "u-sales-manager", createdAt: businessTime(-25, 9) },
+  { id: "target-sales5", userId: "sales5", month: businessDay().slice(0, 7), salesTargetBdt: "400000.00", newCustomerTarget: 3, visitTarget: 18, collectionTargetBdt: "250000.00", createdByUserId: "u-sales-manager", createdAt: businessTime(-25, 9) }
+];
+
+export const marketingScoreRules: MarketingScoreRule[] = [
+  { id: "score-customer", event: "NEW_QUALIFIED_CUSTOMER", label: "New qualified customer", points: 5, active: true },
+  { id: "score-visit", event: "VERIFIED_CUSTOMER_VISIT", label: "Verified customer visit", points: 10, active: true },
+  { id: "score-lead", event: "QUALIFIED_LEAD", label: "Qualified lead", points: 10, active: true },
+  { id: "score-quote", event: "QUOTATION_SUBMITTED", label: "Quotation submitted", points: 15, active: true },
+  { id: "score-order", event: "ORDER_RECEIVED", label: "Order received", points: 30, active: true },
+  { id: "score-collection", event: "PAYMENT_COLLECTED", label: "Payment collected", points: 20, active: true },
+  { id: "score-follow", event: "FOLLOW_UP_COMPLETED", label: "Follow-up completed", points: 5, active: true }
+];
+
 export const products: Product[] = [
-  { id: "prd-d17h", code: "DIAL-17H", family: "Dialyzer", variant: "1.7H", name: "Dialyzer 1.7H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-d17l", code: "DIAL-17L", family: "Dialyzer", variant: "1.7L", name: "Dialyzer 1.7L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-d15h", code: "DIAL-15H", family: "Dialyzer", variant: "1.5H", name: "Dialyzer 1.5H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "700.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-d15l", code: "DIAL-15L", family: "Dialyzer", variant: "1.5L", name: "Dialyzer 1.5L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "700.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-d16h", code: "DIAL-16H", family: "Dialyzer", variant: "1.6H", name: "Dialyzer 1.6H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-d16l", code: "DIAL-16L", family: "Dialyzer", variant: "1.6L", name: "Dialyzer 1.6L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/medical-products.png#dialyzer" },
-  { id: "prd-bts", code: "BTS-001", family: "Blood Line", variant: "Standard", name: "Blood Line Sets", unit: "set", hsCode: "9018.90", standardSalePrice: "230.00", active: true, imageUrl: "/medical-products.png#bloodline" },
-  { id: "prd-av16", code: "AVF-16G", family: "AV Fistula", variant: "16G", name: "AV Fistula 16G", unit: "pcs", hsCode: "9018.32", standardSalePrice: "60.00", active: true, imageUrl: "/medical-products.png#avf" },
-  { id: "prd-av17", code: "AVF-17G", family: "AV Fistula", variant: "17G", name: "AV Fistula 17G", unit: "pcs", hsCode: "9018.32", standardSalePrice: "60.00", active: true, imageUrl: "/medical-products.png#avf" },
-  { id: "prd-cat", code: "CATH-7F13", family: "Catheter", variant: "7Fr-13cm", name: "Central Venous Catheter 7Fr-13cm", unit: "pcs", hsCode: "9018.39", standardSalePrice: "1300.00", active: true, imageUrl: "/medical-products.png#catheter" }
+  { id: "prd-d17h", code: "DIAL-17H", family: "Dialyzer", variant: "1.7H", name: "Dialyzer 1.7H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-d17l", code: "DIAL-17L", family: "Dialyzer", variant: "1.7L", name: "Dialyzer 1.7L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-d15h", code: "DIAL-15H", family: "Dialyzer", variant: "1.5H", name: "Dialyzer 1.5H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "700.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-d15l", code: "DIAL-15L", family: "Dialyzer", variant: "1.5L", name: "Dialyzer 1.5L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "700.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-d16h", code: "DIAL-16H", family: "Dialyzer", variant: "1.6H", name: "Dialyzer 1.6H", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-d16l", code: "DIAL-16L", family: "Dialyzer", variant: "1.6L", name: "Dialyzer 1.6L", unit: "pcs", hsCode: "9018.90", standardSalePrice: "690.00", active: true, imageUrl: "/products/dialyzer.jpg" },
+  { id: "prd-bts", code: "BTS-001", family: "Blood Line", variant: "Standard", name: "Blood Line Sets", unit: "set", hsCode: "9018.90", standardSalePrice: "230.00", active: true, imageUrl: "/products/blood-tubing-set.png" },
+  { id: "prd-av16", code: "AVF-16G", family: "AV Fistula", variant: "16G", name: "AV Fistula 16G", unit: "pcs", hsCode: "9018.32", standardSalePrice: "60.00", active: true, imageUrl: "/products/av-fistula-needle.jpg" },
+  { id: "prd-av17", code: "AVF-17G", family: "AV Fistula", variant: "17G", name: "AV Fistula 17G", unit: "pcs", hsCode: "9018.32", standardSalePrice: "60.00", active: true, imageUrl: "/products/av-fistula-needle.jpg" },
+  { id: "prd-cat", code: "CATH-7F13", family: "Catheter", variant: "7Fr-13cm", name: "Central Venous Catheter 7Fr-13cm", unit: "pcs", hsCode: "9018.39", standardSalePrice: "1300.00", active: true, imageUrl: "/products/iv-catheter.jpg" }
 ];
 
 export const productAliases = [
@@ -308,10 +381,10 @@ export const receipts: WarehouseReceipt[] = [];
 
 export const customers: Customer[] = [
   { id: "cus-ark", name: "ARK Hospital", type: "Hospital", contactPerson: "Purchase Department", phone: "+880 1712 410011", address: "Dhaka", territory: "Dhaka North", assignedSalesUserId: "sales1", paymentTerms: "30 days", creditLimit: "500000.00", currentDue: "0.00", totalSales: "367000.00", totalCollected: "367000.00", active: true },
-  { id: "cus-popular", name: "Popular Medicine & Departmental Store", type: "Pharmacy", contactPerson: "Manager", phone: "+880 1811 220035", address: "Uttara, Dhaka", territory: "Dhaka North", assignedSalesUserId: "sales1", paymentTerms: "Cash / 15 days", creditLimit: "250000.00", currentDue: "27900.00", totalSales: "86937.00", totalCollected: "59037.00", active: true },
-  { id: "cus-kuwait", name: "Kuwait Moitri Hospital", type: "Hospital", contactPerson: "Medical Store", phone: "+880 1715 881220", address: "Uttara, Dhaka", territory: "Dhaka North", assignedSalesUserId: "sales1", paymentTerms: "30 days", creditLimit: "400000.00", currentDue: "0.00", totalSales: "27600.00", totalCollected: "27600.00", active: true },
+  { id: "cus-popular", name: "Popular Medicine & Departmental Store", type: "Pharmacy", contactPerson: "Manager", phone: "+880 1811 220035", email: "purchase@popular.example", address: "Uttara, Dhaka", latitude: 23.8759, longitude: 90.3795, territory: "Dhaka North", assignedSalesUserId: "sales1", paymentTerms: "Cash / 15 days", creditLimit: "250000.00", currentDue: "27900.00", totalSales: "86937.00", totalCollected: "59037.00", active: true },
+  { id: "cus-kuwait", name: "Kuwait Moitri Hospital", type: "Hospital", contactPerson: "Medical Store", phone: "+880 1715 881220", email: "store@kuwaitmoitri.example", address: "Uttara, Dhaka", latitude: 23.8702, longitude: 90.4031, territory: "Dhaka North", assignedSalesUserId: "sales1", paymentTerms: "30 days", creditLimit: "400000.00", currentDue: "0.00", totalSales: "27600.00", totalCollected: "27600.00", active: true },
   { id: "cus-bismillah", name: "Bismillah Surgical", type: "Dealer", contactPerson: "Proprietor", phone: "+880 1912 771122", address: "Mitford, Dhaka", territory: "Dhaka Central", assignedSalesUserId: "sales2", paymentTerms: "Cash", creditLimit: "300000.00", currentDue: "0.00", totalSales: "121200.00", totalCollected: "121200.00", active: true },
-  { id: "cus-labaid", name: "Labaid Specialized Hospital", type: "Hospital", contactPerson: "Supply Chain", phone: "+880 1714 330010", address: "Dhanmondi, Dhaka", territory: "Dhaka Central", assignedSalesUserId: "sales2", paymentTerms: "45 days", creditLimit: "900000.00", currentDue: "186500.00", totalSales: "945000.00", totalCollected: "758500.00", active: true },
+  { id: "cus-labaid", name: "Labaid Specialized Hospital", type: "Hospital", contactPerson: "Supply Chain", phone: "+880 1714 330010", email: "supply@labaid.example", address: "Dhanmondi, Dhaka", latitude: 23.7392, longitude: 90.3830, territory: "Dhaka Central", assignedSalesUserId: "sales2", paymentTerms: "45 days", creditLimit: "900000.00", currentDue: "186500.00", totalSales: "945000.00", totalCollected: "758500.00", active: true },
   { id: "cus-insaf", name: "Insaf Barakah Foundation Hospital", type: "Hospital", contactPerson: "Purchase Office", phone: "+880 1718 332214", address: "Moghbazar, Dhaka", territory: "Dhaka Central", assignedSalesUserId: "sales2", paymentTerms: "30 days", creditLimit: "600000.00", currentDue: "69000.00", totalSales: "422000.00", totalCollected: "353000.00", active: true }
 ];
 
@@ -320,7 +393,7 @@ export const customerOpeningBalances: CustomerOpeningBalance[] = [
 ];
 
 export const quotations: Quotation[] = [
-  { id: "quo-1", quotationNumber: "QT-2026-041", date: "2026-08-18", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", ownerId: "sales1", validityDays: 15, paymentTerms: "Cash / 15 days", remarks: "Delivery within three working days.", status: "Sent", lines: [{ id: "ql-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "690.00", discount: "0.00", lineTotal: "41400.00" }, { id: "ql-2", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00" }], subtotal: "48300.00", discountTotal: "0.00", total: "48300.00" },
+  { id: "quo-1", quotationNumber: "QT-2026-041", leadId: "lead-2", date: "2026-08-18", customerId: "cus-popular", customerName: "Popular Medicine & Departmental Store", ownerId: "sales1", validityDays: 15, paymentTerms: "Cash / 15 days", remarks: "Delivery within three working days.", status: "Sent", lines: [{ id: "ql-1", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "60", unitPrice: "690.00", discount: "0.00", lineTotal: "41400.00" }, { id: "ql-2", productId: "prd-bts", productCode: "BTS-001", productName: "Blood Line Sets", quantity: "30", unitPrice: "230.00", discount: "0.00", lineTotal: "6900.00" }], subtotal: "48300.00", discountTotal: "0.00", total: "48300.00" },
   { id: "quo-2", quotationNumber: "QT-2026-038", date: "2026-08-14", customerId: "cus-labaid", customerName: "Labaid Specialized Hospital", ownerId: "sales2", validityDays: 30, paymentTerms: "45 days", status: "Accepted", lines: [{ id: "ql-3", productId: "prd-d17h", productCode: "DIAL-17H", productName: "Dialyzer 1.7H", quantity: "180", unitPrice: "685.00", discount: "1800.00", lineTotal: "121500.00" }], subtotal: "123300.00", discountTotal: "1800.00", total: "121500.00" }
 ];
 
@@ -347,15 +420,19 @@ export const accounts: CashBankAccount[] = [
   { id: "acc-bkash", name: "MIPRO bKash Merchant", type: "Mobile Banking", accountNumber: "01*********", balance: "92500.00", active: true }
 ];
 
-export const expenseCategories = ["Office Entertainment", "Admin Cost", "Stationery", "Office Transport", "TA", "DA", "Salary", "Rent", "Utilities", "Courier", "Marketing", "Other"].map((name, index) => ({ id: `ec-${index + 1}`, name, active: true }));
+export const expenseCategories = ["Office Entertainment", "Administration", "Stationery", "Printing & Photocopy", "Office Transport", "Travel", "TA", "DA", "Salary", "Rent", "Utilities", "Internet & Telephone", "Mobile / Communication", "Courier", "Fuel", "Repair & Maintenance", "Cleaning / Housekeeping", "Marketing", "Training", "Staff Welfare", "Professional / Legal", "Regulatory / License", "Bank Charges", "Miscellaneous / Other"].map((name, index) => ({ id: `ec-${index + 1}`, name, active: true }));
 
 export const expenses: Expense[] = [
-  { id: "exp-1", date: "2026-08-01", categoryId: "ec-1", categoryName: "Office Entertainment", subtype: "General", amount: "135.00", paidFromAccountId: "acc-cash", remarks: "Tea and refreshments", status: "Posted" },
-  { id: "exp-2", date: "2026-08-02", categoryId: "ec-2", categoryName: "Admin Cost", subtype: "General", amount: "200.00", paidFromAccountId: "acc-cash", remarks: "Office labour cost", status: "Posted" },
-  { id: "exp-3", date: "2026-08-02", categoryId: "ec-4", categoryName: "Office Transport", subtype: "General", amount: "310.00", paidFromAccountId: "acc-cash", remarks: "Product delivery to Popular Hospital", status: "Posted" },
-  { id: "exp-4", date: "2026-08-05", categoryId: "ec-5", categoryName: "TA", subtype: "TA/DA", amount: "2500.00", paidFromAccountId: "acc-bkash", employee: "Nihad Hasan", designation: "Sales Executive", taAmount: "1800.00", daAmount: "700.00", remarks: "Mymensingh customer visit", status: "Posted" },
-  { id: "exp-5", date: "2026-08-10", categoryId: "ec-8", categoryName: "Rent", subtype: "General", amount: "45000.00", paidFromAccountId: "acc-city", remarks: "Office monthly rent", status: "Posted" },
-  { id: "exp-6", date: "2026-08-12", categoryId: "ec-9", categoryName: "Utilities", subtype: "General", amount: "12850.00", paidFromAccountId: "acc-city", remarks: "Office electricity and internet", attachmentName: "office-utility-receipt.png", attachment: uploadedDocument({ id: "doc-exp-6", entityType: "expense", entityId: "exp-6", documentType: "Expense Receipt", fileName: "office-utility-receipt.png", mimeType: "image/png", sizeBytes: 1967263, createdAt: "2026-08-12", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan" }), status: "Posted" }
+  { id: "exp-1", date: "2026-08-01", categoryId: "ec-1", categoryName: "Office Entertainment", subtype: "General", amount: "135.00", paidFromAccountId: "acc-cash", expenseFor: "Office", expenseForId: "head-office", expenseForName: "Head Office", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Tea and refreshments", status: "Posted" },
+  { id: "exp-2", date: "2026-08-02", categoryId: "ec-2", categoryName: "Administration", subtype: "General", amount: "200.00", paidFromAccountId: "acc-cash", expenseFor: "Office", expenseForId: "head-office", expenseForName: "Head Office", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Office labour cost", status: "Posted" },
+  { id: "exp-3", date: "2026-08-02", categoryId: "ec-5", categoryName: "Office Transport", subtype: "General", amount: "310.00", paidFromAccountId: "acc-cash", expenseFor: "Warehouse", expenseForId: "wh-main", expenseForName: "MIPRO Main Warehouse", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Local customer delivery support", status: "Posted" },
+  { id: "exp-4", date: "2026-08-05", categoryId: "ec-7", categoryName: "TA", subtype: "TA/DA", amount: "2500.00", paidFromAccountId: "acc-bkash", expenseFor: "Employee", expenseForId: "sales1", expenseForName: "Rafiq Ahmed", employeeId: "sales1", employee: "Rafiq Ahmed", employeeCode: "SE-001", designation: "Sales Executive", department: "Sales", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", taAmount: "1800.00", daAmount: "700.00", remarks: "Mymensingh customer visit", status: "Posted" },
+  { id: "exp-5", date: "2026-08-10", categoryId: "ec-10", categoryName: "Rent", subtype: "General", amount: "45000.00", paidFromAccountId: "acc-city", expenseFor: "Office", expenseForId: "head-office", expenseForName: "Head Office", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Office monthly rent", status: "Posted" },
+  { id: "exp-6", date: "2026-08-12", categoryId: "ec-11", categoryName: "Utilities", subtype: "General", amount: "12850.00", paidFromAccountId: "acc-city", expenseFor: "Office", expenseForId: "head-office", expenseForName: "Head Office", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Office electricity and water", attachmentName: "office-utility-receipt.png", attachment: uploadedDocument({ id: "doc-exp-6", entityType: "expense", entityId: "exp-6", documentType: "Expense Receipt", fileName: "office-utility-receipt.png", mimeType: "image/png", sizeBytes: 1967263, createdAt: "2026-08-12", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan" }), status: "Posted" },
+  { id: "exp-7", date: "2026-08-15", categoryId: "ec-18", categoryName: "Marketing", subtype: "General", amount: "3850.00", paidFromAccountId: "acc-cash", expenseFor: "Employee", expenseForId: "sales2", expenseForName: "Shamima Sultana", employeeId: "sales2", employee: "Shamima Sultana", employeeCode: "SE-014", designation: "Sales Executive", department: "Sales", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Clinical presentation material and sample labels", status: "Posted" },
+  { id: "exp-8", date: "2026-08-18", categoryId: "ec-15", categoryName: "Fuel", subtype: "General", amount: "2200.00", paidFromAccountId: "acc-cash", expenseFor: "Warehouse", expenseForId: "wh-main", expenseForName: "MIPRO Main Warehouse", enteredByUserId: "u-warehouse", enteredByName: "Aminul Islam", remarks: "Local distribution vehicle fuel", status: "Posted" },
+  { id: "exp-9", date: "2026-08-20", categoryId: "ec-19", categoryName: "Training", subtype: "General", amount: "7500.00", paidFromAccountId: "acc-city", expenseFor: "Company / General", expenseForId: "company", expenseForName: "MIPRO HealthCare Corporation", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Product compliance refresher session", status: "Posted" },
+  { id: "exp-10", date: "2026-08-22", categoryId: "ec-23", categoryName: "Bank Charges", subtype: "General", amount: "1150.00", paidFromAccountId: "acc-city", expenseFor: "Company / General", expenseForId: "company", expenseForName: "MIPRO HealthCare Corporation", enteredByUserId: "u-accounts", enteredByName: "Nusrat Jahan", remarks: "Operational bank service charge", status: "Posted" }
 ];
 
 export const accountTransactions: AccountTransaction[] = [
