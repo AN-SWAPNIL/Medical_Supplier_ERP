@@ -230,8 +230,8 @@ export default function HomePage() {
           <div className="mt-9 grid gap-5 md:grid-cols-3">
             {(resources.data ?? []).slice(0, 3).map((resource) => (
               <article className="group overflow-hidden rounded-md border border-slate-200 bg-white transition hover:-translate-y-1 hover:shadow-lg" key={resource.slug}>
-                <div className="aspect-[16/9] overflow-hidden bg-slate-50 p-4"><img className="h-full w-full object-contain transition duration-500 group-hover:scale-105" src={resource.image} alt="" loading="lazy" /></div>
-                <div className="p-5"><p className="text-xs font-bold uppercase text-cyan-700">{resource.kind}</p><h3 className="mt-2 text-lg font-bold leading-6 text-slate-950">{resource.title}</h3><p className="mt-3 text-sm leading-6 text-slate-600">{resource.summary}</p><Link className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-blue-900" to={`/news#${resource.slug}`}>Read resource <ArrowRight className="h-4 w-4" /></Link></div>
+                <div className="aspect-[16/9] overflow-hidden bg-slate-50 p-4"><img className="h-full w-full object-contain transition duration-500 group-hover:scale-105" src={resource.image} alt={resource.imageAlt ?? ""} loading="lazy" /></div>
+                <div className="p-5"><p className="text-xs font-bold uppercase text-cyan-700">{resource.kind}</p><h3 className="mt-2 text-lg font-bold leading-6 text-slate-950">{resource.title}</h3><p className="mt-3 text-sm leading-6 text-slate-600">{resource.summary}</p><Link className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-blue-900" to={`/news/${resource.slug}`}>Read full article <ArrowRight className="h-4 w-4" /></Link></div>
               </article>
             ))}
           </div>

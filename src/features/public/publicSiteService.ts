@@ -74,6 +74,7 @@ export const publicSiteService = {
   legacyProduct: (legacySlug: string) => get<PublicProduct | null>(`/api/public/legacy-products/${encodeURIComponent(legacySlug)}`, PublicProductSchema.nullable()),
   certificates: () => get<PublicCertificate[]>("/api/public/certificates", z.array(PublicCertificateSchema)),
   resources: () => get<PublicResource[]>("/api/public/resources", z.array(PublicResourceSchema)),
+  resource: (slug: string) => get<PublicResource | null>(`/api/public/resources/${encodeURIComponent(slug)}`, PublicResourceSchema.nullable()),
   submitInquiry: (payload: PublicInquiryInput) => post<PublicInquiryReceipt>("/api/public/contact", payload, PublicInquiryReceiptSchema)
 };
 

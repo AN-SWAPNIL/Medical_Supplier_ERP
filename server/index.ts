@@ -1133,6 +1133,10 @@ app.get("/api/public/products/:slug", (req, res) => {
 });
 app.get("/api/public/certificates", (_req, res) => res.json(ok(sortPublicContent(publicCertificates.filter((certificate) => certificate.published !== false)), "Published certificates loaded")));
 app.get("/api/public/resources", (_req, res) => res.json(ok(sortPublicContent(publicResources.filter((resource) => resource.published !== false)), "Published resources loaded")));
+app.get("/api/public/resources/:slug", (req, res) => {
+  const resource = publicResources.find((entry) => entry.published !== false && entry.slug === req.params.slug) ?? null;
+  res.json(ok(resource, resource ? "Published resource loaded" : "Resource not found"));
+});
 
 app.post("/api/public/contact", (req, res) => {
   const forwarded = String(req.headers["x-forwarded-for"] ?? req.ip ?? "unknown").split(",")[0].trim();

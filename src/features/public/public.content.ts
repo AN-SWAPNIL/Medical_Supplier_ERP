@@ -388,15 +388,89 @@ export const publicCertificates: PublicCertificate[] = [
 
 export const publicResources: PublicResource[] = [
   {
+    slug: "bangladesh-dialysis-access-expansion",
+    kind: "Industry news",
+    title: "Bangladesh plans wider dialysis access beyond major cities",
+    summary: "A July 2026 policy update signals wider public dialysis capacity at medical college, district and upazila hospitals.",
+    body: [
+      "Bangladesh's health ministry has announced plans to expand kidney dialysis services beyond the country's largest cities. Public reporting describes larger dialysis centers at medical college hospitals and new 10-bed units at district and upazila-level facilities.",
+      "The direction matters because regular dialysis remains difficult to access for many patients outside major urban centers. Wider service coverage will require more than equipment alone: facilities also need trained teams, dependable utilities, validated consumables and a consistent replenishment process.",
+      "For hospital procurement teams, early planning should connect expected treatment capacity with the exact dialyzer, blood tubing and vascular-access configurations approved for each machine and clinical protocol. Generic product names are not enough for safe ordering.",
+      "MIPRO's role is commercial and operational. We help institutions review model-specific requirements, supporting documents and supply terms before quotation. Clinical selection and treatment decisions remain with qualified healthcare professionals.",
+      "This article summarizes linked public reporting and does not represent a government notice, clinical guideline or guarantee of project timing. Readers should consult the original sources for the latest implementation details."
+    ],
+    image: "/resources/mipro-product-catalogue.jpg",
+    imageAlt: "MIPRO renal product catalogue with dialyzer, blood tubing and vascular access products",
+    publishedOn: "2026-07-13",
+    author: "MIPRO Editorial Desk",
+    readingMinutes: 4,
+    takeaways: [
+      "Planned dialysis expansion is intended to improve access outside major cities.",
+      "Capacity planning must include compatible consumables, documentation and replenishment.",
+      "Exact implementation details should be checked against current government information."
+    ],
+    sources: [
+      { label: "The Business Standard: Govt plans kidney dialysis services at district, upazila hospitals", url: "https://www.tbsnews.net/bangladesh/health/govt-plans-kidney-dialysis-services-district-upazila-hospitals-1487531" },
+      { label: "Bangladesh Sangbad Sangstha: dialysis units planned at upazila hospitals", url: "https://www.bssnews.net/js-session/404143" }
+    ],
+    featured: true,
+    published: true,
+    sortOrder: 1
+  },
+  {
+    slug: "renal-procurement-readiness",
+    kind: "Clinical resource",
+    title: "Five readiness checks for a dependable dialysis consumable supply",
+    summary: "A practical planning note for institutions aligning treatment capacity, compatible products and replenishment controls.",
+    body: [
+      "Dialysis consumables form a connected treatment set. Procurement planning should begin with the approved dialysis-machine configuration, prescribed therapy and institution-specific protocol, then identify the exact compatible product variants.",
+      "Demand should be estimated from planned sessions, expected patient load, contingency stock and supplier lead time. A stock figure without batch, expiry and usage context cannot show whether the right product will be available when needed.",
+      "Before commercial approval, review the current product specification, instructions for use, manufacturer identity, sterilization information, packaging unit and relevant regulatory or quality documents for the exact model.",
+      "Receiving controls matter as much as ordering. Institutions should verify model, quantity, LOT or batch, manufacturing date, expiry date and package condition, then keep those references connected to warehouse movement.",
+      "Finally, define a replenishment trigger and escalation contact. A documented review path helps procurement, stores and clinical teams resolve a mismatch before it becomes a service interruption."
+    ],
+    image: "/mipro-warehouse.png",
+    imageAlt: "Organized medical supply warehouse representing batch-aware product handling",
+    publishedOn: "2026-07-18",
+    author: "MIPRO Product & Supply Team",
+    readingMinutes: 5,
+    takeaways: [
+      "Start with the approved machine and clinical configuration.",
+      "Plan demand with lead time, contingency stock, batch and expiry visibility.",
+      "Check exact product documents before quotation and again at receipt."
+    ],
+    sources: [
+      { label: "MIPRO supplied HD-series product literature", url: "/resources/mipro-hd17h-technical.pdf" },
+      { label: "MIPRO public product catalogue", url: "/products" }
+    ],
+    featured: true,
+    published: true,
+    sortOrder: 2
+  },
+  {
     slug: "high-flux-and-low-flux-dialyzers",
     kind: "Product guide",
     title: "HD-17H and HD-series dialyzers: procurement questions to ask",
     summary: "A concise checklist for matching an HD-series dialyzer model with clinical and machine requirements.",
     body: [
       "Flux category is only one part of product selection. Buyers should confirm the prescribed model, membrane characteristics, surface area, sterilization method and dialysis-machine compatibility.",
-      "MIPRO can provide model-specific documentation during quotation review so the requesting institution can verify the exact item before order confirmation."
+      "The supplied HD-series literature identifies multiple high-flux models and highlights the HD-17H with a listed effective membrane area of 1.7 square meters. Values shown in a product table depend on stated test conditions and must not be treated as a clinical prescription.",
+      "Ask for the current model-specific specification, instructions for use, packaging information and manufacturer documentation. The model named in the quotation, supporting records and delivered label should agree.",
+      "MIPRO can provide model-specific documentation during quotation review so the requesting institution can verify the exact item before order confirmation. Clinical suitability remains the responsibility of the qualified care team."
     ],
-    image: "/resources/mipro-hd17h-features.jpg"
+    image: "/resources/mipro-hd17h-features.jpg",
+    imageAlt: "HD-17H product feature sheet with membrane and performance information",
+    publishedOn: "2026-06-24",
+    author: "MIPRO Product Desk",
+    readingMinutes: 4,
+    takeaways: ["Confirm the exact prescribed model, not only the flux category.", "Match quotation, documentation and delivered product labels.", "Use current approved documentation for clinical review."],
+    sources: [
+      { label: "HD-17H features sheet supplied to MIPRO", url: "/resources/mipro-hd17h-features.pdf" },
+      { label: "HD-series technical table supplied to MIPRO", url: "/resources/mipro-hd17h-technical.pdf" }
+    ],
+    featured: true,
+    published: true,
+    sortOrder: 3
   },
   {
     slug: "blood-tubing-set-review",
@@ -405,9 +479,19 @@ export const publicResources: PublicResource[] = [
     summary: "Key compatibility and documentation checks before an institutional purchase.",
     body: [
       "Blood tubing configurations differ across dialysis systems. Confirm the machine model, arterial and venous line configuration, chamber arrangement, connectors and packaging specification.",
-      "The final purchase description should identify the approved configuration rather than relying on a generic product name alone."
+      "Review the pump segment, pressure-monitoring lines, chambers, clamps, connectors and included accessories against the approved machine setup. Similar-looking sets can differ in clinically important details.",
+      "The final purchase description should identify the approved configuration rather than relying on a generic product name alone. Product label, LOT, expiry and package condition should be checked at receipt.",
+      "This checklist supports procurement preparation only. Setup and use must follow the current instructions for use and the institution's clinical procedures."
     ],
-    image: "/products/blood-tubing-set.png"
+    image: "/products/blood-tubing-set.png",
+    imageAlt: "Blood tubing set for hemodialysis with chambers, connectors and color-coded lines",
+    publishedOn: "2026-06-15",
+    author: "MIPRO Product Desk",
+    readingMinutes: 4,
+    takeaways: ["State the dialysis-machine configuration.", "Confirm chambers, connectors and accessories.", "Verify LOT, expiry and package condition at receipt."],
+    sources: [{ label: "MIPRO Blood Tubing Set product information", url: "/products/blood-tubing-set-for-hemodialysis" }],
+    published: true,
+    sortOrder: 4
   },
   {
     slug: "av-fistula-needle-selection",
@@ -416,9 +500,19 @@ export const publicResources: PublicResource[] = [
     summary: "A practical pre-quotation checklist for gauge, length, tubing and packaging requirements.",
     body: [
       "Institutional requests should state the required gauge, needle length, tubing configuration, back-eye requirement where relevant, and expected unit packaging.",
-      "Clinical selection and use remain the responsibility of appropriately trained healthcare professionals."
+      "Confirm whether the request is for arterial, venous or paired sets and record the required color coding and safety features. The exact quotation description should carry these details forward.",
+      "At receiving, check the product label, sterile barrier, LOT, manufacturing date and expiry. Storage and issue should follow the approved documentation and the institution's controls.",
+      "Clinical selection, cannulation and use remain the responsibility of appropriately trained healthcare professionals."
     ],
-    image: "/products/av-fistula-needle.jpg"
+    image: "/products/av-fistula-needle.jpg",
+    imageAlt: "Color-coded disposable A.V. fistula needle sets for hemodialysis",
+    publishedOn: "2026-06-05",
+    author: "MIPRO Product Desk",
+    readingMinutes: 3,
+    takeaways: ["Specify gauge, length and line configuration.", "Identify arterial, venous or paired requirements.", "Check sterile packaging, LOT and expiry at receipt."],
+    sources: [{ label: "MIPRO A.V. Fistula Needle product information", url: "/products/disposable-a-v-fistula-needle" }],
+    published: true,
+    sortOrder: 5
   },
   {
     slug: "institutional-document-checklist",
@@ -427,8 +521,18 @@ export const publicResources: PublicResource[] = [
     summary: "How MIPRO connects product inquiry, technical review and commercial quotation without an online cart.",
     body: [
       "A website inquiry records the institution, product interest and requested documentation. The sales team then confirms model, manufacturer documentation and commercial requirements before preparing a quotation.",
-      "This review-first approach is better suited to medical procurement than a public checkout flow."
+      "When the inquiry is qualified, the selected product and customer context carry into MIPRO's internal sales workflow. Quotation, order and delivery records can then retain the agreed item description without repeated entry.",
+      "This review-first approach is better suited to institutional medical procurement than a public checkout flow. It gives both parties a clear point to resolve model, documentation and commercial questions.",
+      "Public inquiries do not create ERP user accounts and do not expose stock, supplier pricing or landed-cost information. MIPRO employees access operational records through the separate Employee Portal."
     ],
-    image: "/medical-products.png"
+    image: "/medical-products.png",
+    imageAlt: "MIPRO medical products arranged for institutional review",
+    publishedOn: "2026-05-28",
+    author: "MIPRO Healthcare Corporation",
+    readingMinutes: 3,
+    takeaways: ["Inquiry comes before quotation.", "Exact product and documentation details are confirmed before order.", "The public website and internal ERP remain separate."],
+    sources: [{ label: "Contact MIPRO for an institutional inquiry", url: "/contact" }],
+    published: true,
+    sortOrder: 6
   }
 ];

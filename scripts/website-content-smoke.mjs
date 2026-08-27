@@ -37,7 +37,7 @@ try {
     page.on("console", (message) => { if (message.type() === "error" && !message.text().includes("favicon")) errors.push(message.text()); });
     await routeApi(page);
 
-    for (const path of ["/", "/about", "/products", "/products/hollow-fiber-hemodialyzer-high-low-flux", "/certificates", "/news", "/contact", "/login"]) {
+    for (const path of ["/", "/about", "/products", "/products/hollow-fiber-hemodialyzer-high-low-flux", "/certificates", "/news", "/news/bangladesh-dialysis-access-expansion", "/contact", "/login"]) {
       await page.goto(webBase + path, { waitUntil: "domcontentloaded" });
       await page.locator("h1").first().waitFor({ timeout: 15_000 });
       assert.equal(await page.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, `${path} overflows at ${viewport.name}`);
@@ -51,6 +51,14 @@ try {
     await page.getByRole("button", { name: "Puncture & Access" }).click();
     await page.getByRole("button", { name: /Warehouse handling/ }).click();
     await page.screenshot({ path: `artifacts/website-content-smoke/home-${viewport.name}.png`, fullPage: true, animations: "disabled" });
+
+    await page.goto(webBase + "/about", { waitUntil: "networkidle" });
+    await page.screenshot({ path: `artifacts/website-content-smoke/about-${viewport.name}.png`, fullPage: true, animations: "disabled" });
+    await page.goto(webBase + "/news", { waitUntil: "networkidle" });
+    await page.screenshot({ path: `artifacts/website-content-smoke/news-${viewport.name}.png`, fullPage: true, animations: "disabled" });
+    await page.goto(webBase + "/news/bangladesh-dialysis-access-expansion", { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "Key points" }).waitFor();
+    await page.screenshot({ path: `artifacts/website-content-smoke/article-${viewport.name}.png`, fullPage: true, animations: "disabled" });
 
     await login(page, "superadmin@mipro.local");
     await page.goto(webBase + "/app/settings?view=website", { waitUntil: "networkidle" });

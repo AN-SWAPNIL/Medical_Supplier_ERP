@@ -5,6 +5,8 @@ type PublicMeta = {
   description: string;
   path?: string;
   image?: string;
+  type?: "website" | "article";
+  publishedOn?: string;
 };
 
 function setMeta(selector: string, attribute: "name" | "property", key: string, content: string) {
@@ -17,7 +19,7 @@ function setMeta(selector: string, attribute: "name" | "property", key: string, 
   element.content = content;
 }
 
-export function usePublicMeta({ title, description, path = "/", image = "/medical-products.png" }: PublicMeta) {
+export function usePublicMeta({ title, description, path = "/", image = "/medical-products.png", type = "website", publishedOn }: PublicMeta) {
   useEffect(() => {
     const url = `https://www.miprobd.com${path}`;
     const imageUrl = image.startsWith("http") ? image : `https://www.miprobd.com${image}`;
@@ -25,10 +27,11 @@ export function usePublicMeta({ title, description, path = "/", image = "/medica
     setMeta('meta[name="description"]', "name", "description", description);
     setMeta('meta[property="og:title"]', "property", "og:title", title);
     setMeta('meta[property="og:description"]', "property", "og:description", description);
-    setMeta('meta[property="og:type"]', "property", "og:type", "website");
+    setMeta('meta[property="og:type"]', "property", "og:type", type);
     setMeta('meta[property="og:url"]', "property", "og:url", url);
     setMeta('meta[property="og:image"]', "property", "og:image", imageUrl);
     setMeta('meta[name="robots"]', "name", "robots", "index,follow,max-image-preview:large");
+    if (publishedOn) setMeta('meta[property="article:published_time"]', "property", "article:published_time", publishedOn);
 
     let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {
@@ -37,5 +40,5 @@ export function usePublicMeta({ title, description, path = "/", image = "/medica
       document.head.appendChild(canonical);
     }
     canonical.href = url;
-  }, [description, image, path, title]);
+  }, [description, image, path, publishedOn, title, type]);
 }

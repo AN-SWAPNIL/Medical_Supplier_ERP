@@ -91,11 +91,18 @@ export type PublicCertificate = {
 
 export type PublicResource = {
   slug: string;
-  kind: "Clinical resource" | "Product guide" | "Company update";
+  kind: "Clinical resource" | "Product guide" | "Company update" | "Industry news";
   title: string;
   summary: string;
   body: string[];
   image: string;
+  imageAlt?: string;
+  publishedOn?: string;
+  author?: string;
+  readingMinutes?: number;
+  takeaways?: string[];
+  sources?: Array<{ label: string; url: string }>;
+  featured?: boolean;
   published?: boolean;
   sortOrder?: number;
 };

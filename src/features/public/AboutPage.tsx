@@ -1,5 +1,6 @@
-import { Building2, Handshake, HeartHandshake, PackageCheck, ShieldCheck, Truck } from "lucide-react";
+import { Activity, Building2, CheckCircle2, Handshake, HeartHandshake, MapPin, Network, PackageCheck, ShieldCheck, Truck, UserRoundCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import MiproLogo from "../../components/branding/MiproLogo";
 import ContactCTA from "./components/ContactCTA";
 import PublicPageHero from "./components/PublicPageHero";
 import SectionHeading from "./components/SectionHeading";
@@ -24,13 +25,24 @@ export default function AboutPage() {
     <>
       <PublicPageHero eyebrow="About MIPRO" title="Healthcare supply built around dependable operations" body="MIPRO Healthcare Corporation supports medical product procurement and distribution for healthcare organizations in Bangladesh." image="/medical-products.png" imageAlt="Collection of hemodialysis and medical consumable products" actions={<Link className="inline-flex h-11 items-center rounded-md bg-cyan-400 px-4 text-sm font-bold text-blue-950 hover:bg-cyan-300" to="/contact">Speak with our team</Link>} />
 
+      <section className="border-b border-slate-200 bg-white" aria-label="MIPRO company profile highlights">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 px-4 sm:px-6 lg:grid-cols-4 lg:px-8">
+          {[[MapPin, "Uttara, Dhaka", "Operating base"], [Activity, "Renal products", "Primary public focus"], [Building2, "Institutional & dealer", "Commercial channels"], [Network, "Five regions", "Published sales coverage"]].map(([Icon, value, label], index) => {
+            const FactIcon = Icon as typeof MapPin;
+            return <div className={`flex min-h-28 items-center gap-3 px-3 py-5 sm:px-5 ${index % 2 ? "border-l border-slate-200" : ""} ${index > 1 ? "border-t border-slate-200 lg:border-t-0" : ""} ${index === 2 ? "lg:border-l" : ""}`} key={value as string}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-cyan-50 text-cyan-700"><FactIcon className="h-5 w-5" /></span><div><strong className="block text-base font-bold text-blue-950">{value as string}</strong><span className="text-xs font-semibold text-slate-500">{label as string}</span></div></div>;
+          })}
+        </div>
+      </section>
+
       <section className="bg-white py-16 sm:py-20">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
-          <SectionHeading eyebrow="Company overview" title="MIPRO Healthcare Corporation" />
+          <SectionHeading eyebrow="Company overview" title="A Bangladesh healthcare supply business with a renal-care focus" />
           <div className="space-y-5 text-base leading-8 text-slate-700">
-            <p>MIPRO is a Bangladesh healthcare supply business focused on medical devices and consumables. The company supports the commercial and operational path from overseas sourcing and import coordination through warehouse handling and institutional distribution.</p>
-            <p>The public catalogue is designed for professional inquiry. Exact model, manufacturer, specification, documentation and commercial terms are confirmed before a quotation proceeds.</p>
-            <p>MIPRO does not present itself as the manufacturer of distributed products unless a specific product record explicitly confirms that relationship.</p>
+            <p>MIPRO Healthcare Corporation operates from Uttara, Dhaka and supplies medical devices and consumables for professional healthcare use. Its established public catalogue places hemodialysis products at the center, including dialyzers, blood tubing sets and A.V. fistula needles.</p>
+            <p>The business works through institutional and dealer relationships rather than a consumer checkout model. A published 2026 renal-product recruitment notice identifies sales activity across Dhaka, Chattogram, Mymensingh, Rajshahi and Sylhet. These are commercial coverage areas, not claims of branch offices.</p>
+            <p>Behind each inquiry, MIPRO supports the path from overseas sourcing and import coordination through warehouse receipt, batch-aware handling, quotation and customer delivery. The public catalogue is deliberately separate from confidential supplier, stock and landed-cost records.</p>
+            <p>Exact model, manufacturer, specification, documentation and commercial terms are confirmed before a quotation proceeds. MIPRO does not present itself as the manufacturer of distributed products unless a specific product record explicitly confirms that relationship.</p>
+            <div className="flex flex-wrap gap-4 border-t border-slate-200 pt-5 text-sm font-bold"><a className="text-blue-900 hover:text-cyan-700" href="https://www.miprobd.com/" target="_blank" rel="noreferrer">Established MiproBD website</a><a className="text-blue-900 hover:text-cyan-700" href="https://bd.linkedin.com/jobs/view/sales-executive-renal-products-for-mipro-healthcare-corporation-job-id-1479900-at-bdjobs-com-4402458176" target="_blank" rel="noreferrer">Published company recruitment profile</a></div>
           </div>
         </div>
       </section>
@@ -42,6 +54,22 @@ export default function AboutPage() {
             {businessFocus.map(([Icon, title, body]) => (
               <div className="flex gap-4 rounded-md border border-slate-200 bg-white p-6" key={title}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-cyan-50 text-cyan-700"><Icon className="h-5 w-5" /></span><div><h3 className="font-bold text-slate-950">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{body}</p></div></div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-cyan-200 bg-cyan-50 py-16 sm:py-20">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:px-8">
+          <div className="overflow-hidden rounded-md border border-cyan-200 bg-white p-7 shadow-sm sm:p-9">
+            <MiproLogo className="w-full max-w-[280px]" />
+            <div className="mt-8 border-l-4 border-red-600 pl-5"><p className="text-xs font-bold uppercase text-cyan-700">Leadership principle</p><p className="mt-2 text-xl font-bold leading-8 text-blue-950">Keep product, commercial and fulfilment accountability connected.</p></div>
+          </div>
+          <div>
+            <SectionHeading eyebrow="Leadership" title="An owner-led operating model" body="MIPRO's owner remains close to the decisions that carry the greatest commercial and supply responsibility, while department teams execute the daily workflow through defined authority." />
+            <div className="mt-7 grid gap-4">
+              {["Owner-level oversight for sensitive landed cost, profitability and exceptional commercial decisions", "Delegated responsibility across import, warehouse, sales, accounts and field teams", "Traceable approvals and connected records from supplier inquiry through institutional delivery"].map((item) => <div className="flex items-start gap-3 border-b border-cyan-200 pb-4 text-sm font-semibold leading-6 text-slate-700" key={item}><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-cyan-700" />{item}</div>)}
+            </div>
+            <div className="mt-6 flex items-start gap-3 text-sm leading-6 text-slate-600"><UserRoundCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-900" /><p>This close leadership oversight gives institutional buyers a clear escalation path while preserving accountable ownership within each operating team.</p></div>
           </div>
         </div>
       </section>

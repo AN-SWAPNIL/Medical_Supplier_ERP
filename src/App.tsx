@@ -14,6 +14,7 @@ const ProductsPage = lazy(() => import("./features/public/ProductsPage"));
 const ProductDetailPage = lazy(() => import("./features/public/ProductDetailPage"));
 const CertificatesPage = lazy(() => import("./features/public/CertificatesPage"));
 const NewsPage = lazy(() => import("./features/public/NewsPage"));
+const ResourceDetailPage = lazy(() => import("./features/public/ResourceDetailPage"));
 const ContactPage = lazy(() => import("./features/public/ContactPage"));
 const LegacyProductRedirect = lazy(() => import("./features/public/LegacyProductRedirect"));
 const AccountsPage = lazy(() => import("./domains/accounts/AccountsPage"));
@@ -56,6 +57,7 @@ function App() {
         <Route path="/products/:slug" element={deferred(<ProductDetailPage />)} />
         <Route path="/certificates" element={deferred(<CertificatesPage />)} />
         <Route path="/news" element={deferred(<NewsPage />)} />
+        <Route path="/news/:slug" element={deferred(<ResourceDetailPage />)} />
         <Route path="/contact" element={deferred(<ContactPage />)} />
       </Route>
       <Route path="/product/:legacySlug" element={deferred(<LegacyProductRedirect />)} />

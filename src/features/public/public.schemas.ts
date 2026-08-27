@@ -90,11 +90,18 @@ export const PublicCertificateSchema = z.object({
 
 export const PublicResourceSchema = z.object({
   slug: nonEmpty,
-  kind: z.enum(["Clinical resource", "Product guide", "Company update"]),
+  kind: z.enum(["Clinical resource", "Product guide", "Company update", "Industry news"]),
   title: nonEmpty,
   summary: nonEmpty,
   body: z.array(nonEmpty).min(1),
   image: nonEmpty,
+  imageAlt: z.string().optional(),
+  publishedOn: z.string().optional(),
+  author: z.string().optional(),
+  readingMinutes: z.number().int().positive().optional(),
+  takeaways: z.array(nonEmpty).optional(),
+  sources: z.array(z.object({ label: nonEmpty, url: nonEmpty })).optional(),
+  featured: z.boolean().optional(),
   published: z.boolean().optional(),
   sortOrder: z.number().int().nonnegative().optional()
 });
