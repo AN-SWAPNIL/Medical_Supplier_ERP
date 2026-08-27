@@ -633,10 +633,20 @@ export type MarketingActivityType =
   | "LEAD_CREATED"
   | "CUSTOMER_CONTACT"
   | "CUSTOMER_VISIT"
+  | "DOCTOR_MEETING"
+  | "PROCUREMENT_MEETING"
+  | "DEALER_VISIT"
   | "PRODUCT_PRESENTATION"
+  | "PRODUCT_DEMONSTRATION"
   | "SAMPLE_DELIVERED"
   | "FOLLOW_UP_COMPLETED"
   | "NEGOTIATION_UPDATE"
+  | "TENDER_FOLLOW_UP"
+  | "COLLECTION_VISIT"
+  | "TRAINING_SESSION"
+  | "SERVICE_FOLLOW_UP"
+  | "MARKET_SURVEY"
+  | "OFFICE_COORDINATION"
   | "GENERAL_NOTE"
   | "CHECK_IN"
   | "CHECK_OUT"
@@ -823,6 +833,8 @@ export type EmployeeMarketingSnapshot = {
   followUps: MarketingFollowUp[];
   leads: MarketingLead[];
   dailyPlan?: DailyMarketingPlan;
+  dailyPlans: DailyMarketingPlan[];
+  monthlyPlans: MonthlyMarketingPlan[];
 };
 
 export type DashboardData = {

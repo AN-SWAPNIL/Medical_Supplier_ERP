@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowRight, BadgeCheck, Boxes, ClipboardCheck, FileBadge2, Globe2, Layers3, MessageSquareText, PackageCheck, Truck } from "lucide-react";
+import { ArrowRight, BadgeCheck, Boxes, ClipboardCheck, ExternalLink, FileBadge2, FileText, Globe2, Layers3, MessageSquareText, PackageCheck, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ContactCTA from "./components/ContactCTA";
@@ -17,9 +17,57 @@ const supplySteps = [
   { icon: Truck, title: "Institutional distribution", body: "Quotation-led supply supports hospitals, clinics, dialysis centers and dealers.", detail: "Customer requirements carry into quotation, order, delivery and collection without a public checkout flow.", image: "/products/dialyzer.jpg" }
 ] as const;
 
+const productLiterature = [
+  {
+    id: "catalogue",
+    tab: "Product Range",
+    eyebrow: "Dialysis and single-use essentials",
+    title: "A product range organized around institutional healthcare supply",
+    body: "The supplied MIPRO catalogue brings the core dialysis range together with selected single-use products for a clearer procurement discussion.",
+    facts: ["High-flux and low-flux hemodialyzer series", "Blood tubing sets and A.V. fistula needle sets", "Selected burette, ET tube, scalp vein and Foley catheter products"],
+    image: "/resources/mipro-product-catalogue.jpg",
+    imageAlt: "MIPRO product catalogue showing hemodialyzer, blood tubing, fistula needles and selected medical disposables",
+    pdf: "/resources/mipro-product-catalogue.pdf"
+  },
+  {
+    id: "hd17h",
+    tab: "HD-17H Focus",
+    eyebrow: "Hollow fiber hemodialyzer",
+    title: "HD-17H high-flux product information at a glance",
+    body: "The supplied product literature highlights the HD-17H configuration for professional hemodialysis procurement and model-specific review.",
+    facts: ["High-flux HD-17H model", "Effective membrane area listed as 1.7 m²", "PES hollow-fiber membrane information in the supplied literature"],
+    image: "/resources/mipro-hd17h-campaign.jpg",
+    imageAlt: "MIPRO HD-17H hemodialyzer campaign sheet with dialysis blood tubing",
+    pdf: "/resources/mipro-hd17h-campaign.pdf"
+  },
+  {
+    id: "features",
+    tab: "Features",
+    eyebrow: "Product literature review",
+    title: "Performance, membrane and handling information in one visual sheet",
+    body: "Feature information is presented as manufacturer/product literature and should be checked against the approved documentation for the exact quoted model.",
+    facts: ["Biocompatibility and ultrafiltration information", "Triple-layer asymmetric membrane illustration", "Sterility and pyrogen-free symbols shown on the supplied sheet"],
+    image: "/resources/mipro-hd17h-features.jpg",
+    imageAlt: "HD-17H feature sheet showing membrane structure and product information",
+    pdf: "/resources/mipro-hd17h-features.pdf"
+  },
+  {
+    id: "technical",
+    tab: "Technical Data",
+    eyebrow: "Model comparison",
+    title: "A technical reference across the HD high-flux series",
+    body: "The supplied table lists HD-10H through HD-22H and highlights HD-17H. Final selection remains subject to clinical review, current IFU and approved manufacturer records.",
+    facts: ["HD-17H highlighted with 1.7 m² effective membrane area", "Blood-flow and clearance values shown by test condition", "Manufacturer context for Jiangxi Hongda Medical Equipment Group"],
+    image: "/resources/mipro-hd17h-technical.jpg",
+    imageAlt: "HD hemodialyzer technical table with HD-17H highlighted",
+    pdf: "/resources/mipro-hd17h-technical.pdf"
+  }
+] as const;
+
 export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState("Featured");
   const [activeSupplyStep, setActiveSupplyStep] = useState(0);
+  const [activeLiterature, setActiveLiterature] = useState(0);
   usePublicMeta({
     title: "MIPRO Healthcare Corporation | Medical Device & Consumable Supplier in Bangladesh",
     description: "MIPRO Healthcare Corporation supplies medical devices and consumables including hemodialysis and related healthcare products in Bangladesh."
@@ -38,6 +86,7 @@ export default function HomePage() {
     return productRows.filter((product) => product.category === activeCategory).slice(0, 8);
   }, [activeCategory, productRows]);
   const activeStep = supplySteps[activeSupplyStep];
+  const literature = productLiterature[activeLiterature];
 
   const catalogueMetrics = [
     { value: String(productRows.length).padStart(2, "0"), label: "Published products", icon: PackageCheck },
@@ -58,6 +107,27 @@ export default function HomePage() {
               <div><strong className="block text-2xl font-bold text-blue-950">{value}</strong><span className="text-xs font-semibold text-slate-500">{label}</span></div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="overflow-hidden bg-blue-950 py-14 text-white sm:py-18" aria-labelledby="product-literature-title">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 border-b border-white/15 pb-7 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl"><p className="text-xs font-bold uppercase text-cyan-300">MIPRO product literature</p><h2 className="mt-2 text-3xl font-bold leading-tight sm:text-4xl" id="product-literature-title">Dialysis products shown with practical model information</h2><p className="mt-4 text-base leading-7 text-blue-100">Review the supplied product range, HD-17H focus, feature overview and technical table without leaving the homepage.</p></div>
+            <div className="flex max-w-full gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Select product literature sheet">{productLiterature.map((item, index) => <button className={clsx("h-10 shrink-0 border-b-2 px-3 text-sm font-bold transition", activeLiterature === index ? "border-red-500 bg-white/10 text-white" : "border-transparent text-blue-200 hover:bg-white/5 hover:text-white")} type="button" role="tab" aria-selected={activeLiterature === index} onClick={() => setActiveLiterature(index)} key={item.id}>{item.tab}</button>)}</div>
+          </div>
+
+          <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,.9fr)_minmax(420px,1.1fr)] lg:items-center">
+            <div className="min-w-0">
+              <span className="inline-flex border-l-4 border-red-500 pl-3 text-xs font-bold uppercase text-cyan-300">{literature.eyebrow}</span>
+              <h3 className="mt-4 text-2xl font-bold leading-tight sm:text-3xl">{literature.title}</h3>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-blue-100 sm:text-base">{literature.body}</p>
+              <div className="mt-6 divide-y divide-white/15 border-y border-white/15">{literature.facts.map((fact, index) => <div className="flex items-start gap-3 py-3 text-sm text-slate-100" key={fact}><span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-cyan-400 text-[10px] font-bold text-blue-950">0{index + 1}</span><span className="pt-0.5 leading-5">{fact}</span></div>)}</div>
+              <div className="mt-7 flex flex-wrap gap-3"><Link className="inline-flex h-11 items-center gap-2 rounded-md bg-cyan-400 px-4 text-sm font-bold text-blue-950 hover:bg-cyan-300" to="/products/hollow-fiber-hemodialyzer-high-low-flux">View product details <ArrowRight className="h-4 w-4" /></Link><a className="inline-flex h-11 items-center gap-2 rounded-md border border-white/35 px-4 text-sm font-bold text-white hover:bg-white/10" href={literature.pdf} target="_blank" rel="noreferrer"><FileText className="h-4 w-4" />Open literature PDF <ExternalLink className="h-3.5 w-3.5" /></a></div>
+              <p className="mt-5 text-xs leading-5 text-blue-200">Technical statements above summarize the supplied product literature. Confirm the exact quoted model, current instructions for use and manufacturer documentation before clinical or procurement decisions.</p>
+            </div>
+            <div className="relative mx-auto w-full max-w-[620px] overflow-hidden rounded-md border border-white/20 bg-[#eaf5ff] p-3 shadow-2xl"><img className="mx-auto aspect-[790/1119] max-h-[720px] w-full object-contain" src={literature.image} alt={literature.imageAlt} loading="lazy" /><span className="absolute right-5 top-5 rounded bg-red-600 px-2 py-1 text-[10px] font-bold uppercase text-white">Official supplied sheet</span></div>
+          </div>
         </div>
       </section>
 

@@ -12,12 +12,13 @@
     "build": "tsc -b && npm run typecheck:api && vite build",
     "typecheck:api": "tsc --noEmit --ignoreConfig --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck api/index.ts server/index.ts",
     "lint": "eslint .",
-    "test": "tsx --test src/domains/imports/costing.test.ts src/lib/permissions/effectiveAccess.test.ts",
+    "test": "tsx --test src/domains/imports/costing.test.ts src/lib/permissions/effectiveAccess.test.ts src/domains/employees/employeeReports.test.ts",
     "test:allocation": "tsx --test src/domains/imports/costing.test.ts",
     "test:flows": "node scripts/api-flow.mjs",
     "smoke": "node scripts/smoke.mjs",
     "smoke:public": "node scripts/public-smoke.mjs",
     "smoke:website": "node scripts/website-content-smoke.mjs",
+    "smoke:employee": "node scripts/employee-report-smoke.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

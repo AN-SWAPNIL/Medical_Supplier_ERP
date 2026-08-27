@@ -72,8 +72,8 @@ button:disabled {
     background: #ffffff !important;
   }
 
-  header,
-  aside,
+  .app-header,
+  .app-sidebar,
   nav,
   button,
   .no-print {
@@ -113,5 +113,47 @@ button:disabled {
     min-height: 297mm;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  body:has(.employee-print-report) main > :not(.employee-report-workspace) {
+    display: none !important;
+  }
+
+  body:has(.employee-print-report) .employee-report-workspace > :not(.employee-print-report) {
+    display: none !important;
+  }
+
+  .employee-print-report {
+    display: block !important;
+    width: 210mm !important;
+    min-height: 297mm;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .employee-print-report header {
+    display: block !important;
+  }
+
+  .employee-print-report section,
+  .employee-print-report footer {
+    break-inside: avoid;
+  }
+
+  .employee-report-mobile {
+    display: none !important;
+  }
+
+  .employee-report-table {
+    display: block !important;
+  }
+
+  .employee-report-table table {
+    min-width: 0 !important;
+    table-layout: fixed;
   }
 }

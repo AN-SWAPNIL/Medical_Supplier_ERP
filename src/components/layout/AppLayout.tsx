@@ -67,8 +67,8 @@ export default function AppLayout() {
   };
 
   const side = (
-    <aside className={clsx("flex h-full flex-col border-r border-slate-200 bg-white transition-[width]", collapsed ? "w-[72px]" : "w-[248px]")}>
-      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-3">
+    <aside className={clsx("app-sidebar flex h-full flex-col border-r border-blue-200 bg-[#f7fbff] transition-[width]", collapsed ? "w-[72px]" : "w-[248px]")}>
+      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-blue-900 bg-blue-950 px-3 text-white">
         <button
           className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-slate-200"
           type="button"
@@ -79,12 +79,12 @@ export default function AppLayout() {
         </button>
         {!collapsed ? (
           <div className="min-w-0 leading-tight">
-            <strong className="block truncate text-[15px] text-slate-950">MIPRO ERP</strong>
-            <span className="block truncate text-[11px] text-slate-500">Import & distribution</span>
+            <strong className="block truncate text-[15px] text-white">MIPRO ERP</strong>
+            <span className="block truncate text-[11px] text-blue-200">Import & distribution</span>
           </div>
         ) : null}
         <button
-          className="ml-auto hidden rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:block"
+          className="ml-auto hidden rounded-md p-1.5 text-blue-200 hover:bg-white/10 hover:text-white lg:block"
           type="button"
           onClick={() => setCollapsed((value) => !value)}
           aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
@@ -106,8 +106,8 @@ export default function AppLayout() {
                       clsx(
                         "flex h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm font-semibold transition",
                         isActive
-                          ? "border-cyan-600 bg-cyan-50 text-blue-950"
-                          : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                          ? "border-red-600 bg-blue-100 text-blue-950"
+                          : "border-transparent text-slate-600 hover:bg-blue-50 hover:text-blue-950"
                       )
                     }
                     key={item.path}
@@ -125,8 +125,8 @@ export default function AppLayout() {
         </div>
       </nav>
 
-      <div className="border-t border-slate-200 p-2">
-        <div className={clsx("rounded-md bg-slate-50 p-2", collapsed ? "text-center" : "flex items-center gap-2")}>
+      <div className="border-t border-blue-200 p-2">
+        <div className={clsx("rounded-md bg-blue-50 p-2", collapsed ? "text-center" : "flex items-center gap-2")}>
           <span className="flex h-7 w-7 shrink-0 items-center overflow-hidden rounded bg-white"><img className="h-full w-auto max-w-none" src="/favicon.png" alt="" /></span>
           {!collapsed ? (
             <div className="min-w-0">
@@ -140,7 +140,7 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-[#eaf1f7] text-slate-900">
       <Toasts />
       <div className="fixed inset-y-0 left-0 z-30 hidden lg:block">{side}</div>
       {mobileOpen ? (
@@ -154,7 +154,7 @@ export default function AppLayout() {
       ) : null}
 
       <div className={clsx("min-h-screen transition-[padding]", collapsed ? "lg:pl-[72px]" : "lg:pl-[248px]")}>
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <header className="app-header sticky top-0 z-20 border-b border-blue-200 border-t-2 border-t-red-600 bg-[#f8fbff]/95 backdrop-blur">
           <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-5">
             <button className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" type="button" onClick={() => { setCollapsed(false); setMobileOpen(true); }} aria-label="Open navigation">
               <Menu className="h-5 w-5" />

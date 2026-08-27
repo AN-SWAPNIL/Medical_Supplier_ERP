@@ -17,7 +17,7 @@ password123
 
 ## Recommended 20-Minute Demo
 
-1. **Corporate Home:** introduce MIPRO Healthcare Corporation, product categories, featured products, documentation discipline and the Employee Portal boundary.
+1. **Corporate Home:** introduce MIPRO Healthcare Corporation, switch the Product Range / HD-17H / Features / Technical Data literature views, open one supplied PDF, then explain product categories, documentation discipline and the Employee Portal boundary.
 2. **Products:** search/filter the B2B catalogue, open a product, and show that public records contain no price, stock, landed cost or supplier terms.
 3. **Certificates & Contact:** preview/download the migrated manufacturer scans, explain current versus historical status, show the free map, and submit a business inquiry.
 4. **Employee Portal:** explain production-safe login and choose a demo role only because `VITE_DEMO_MODE=true`.
@@ -30,12 +30,14 @@ password123
 11. **Warehouse Receipt:** explain finalization lock and inherited cost.
 12. **Inventory:** show product images, Opening/Import batches, smart FIFO/expiry alert, Movements and split FIFO.
 13. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
-14. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
-15. **Field Team:** inside Sales, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
-16. **Reports:** set From/To, search employee ID, filter territory, sort/paginate the team, select one employee, move to Field Activity, and print.
-17. **Smart Insights:** open View All Insights from Dashboard, filter Field Team/Inventory, open a source and dismiss one alert.
-18. **MIPRO AI:** ask about the open import and Field Team, then show a Sales Executive receiving permission-safe cost and other-employee refusals.
-19. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
+14. **Daily Field Activity:** as Sales Executive, open Marketing -> Report Activity; show the locked signed-in identity, expanded activity categories, customer/lead, purpose and outcome.
+15. **Employees:** search `SE-014`, clear the search, and click the employee name to open Activity & Reports without leaving Employees.
+16. **Employee Reports:** switch Daily/Weekly/Monthly/Custom and the five report-content strategies; show employee identity, KPIs, activity log, targets, plans, follow-ups, signatures, CSV control, and Print / Save PDF.
+17. **Field Team:** under Employees, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
+18. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
+19. **Reports:** explain that global Reports is for cross-team/grouped operational analysis; the understandable named employee report already stays in Employees.
+20. **Smart Insights and MIPRO AI:** open one role-safe insight, then ask about the open import or selected employee and demonstrate permission-safe refusals.
+21. **Settings:** show capabilities, Role Access Summary, aliases, opening-data migration, print calibration and confirmation answers.
 
 End as Sales Executive to show own-record Sales and Reports, direct-URL denial, and no cost/profit leakage.
 
@@ -45,6 +47,7 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 
 - [ ] Public navigation contains Home, About, Products, Certificates, News & Resources, Contact and Employee Portal.
 - [ ] Homepage contains no ERP mock sales, stock valuation or role statistics.
+- [ ] Product Range, HD-17H Focus, Features and Technical Data tabs switch the supplied MIPRO literature; each source PDF opens from the homepage.
 - [ ] Product catalogue uses a separate public type and exposes no protected ERP fields.
 - [ ] Product search, category filter, detail and Contact Sales links work.
 - [ ] Certificates identify manufacturer versus MIPRO ownership, show visible validity dates, and provide working preview/download actions for the authorized scans.
@@ -56,7 +59,7 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 
 ### Field Team, scalable reports and Smart Insights
 
-- [ ] Field Team remains inside Sales; the main sidebar still has at most seven destinations.
+- [ ] Field Team remains inside Employees with a Marketing shortcut; it is not duplicated as a main navigation destination.
 - [ ] Demo location feed is clearly labelled and never presented as production tracking.
 - [ ] Leaflet map renders real coordinate markers, clustering support, pan/zoom, customer points and route polyline.
 - [ ] Every marker/detail shows employee ID, territory, status, last update and accuracy.
@@ -64,9 +67,9 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Territory, status and employee search filters work.
 - [ ] Route history uses stored coordinate points and does not invent distance.
 - [ ] Sales Executive sees only self; Accounts/Import/Warehouse receive API denial.
-- [ ] EmployeePicker searches name, employee ID and territory with keyboard selection.
+- [ ] EmployeePicker searches name, employee ID, designation and territory; Enter selects the first filtered employee rather than All Employees.
 - [ ] All Employees supports territory, search, sort and pagination.
-- [ ] Performance and Field Activity link to each other.
+- [ ] Employee name and report icon open Activity & Reports locally; report generation does not redirect to global Reports.
 - [ ] Smart Insights is linked from Dashboard, not the main sidebar.
 - [ ] Insight filters and source links respect role scope; dismissal posts no transaction.
 
@@ -130,6 +133,17 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Unauthorized direct URLs show Access denied.
 - [ ] Sensitive cost is absent for unauthorized roles.
 
+### Employee daily activity and printable reports
+
+- [ ] Report Daily Field Activity displays the signed-in employee name/code and does not allow reporter impersonation.
+- [ ] Categories include hospital/customer visit, doctor/clinical meeting, procurement meeting, dealer visit, presentation, demonstration, sample, training, negotiation, tender/quotation follow-up, collection visit, service follow-up, market survey and office coordination.
+- [ ] Authoritative quotation, order, delivery, collection and GPS events appear automatically and cannot be manually imitated.
+- [ ] Directory search works for name, ID, title/role, phone, department, territory and login; Clear restores all permitted employees.
+- [ ] Daily, Weekly, Monthly and Custom controls produce the correct date range, including historical periods.
+- [ ] Complete Performance, Activity Details, Field Visits & Meetings, Sales & Collection, and Follow-ups & Pipeline produce understandable filtered outputs.
+- [ ] Printed employee report includes name, image/initials, code, designation, department, territory, status, period, preparer, KPIs, detailed activity, target/plan/follow-up sections, report reference and signatures.
+- [ ] Mobile report uses readable cards and has no horizontal page overflow.
+
 ### Documents and contextual AI
 
 - [ ] Import PDF and expense image open in the shared viewer.
@@ -174,9 +188,10 @@ npm run typecheck:api
 npm run test:flows
 npm run build
 npm run smoke
+npm run smoke:employee
 ```
 
-`test:flows` starts its own isolated API. Run `smoke` while the development server is active, then restart the demo API to restore seed data before presenting.
+`test:flows` starts its own isolated API. Run `smoke` and `smoke:employee` while the development server is active, then restart the demo API to restore seed data before presenting.
 
 ## Honest Demo Language
 

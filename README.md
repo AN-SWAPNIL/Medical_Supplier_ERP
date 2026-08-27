@@ -39,7 +39,7 @@ Operating expenses and cash/bank transactions are tracked separately. A fully au
 
 `Dashboard`, `Imports`, `Inventory`, `Sales & Marketing`, `Expenses & Accounts`, `Employees`, `Reports`, `Settings`.
 
-Unauthorized destinations and Employee subtabs are hidden by effective access. Employees composes Directory, Login Account, Access & Roles, the shared Field Team map, and Activity & Performance. Sales staff still perform daily work in Sales & Marketing. Protected PDF/image viewing, Smart Insights, reviewed import-document extraction, and floating role-safe MIPRO AI remain contextual. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
+Unauthorized destinations and Employee subtabs are hidden by effective access. Employees composes Directory, Login Account, Access & Roles, the shared Field Team map, and Activity & Reports. Named Daily/Weekly/Monthly/Custom employee reports stay in that Employee tab and print from the same preview. Sales staff submit their own daily field activity in Sales & Marketing under the signed-in user ID. Protected PDF/image viewing, Smart Insights, reviewed import-document extraction, and floating role-safe MIPRO AI remain contextual. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
 
 ## Stack
 

@@ -39,8 +39,8 @@ export const publicHeroSlides: PublicHeroSlide[] = [
   {
     id: "hero-hemodialysis",
     eyebrow: "Hemodialysis Supply",
-    title: "Product clarity before every institutional quotation",
-    body: "Review dialyzers, blood tubing and vascular-access products with model-specific documentation and a direct sales inquiry path.",
+    title: "HD-series dialysis products with model-specific review",
+    body: "Review the HD-17H focus, dialyzer model data, blood tubing and vascular-access products before an institutional quotation.",
     image: "/products/dialyzer.jpg",
     imageAlt: "Hollow fiber hemodialyzers supplied through MIPRO",
     primaryLabel: "View hemodialysis",
@@ -107,20 +107,23 @@ export const publicProducts: PublicProduct[] = [
     legacySlug: "hollow-fiber-hemodialyzerhigh-flux",
     name: "Hollow Fiber Hemodialyzer",
     category: "Hemodialysis",
-    shortDescription: "Single-use hemodialysis filter offered in high-flux and low-flux configurations.",
+    shortDescription: "HD-series hollow-fiber hemodialyzers offered in high-flux and low-flux configurations, including the supplied HD-17H literature.",
     description:
       "A hollow-fiber dialyzer for blood purification during hemodialysis. Product selection and treatment parameters must be determined by qualified clinical professionals using the approved manufacturer documentation.",
     brand: "Distributed by MIPRO",
     manufacturer: "Jiangxi Hongda Medical Equipment Group",
     intendedApplication: "Hemodialysis treatment in hospitals and dialysis centers.",
-    images: ["/products/dialyzer.jpg"],
+    images: ["/products/dialyzer.jpg", "/resources/mipro-hd17h-features.jpg", "/resources/mipro-hd17h-technical.jpg"],
     imageAlt: "Hollow fiber hemodialyzer with color-coded end caps",
-    features: ["High-flux and low-flux options", "Hollow-fiber membrane format", "Single-use sterile presentation"],
-    variants: ["High-flux configuration", "Low-flux configuration", "Model selection subject to availability"],
+    features: ["High-flux and low-flux HD-series options", "PES hollow-fiber membrane information in the supplied literature", "Model-specific performance table and single-use presentation"],
+    variants: ["HD-17H high-flux reference with 1.7 m² effective membrane area", "HD high-flux table covering 1.0 m² to 2.2 m² models", "Low-flux configuration and exact model selection subject to quotation"],
     specifications: [
       { label: "Product family", value: "Hollow fiber hemodialyzer" },
+      { label: "Supplied model focus", value: "HD-17H high flux" },
+      { label: "HD-17H membrane area", value: "1.7 m² (supplied product sheet)" },
+      { label: "Manufacturer", value: "Jiangxi Hongda Medical Equipment Group Ltd." },
       { label: "Use", value: "Single use" },
-      { label: "Supply format", value: "Sterile packaged unit" }
+      { label: "Selection basis", value: "Current IFU, approved documents and clinical requirement" }
     ],
     certificateIds: ["jiangxi-hongda-ec"],
     featured: true,
@@ -387,13 +390,13 @@ export const publicResources: PublicResource[] = [
   {
     slug: "high-flux-and-low-flux-dialyzers",
     kind: "Product guide",
-    title: "High-flux and low-flux dialyzers: procurement questions to ask",
-    summary: "A concise checklist for matching a requested dialyzer model with clinical and machine requirements.",
+    title: "HD-17H and HD-series dialyzers: procurement questions to ask",
+    summary: "A concise checklist for matching an HD-series dialyzer model with clinical and machine requirements.",
     body: [
       "Flux category is only one part of product selection. Buyers should confirm the prescribed model, membrane characteristics, surface area, sterilization method and dialysis-machine compatibility.",
       "MIPRO can provide model-specific documentation during quotation review so the requesting institution can verify the exact item before order confirmation."
     ],
-    image: "/products/dialyzer.jpg"
+    image: "/resources/mipro-hd17h-features.jpg"
   },
   {
     slug: "blood-tubing-set-review",

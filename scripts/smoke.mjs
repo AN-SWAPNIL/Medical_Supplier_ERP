@@ -189,8 +189,8 @@ await employeeReport.getByLabel("From Date").fill("2026-08-01");
 await employeeReport.getByLabel("To Date").fill("2026-08-31");
 await employeeReport.getByRole("heading", { name: "Salesperson Performance" }).waitFor({ timeout: 30000 });
 await employeeReport.getByTestId("employee-picker").locator("button").first().click();
-await employeeReport.getByPlaceholder("Search name / ID / territory").fill("SE-001");
-await employeeReport.getByRole("option", { name: /Rafiq Ahmed/ }).click();
+await employeeReport.getByPlaceholder("Search name, ID, designation...").fill("SE-001");
+await employeeReport.getByTestId("employee-picker").getByRole("listbox").getByRole("option", { name: /Rafiq Ahmed/ }).click();
 await employeeReport.getByText(/Rafiq Ahmed \| Activity details/).waitFor({ timeout: 30000 });
 await employeeReport.getByRole("button", { name: "Print Report" }).waitFor();
 await employeeReport.getByRole("button", { name: "Field Map" }).waitFor();
@@ -205,18 +205,18 @@ await employeeReport.close();
 const employeeHub = await preparePage({ name: "employee-hub-activity-flow", width: 1440, height: 1100, user: people.salesManager });
 await employeeHub.goto(baseUrl + "/app/employees?view=activity&employee=sales1", { waitUntil: "networkidle", timeout: 60000 });
 await employeeHub.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
-await employeeHub.getByLabel("Period").selectOption("This Month");
-await employeeHub.getByText("Employee Activity Timeline", { exact: true }).waitFor();
-if ((await employeeHub.getByText(/Time unavailable/).count()) === 0) issues.push("Employee activity invented or hid the missing time on legacy date-only transactions.");
+await employeeHub.getByRole("tab", { name: "Monthly" }).click();
+await employeeHub.getByLabel("Report Month").fill("2026-08");
+await employeeHub.getByRole("heading", { name: "Monthly Employee Activity & Performance Report" }).waitFor();
+await employeeHub.getByText("Employee Activity Log", { exact: true }).waitFor();
 const employeeHubText = await employeeHub.locator("body").textContent();
-for (const expectedMetric of ["Verified Visits", "Qualified Leads", "Delivered Sales", "Collections", "Target Progress"]) {
+for (const expectedMetric of ["Verified Visits", "New Leads", "Collections", "Overall Target", "Target vs Actual", "Daily & Monthly Plan Review"]) {
   if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity & Performance is missing " + expectedMetric + ".");
 }
 await employeeHub.screenshot({ path: "artifacts/employee-hub-activity-flow.png", fullPage: true });
-await employeeHub.getByRole("button", { name: "Full Report" }).click();
-await employeeHub.getByRole("heading", { name: "Marketing Report Builder" }).waitFor({ timeout: 30000 });
+await employeeHub.getByRole("button", { name: "Print / Save PDF" }).waitFor();
 const reportUrl = new URL(employeeHub.url());
-if (reportUrl.searchParams.get("employee") !== "sales1" || !reportUrl.searchParams.get("from") || !reportUrl.searchParams.get("to")) issues.push("Employee Full Report did not carry employee and period context.");
+if (reportUrl.pathname !== "/app/employees" || reportUrl.searchParams.get("view") !== "activity" || reportUrl.searchParams.get("employee") !== "sales1") issues.push("Employee report left its canonical Employees workspace.");
 await employeeHub.close();
 
 const fieldTeam = await preparePage({ name: "field-team-interactions", width: 1440, height: 1050, user: people.salesManager });
@@ -419,7 +419,7 @@ const visitShortcut = salesPage.getByRole("dialog").getByRole("button", { name: 
 await visitShortcut.waitFor();
 await visitShortcut.click();
 const activityDialog = salesPage.getByRole("dialog");
-await activityDialog.getByText("Report Marketing Activity", { exact: true }).waitFor();
+await activityDialog.getByText("Report Daily Field Activity", { exact: true }).waitFor();
 if (await activityDialog.locator("select").first().inputValue() !== "CUSTOMER_VISIT" || !(await activityDialog.locator("select").nth(1).inputValue()).startsWith("lead:")) issues.push("Lead-to-visit shortcut did not carry the activity and lead context.");
 await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
 await salesPage.getByRole("button", { name: "Update Plan" }).click();
@@ -435,7 +435,7 @@ await salesPage.close();
 const dashboardQuickAction = await preparePage({ name: "dashboard-quick-action", width: 1280, height: 900, user: people.sales });
 await dashboardQuickAction.goto(baseUrl + "/app/dashboard", { waitUntil: "networkidle", timeout: 60000 });
 await dashboardQuickAction.getByRole("link", { name: "Report Activity" }).click();
-await dashboardQuickAction.getByRole("heading", { name: "Report Marketing Activity" }).waitFor({ timeout: 30000 });
+await dashboardQuickAction.getByRole("heading", { name: "Report Daily Field Activity" }).waitFor({ timeout: 30000 });
 await dashboardQuickAction.close();
 
 const liveMarketing = await preparePage({ name: "marketing-live-polling", width: 1280, height: 900, user: people.salesManager });
