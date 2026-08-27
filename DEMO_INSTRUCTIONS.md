@@ -32,7 +32,7 @@ password123
 13. **Sales:** show running customer ledger, owner profit preview, quote/order, delivery, collection and follow-up recommendations.
 14. **Daily Field Activity:** as Sales Executive, open Marketing -> Report Activity; show the locked signed-in identity, expanded activity categories, customer/lead, purpose and outcome.
 15. **Employees:** search `SE-014`, clear the search, and click the employee name to open Activity & Reports without leaving Employees.
-16. **Employee Reports:** switch Daily/Weekly/Monthly/Custom and the five report-content strategies; show employee identity, KPIs, activity log, targets, plans, follow-ups, signatures, CSV control, and Print / Save PDF.
+16. **Employee Reports:** switch Daily/Weekly/Monthly/Custom and the five report-content strategies; show employee identity, KPIs, activity log, targets, plans, follow-ups and CSV, then click Print Preview to open the shared A4 preview where stationery mode and Print / Save PDF are available.
 17. **Field Team:** under Employees, show the Demo location feed label, live/recent/stale/offline states, territory/status filters, marker detail and Route History.
 18. **Expenses & Accounts:** show expense isolation, account ledger and the utility-receipt image viewer.
 19. **Reports:** explain that global Reports is for cross-team/grouped operational analysis; the understandable named employee report already stays in Employees.
@@ -111,7 +111,7 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Owner-only price preview shows FIFO COGS and profit/loss.
 - [ ] Quotation lines carry into order.
 - [ ] Actual MIPRO/LED digital and calibrated preprinted quotation views render.
-- [ ] Every formal report offers With Background and Without Background using the same selected identity and calibrated safe area.
+- [ ] Every formal report has one Print Preview action; the dedicated preview offers With Background and Without Background using the same selected identity and calibrated safe area.
 - [ ] Order Receiving Sheet uses the supplied structure.
 - [ ] Delivery selects an actual batch and reduces stock.
 - [ ] Delivery creates customer due.

@@ -1,76 +1,152 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Ruler, Stamp } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
+import type { Role, User } from "../../types";
 import { ErrorBlock, LoadingBlock, Segmented } from "../components";
-import { importService, printService, reportService, salesService } from "../services";
-import type { Collection, Delivery, ImportCase, PrintIdentity, Quotation, SalesOrder, SalespersonPerformanceDetail } from "../erp.types";
+import { importService, marketingService, printService, reportService, salesService, settingsService } from "../services";
+import type {
+  AuditEvent,
+  Collection,
+  Delivery,
+  EmployeeMarketingSnapshot,
+  ImportCase,
+  MarketingReportData,
+  PrintIdentity,
+  Quotation,
+  ReportData,
+  SalesOrder,
+  SalespersonPerformanceData,
+  SalespersonPerformanceDetail
+} from "../erp.types";
 import { formatCurrency, formatNumber } from "../../utils/format";
+import {
+  employeeReportTitle,
+  filterEmployeeReportActivities,
+  type EmployeeReportFrequency,
+  type EmployeeReportKind
+} from "../employees/employeeReports";
 import { LetterheadSheet, letterheadModeOptions, printModeFromConfiguration, type LetterheadMode } from "./LetterheadPrint";
-type Printable = Quotation | SalesOrder | Delivery | Collection | ImportCase | SalespersonPerformanceDetail;
+import {
+  auditEventsReportTable,
+  buildEmployeeLetterheadPages,
+  buildMarketingLetterheadPages,
+  buildOperationalLetterheadPages,
+  buildPerformancePrintTables
+} from "./ReportPrintContent";
+
+type PrintPayload =
+  | { kind: "quotation"; record: Quotation }
+  | { kind: "order"; record: SalesOrder }
+  | { kind: "challan"; record: Delivery }
+  | { kind: "receipt"; record: Collection }
+  | { kind: "import-cost"; record: ImportCase }
+  | { kind: "employee-performance"; record: SalespersonPerformanceDetail }
+  | { kind: "employee-activity"; snapshot: EmployeeMarketingSnapshot }
+  | { kind: "marketing-analysis"; report: MarketingReportData }
+  | { kind: "operational-report"; report: ReportData; performance?: SalespersonPerformanceData; audit: AuditEvent[] };
+
+type PrintPresentation = {
+  title: string;
+  subtitle?: string;
+  reference: string;
+  date: string;
+  content: ReactNode;
+  pages?: ReactNode[];
+};
 
 export default function PrintPage() {
   const { documentType = "", id = "" } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.session?.user);
+  const role = useEffectiveRole();
   const [mode, setMode] = useState<LetterheadMode | "">("");
   const [identityId, setIdentityId] = useState("");
+  const queryString = searchParams.toString();
   const configQuery = useQuery({ queryKey: ["print", "configuration"], queryFn: printService.configuration });
   const recordQuery = useQuery({
-    queryKey: ["print", documentType, id, searchParams.get("from"), searchParams.get("to")],
-    queryFn: async (): Promise<Printable> => {
-      if (documentType === "quotation") return find(await salesService.quotations(), id);
-      if (documentType === "order") return find(await salesService.orders(), id);
-      if (documentType === "challan") return find(await salesService.deliveries(), id);
-      if (documentType === "receipt") return find(await salesService.collections(), id);
-      if (documentType === "import-cost") return importService.get(id);
+    queryKey: ["print", documentType, id, queryString, user?.id],
+    queryFn: async (): Promise<PrintPayload> => {
+      if (documentType === "quotation") return { kind: "quotation", record: find(await salesService.quotations(), id) };
+      if (documentType === "order") return { kind: "order", record: find(await salesService.orders(), id) };
+      if (documentType === "challan") return { kind: "challan", record: find(await salesService.deliveries(), id) };
+      if (documentType === "receipt") return { kind: "receipt", record: find(await salesService.collections(), id) };
+      if (documentType === "import-cost") return { kind: "import-cost", record: await importService.get(id) };
       if (documentType === "employee-performance") {
         const today = new Date().toISOString().slice(0, 10);
         const report = await reportService.salespeople(searchParams.get("from") ?? `${today.slice(0, 7)}-01`, searchParams.get("to") ?? today, id);
         if (!report.selected) throw new Error("Select one employee before opening the printable report.");
-        return report.selected;
+        return { kind: "employee-performance", record: report.selected };
+      }
+      if (documentType === "employee-activity") {
+        const { from, to } = requiredPeriod(searchParams);
+        return { kind: "employee-activity", snapshot: await marketingService.employeeSnapshot(id, from, to) };
+      }
+      if (documentType === "marketing-analysis") {
+        const { from, to } = requiredPeriod(searchParams);
+        const report = await reportService.marketing({
+          from,
+          to,
+          employeeId: searchParams.get("employeeId") ?? "all",
+          territory: searchParams.get("territory") ?? "",
+          activityType: searchParams.get("activityType") ?? "",
+          subjectId: searchParams.get("subjectId") ?? "",
+          verification: searchParams.get("verification") ?? "",
+          status: searchParams.get("status") ?? "",
+          groupBy: searchParams.get("groupBy") ?? "Date",
+          mode: searchParams.get("mode") === "Detail" ? "Detail" : "Summary"
+        });
+        return { kind: "marketing-analysis", report };
+      }
+      if (documentType === "operational-report") {
+        const { from, to } = requiredPeriod(searchParams);
+        const table = searchParams.get("table") ?? "";
+        const [report, performance, audit] = await Promise.all([
+          reportService.get(from, to),
+          table === "salesperson-performance" ? reportService.salespeople(from, to, searchParams.get("employeeId") ?? "all") : Promise.resolve(undefined),
+          (searchParams.get("view") ?? id) === "audit" ? settingsService.audit() : Promise.resolve([])
+        ]);
+        return { kind: "operational-report", report, performance, audit };
       }
       throw new Error("Printable record not found or unavailable for this role.");
     }
   });
 
   if (configQuery.isLoading || recordQuery.isLoading) return <LoadingBlock label="Preparing calibrated A4 print view" />;
-  if (configQuery.isError || recordQuery.isError || !recordQuery.data || !configQuery.data) return <ErrorBlock error={configQuery.error ?? recordQuery.error} />;
+  if (configQuery.isError || recordQuery.isError || !recordQuery.data || !configQuery.data || !user) return <ErrorBlock error={configQuery.error ?? recordQuery.error ?? new Error("Your session is unavailable. Sign in again before printing.")} />;
   const config = configQuery.data;
-  const record = recordQuery.data;
+  const payload = recordQuery.data;
   const identity = config.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config.identities[0];
-  const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "ORDER RECEIVING SHEET" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : documentType === "employee-performance" ? "SALES EMPLOYEE PERFORMANCE REPORT" : "IMPORT LANDED COST";
   const effectiveMode = printModeFromConfiguration(config, mode);
-  const documentReference = getDocumentReference(documentType, record);
+  const presentation = buildPresentation(payload, searchParams, user, role, identity);
 
   return (
     <>
       <div className="no-print flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between">
         <Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(-1)}>Back</Button>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><Stamp className="h-4 w-4" /><select className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm" value={identity.id} onChange={(event) => setIdentityId(event.target.value)}>{config.identities.map((entry) => <option value={entry.id} key={entry.id}>{entry.displayName}</option>)}</select></label>
+          <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><Stamp className="h-4 w-4" /><select aria-label="Print identity" className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm" value={identity.id} onChange={(event) => setIdentityId(event.target.value)}>{config.identities.map((entry) => <option value={entry.id} key={entry.id}>{entry.displayName}</option>)}</select></label>
           <Segmented value={effectiveMode} onChange={setMode} ariaLabel="Letterhead artwork" options={letterheadModeOptions} />
         </div>
         <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button>
       </div>
 
-      <div className="print-preview overflow-x-auto rounded-md bg-slate-200 p-3 sm:p-6">
-        <LetterheadSheet
+      <div className="print-preview grid gap-4 overflow-x-auto rounded-md bg-slate-200 p-3 sm:p-6">
+        {(presentation.pages ?? [presentation.content]).map((page, index, pages) => <LetterheadSheet
           identity={identity}
           mode={effectiveMode}
-          title={title}
-          reference={documentReference.reference}
-          date={documentReference.date}
+          title={presentation.title}
+          subtitle={`${presentation.subtitle ?? ""}${pages.length > 1 ? `${presentation.subtitle ? " | " : ""}Page ${index + 1} of ${pages.length}` : ""}` || undefined}
+          reference={presentation.reference}
+          date={presentation.date}
           className="print-sheet shadow-xl"
+          key={index}
         >
-              {documentType === "quotation" ? <QuotationDocument record={record as Quotation} /> : null}
-              {documentType === "order" ? <OrderReceivingSheet record={record as SalesOrder} identity={identity} /> : null}
-              {documentType === "challan" ? <ChallanDocument record={record as Delivery} /> : null}
-              {documentType === "receipt" ? <ReceiptDocument record={record as Collection} /> : null}
-              {documentType === "import-cost" ? <ImportCostDocument record={record as ImportCase} /> : null}
-              {documentType === "employee-performance" ? <EmployeePerformanceDocument record={record as SalespersonPerformanceDetail} from={searchParams.get("from") ?? ""} to={searchParams.get("to") ?? ""} /> : null}
-        </LetterheadSheet>
+          {page}
+        </LetterheadSheet>)}
       </div>
       <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Physical calibration:</strong> 210 x 297 mm, zero browser margin, content safe area {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm. Choose "Actual size / 100%" in the print dialog.</p></div>
     </>
@@ -83,16 +159,101 @@ function find<T extends { id: string }>(rows: T[], id: string) {
   return record;
 }
 
-function getDocumentReference(type: string, record: Printable) {
-  let reference = "";
-  let date = "";
-  if (type === "quotation") { reference = (record as Quotation).quotationNumber; date = (record as Quotation).date; }
-  if (type === "order") { reference = (record as SalesOrder).orderNumber; date = (record as SalesOrder).date; }
-  if (type === "challan") { reference = (record as Delivery).challanNumber; date = (record as Delivery).date; }
-  if (type === "receipt") { reference = (record as Collection).receiptNumber; date = (record as Collection).date; }
-  if (type === "import-cost") { reference = (record as ImportCase).primaryReference; date = (record as ImportCase).snapshot?.finalizedAt.slice(0, 10) ?? ""; }
-  if (type === "employee-performance") { reference = (record as SalespersonPerformanceDetail).employee.name; date = "Selected period"; }
-  return { reference, date };
+function requiredPeriod(params: URLSearchParams) {
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error("A valid report period is required for print preview.");
+  return { from, to };
+}
+
+function buildPresentation(payload: PrintPayload, params: URLSearchParams, user: User, role: Role, identity: PrintIdentity): PrintPresentation {
+  if (payload.kind === "quotation") return { title: "QUOTATION", reference: payload.record.quotationNumber, date: payload.record.date, content: <QuotationDocument record={payload.record} /> };
+  if (payload.kind === "order") return { title: "ORDER RECEIVING SHEET", reference: payload.record.orderNumber, date: payload.record.date, content: <OrderReceivingSheet record={payload.record} identity={identity} /> };
+  if (payload.kind === "challan") return { title: "DELIVERY CHALLAN", reference: payload.record.challanNumber, date: payload.record.date, content: <ChallanDocument record={payload.record} /> };
+  if (payload.kind === "receipt") return { title: "MONEY RECEIPT", reference: payload.record.receiptNumber, date: payload.record.date, content: <ReceiptDocument record={payload.record} /> };
+  if (payload.kind === "import-cost") return { title: "IMPORT LANDED COST", reference: payload.record.primaryReference, date: payload.record.snapshot?.finalizedAt.slice(0, 10) ?? "", content: <ImportCostDocument record={payload.record} /> };
+  if (payload.kind === "employee-performance") return { title: "SALES EMPLOYEE PERFORMANCE REPORT", reference: payload.record.employee.name, date: "Selected period", content: <EmployeePerformanceDocument record={payload.record} from={params.get("from") ?? ""} to={params.get("to") ?? ""} /> };
+
+  const { from, to } = requiredPeriod(params);
+  if (payload.kind === "employee-activity") {
+    const frequency = employeeFrequency(params.get("frequency"));
+    const reportKind = employeeKind(params.get("reportKind"));
+    const activities = filterEmployeeReportActivities(payload.snapshot.recentActivities, reportKind);
+    const showTargets = reportKind === "Complete" || reportKind === "Sales & Collection";
+    const showPlans = reportKind === "Complete" || reportKind === "Activity" || reportKind === "Field Work";
+    const showFollowUps = reportKind === "Complete" || reportKind === "Follow-ups";
+    const showPipeline = reportKind === "Complete" || reportKind === "Follow-ups";
+    const periodText = from === to ? from : `${from} to ${to}`;
+    return {
+      title: employeeReportTitle(reportKind, frequency).toUpperCase(),
+      subtitle: "Employee performance and activity recorded through the linked ERP user ID",
+      reference: `EMP-${payload.snapshot.employee.employeeCode}-${to.replaceAll("-", "")}-${frequency.slice(0, 1).toUpperCase()}`,
+      date: periodText,
+      content: null,
+      pages: buildEmployeeLetterheadPages({ snapshot: payload.snapshot, actor: user, activities, periodText, reportKind, showTargets, showPlans, showFollowUps, showPipeline })
+    };
+  }
+
+  if (payload.kind === "marketing-analysis") {
+    const table = payload.report.tables.find((entry) => entry.id === params.get("table")) ?? payload.report.tables[0];
+    if (!table) throw new Error("No marketing report table is available for this preview.");
+    const employee = payload.report.performance.find((entry) => entry.employee.id === payload.report.filters.employeeId)?.employee.name;
+    return {
+      title: "MARKETING TEAM ANALYSIS",
+      subtitle: `${table.title} | ${payload.report.filters.mode} | Grouped by ${payload.report.filters.groupBy}${employee ? ` | ${employee}` : ""}`,
+      reference: `MKT-${table.id.toUpperCase()}-${to.replaceAll("-", "")}`,
+      date: `${from} to ${to}`,
+      content: null,
+      pages: buildMarketingLetterheadPages({ summary: payload.report.summary, table })
+    };
+  }
+
+  const view = params.get("view") ?? "overview";
+  const tableId = params.get("table") ?? "";
+  const groups = [
+    { id: "imports", title: "Import & Cost", rows: payload.report.importCosts, tables: payload.report.tables.imports },
+    { id: "inventory", title: "Inventory", rows: payload.report.inventory, tables: payload.report.tables.inventory },
+    { id: "sales", title: "Sales & Collection", rows: payload.report.sales, tables: payload.report.tables.sales },
+    { id: "expenses", title: "Expense & Cash-Bank", rows: payload.report.expenses, tables: payload.report.tables.expenses }
+  ].filter((group) => role !== "Sales Executive" || group.id === "sales");
+  const selectedGroup = groups.find((group) => group.id === view);
+  const taDaEmployee = params.get("taDaEmployee") ?? "All employees";
+  const selectedTable = selectedGroup?.tables.find((table) => table.id === tableId) ?? selectedGroup?.tables[0];
+  const filteredTable = selectedTable?.id === "ta-da" && taDaEmployee !== "All employees" ? { ...selectedTable, rows: selectedTable.rows.filter((row) => row.employee === taDaEmployee) } : selectedTable;
+  const auditTable = auditEventsReportTable(payload.audit);
+  const tables = view === "overview"
+    ? groups.flatMap((group) => group.tables)
+    : view === "audit"
+      ? [auditTable]
+      : tableId === "salesperson-performance"
+        ? buildPerformancePrintTables(payload.performance)
+        : filteredTable ? [filteredTable] : [];
+  const summary = view === "overview"
+    ? groups.flatMap((group) => group.rows.slice(0, 2).map((row) => ({ label: `${group.title}: ${row.label}`, value: row.value })))
+    : selectedGroup?.rows ?? (view === "audit" ? [{ label: "Protected events", value: String(auditTable.rows.length) }] : []);
+  const title = view === "overview"
+    ? "OPERATIONAL REPORT OVERVIEW"
+    : view === "audit"
+      ? "NARROW AUDIT REPORT"
+      : tableId === "salesperson-performance"
+        ? role === "Sales Executive" ? "MY SALES PERFORMANCE" : "SALES TEAM COMPARISON"
+        : (filteredTable?.title ?? selectedGroup?.title ?? "OPERATIONAL REPORT").toUpperCase();
+  return {
+    title,
+    subtitle: `${role} role-safe report | Main Warehouse${filteredTable?.id === "ta-da" ? ` | Employee: ${taDaEmployee}` : ""}`,
+    reference: `RPT-${view.toUpperCase()}-${to.replaceAll("-", "")}`,
+    date: `${from} to ${to}`,
+    content: null,
+    pages: buildOperationalLetterheadPages({ summary, tables })
+  };
+}
+
+function employeeFrequency(value: string | null): EmployeeReportFrequency {
+  return value === "Weekly" || value === "Monthly" || value === "Custom" ? value : "Daily";
+}
+
+function employeeKind(value: string | null): EmployeeReportKind {
+  return value === "Activity" || value === "Field Work" || value === "Sales & Collection" || value === "Follow-ups" ? value : "Complete";
 }
 
 function CustomerBlock({ name, address, phone, contact, terms }: { name: string; address?: string; phone?: string; contact?: string; terms?: string }) {

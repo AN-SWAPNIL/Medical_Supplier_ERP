@@ -80,10 +80,6 @@ button:disabled {
   border-radius: 999px;
 }
 
-.report-print-portal {
-  display: none;
-}
-
 @media print {
   html,
   body {
@@ -99,21 +95,15 @@ button:disabled {
     display: none !important;
   }
 
+  .app-content-shell {
+    min-height: 0 !important;
+    padding-left: 0 !important;
+  }
+
   main {
     display: block !important;
     width: auto !important;
     max-width: none !important;
-    padding: 0 !important;
-  }
-
-  body:has(> .report-print-portal) > #root {
-    display: none !important;
-  }
-
-  body > .report-print-portal {
-    display: block !important;
-    width: 210mm !important;
-    margin: 0 !important;
     padding: 0 !important;
   }
 
@@ -126,34 +116,9 @@ button:disabled {
     -webkit-print-color-adjust: exact;
   }
 
-  .report-letterhead-sheet {
-    page: report-letterhead;
-    width: 210mm !important;
-    min-height: 297mm !important;
-    overflow: visible !important;
-    background-repeat: no-repeat !important;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-  }
-
-  .report-letterhead-sheet > div {
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-  }
-
-  .report-letterhead-fixed-footer {
-    position: fixed;
-    z-index: 3;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: 210mm;
-    background-position: bottom left;
-    background-repeat: no-repeat;
-    background-size: 210mm 297mm;
-  }
-
   .print-preview {
+    display: block !important;
+    gap: 0 !important;
     overflow: visible !important;
     padding: 0 !important;
     background: #ffffff !important;
@@ -164,9 +129,17 @@ button:disabled {
     min-height: 297mm !important;
     border: 0 !important;
     box-shadow: none !important;
+    break-after: page;
+    break-inside: avoid;
+    page-break-after: always;
     page-break-inside: avoid;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  .print-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
 }

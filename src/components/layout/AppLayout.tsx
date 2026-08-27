@@ -153,7 +153,7 @@ export default function AppLayout() {
         </div>
       ) : null}
 
-      <div className={clsx("min-h-screen transition-[padding]", collapsed ? "lg:pl-[72px]" : "lg:pl-[248px]")}>
+      <div className={clsx("app-content-shell min-h-screen transition-[padding]", collapsed ? "lg:pl-[72px]" : "lg:pl-[248px]")}>
         <header className="app-header sticky top-0 z-20 border-b border-blue-200 border-t-2 border-t-red-600 bg-[#f8fbff]/95 backdrop-blur">
           <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-5">
             <button className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" type="button" onClick={() => { setCollapsed(false); setMobileOpen(true); }} aria-label="Open navigation">

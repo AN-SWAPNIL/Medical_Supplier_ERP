@@ -69,18 +69,29 @@ try {
   await desktop.getByLabel("Choose Any Date in the Week").fill("2026-08-27");
   await desktop.getByLabel("Report Content").selectOption("Field Work");
   await desktop.getByRole("heading", { name: "Weekly Employee Field Work Report" }).waitFor();
-  await desktop.getByRole("button", { name: "Print / Save PDF" }).waitFor();
-  await desktop.getByRole("tab", { name: "Without Background" }).click();
-  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "preprinted", "Employee report must offer a content-only preprinted-paper mode");
-  assert.equal(await desktop.locator(".report-letterhead-sheet").evaluate((element) => window.getComputedStyle(element).backgroundImage), "none", "Preprinted employee report must omit background artwork");
-  await desktop.getByRole("tab", { name: "With Background" }).click();
-  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "digital", "Employee report must restore its digital background mode");
-  assert.match(await desktop.locator(".report-letterhead-sheet").evaluate((element) => window.getComputedStyle(element).backgroundImage), /url\(/, "Digital employee report must use configured letterhead artwork");
+  await desktop.getByRole("button", { name: "Print Preview" }).waitFor();
+  assert.equal(await desktop.getByRole("tab", { name: "Without Background" }).count(), 0, "Operational employee page must not contain stationery choices");
   await desktop.getByRole("button", { name: "CSV" }).waitFor();
   assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /Shamima Sultana/);
   assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /SE-014/);
   assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /Employee Activity Log/);
   await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-desktop.png", fullPage: true, animations: "disabled" });
+  await desktop.getByRole("button", { name: "Print Preview" }).click();
+  await desktop.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+  assert.match(new URL(desktop.url()).pathname, /^\/app\/print\/employee-activity\//, "Employee print action must navigate to the shared preview page");
+  await desktop.getByRole("tab", { name: "Without Background" }).click();
+  assert.equal(await desktop.locator(".print-sheet").first().getAttribute("data-letterhead-mode"), "preprinted", "Employee report must offer a content-only preprinted-paper mode");
+  assert.equal(await desktop.locator(".print-sheet").first().evaluate((element) => window.getComputedStyle(element).backgroundImage), "none", "Preprinted employee report must omit background artwork");
+  await desktop.getByRole("tab", { name: "With Background" }).click();
+  assert.equal(await desktop.locator(".print-sheet").first().getAttribute("data-letterhead-mode"), "digital", "Employee report must restore its digital background mode");
+  assert.match(await desktop.locator(".print-sheet").first().evaluate((element) => window.getComputedStyle(element).backgroundImage), /url\(/, "Digital employee report must use configured letterhead artwork");
+  await desktop.emulateMedia({ media: "print" });
+  assert.equal(await desktop.locator(".no-print:visible").count(), 0, "Report controls must be hidden in print media");
+  assert.equal(await desktop.locator(".print-sheet").first().isVisible(), true, "Calibrated employee letterhead sheet must print");
+  assert.equal(await desktop.locator(".print-sheet header").first().isVisible(), true, "Shared report title and reference header must print");
+  await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-print.png", fullPage: true, animations: "disabled" });
+  await desktop.pdf({ path: "artifacts/employee-report/employee-weekly-print.pdf", format: "A4", printBackground: true });
+  await desktop.emulateMedia({ media: "screen" });
 
   await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
   await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
@@ -93,20 +104,20 @@ try {
   await desktop.getByRole("listbox", { name: "Employee Filter" }).getByRole("option", { name: /Shamima Sultana/ }).click();
   const namedReportLink = desktop.getByRole("link", { name: "Open named employee report" });
   await namedReportLink.waitFor();
-  await desktop.getByRole("tab", { name: "Without Background" }).click();
-  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "preprinted", "Marketing analysis must offer a without-background print mode");
-  await desktop.getByRole("tab", { name: "With Background" }).click();
   await desktop.screenshot({ path: "artifacts/employee-report/marketing-analysis-desktop.png", fullPage: true, animations: "disabled" });
   await namedReportLink.click();
   await desktop.getByTestId("employee-activity-performance").waitFor();
   assert.equal(new URL(desktop.url()).pathname, "/app/employees", "Named employee reporting must leave team analysis for the canonical Employees workspace");
 
-  await desktop.emulateMedia({ media: "print" });
-  assert.equal(await desktop.locator(".no-print:visible").count(), 0, "Report controls must be hidden in print media");
-  assert.equal(await desktop.locator(".report-letterhead-sheet").isVisible(), true, "Calibrated employee letterhead sheet must print");
-  assert.equal(await desktop.locator(".report-letterhead-sheet header").isVisible(), true, "Shared report title and reference header must print");
-  await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-print.png", fullPage: true, animations: "disabled" });
-  await desktop.pdf({ path: "artifacts/employee-report/employee-weekly-print.pdf", format: "A4", printBackground: true });
+  await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
+  assert.equal(await desktop.getByRole("tab", { name: "Without Background" }).count(), 0, "Marketing workspace must not contain stationery choices");
+  await desktop.getByRole("button", { name: "Print Preview" }).click();
+  await desktop.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+  assert.equal(new URL(desktop.url()).pathname, "/app/print/marketing-analysis/current", "Marketing print action must use the shared preview route");
+  await desktop.getByRole("tab", { name: "Without Background" }).click();
+  assert.equal(await desktop.locator(".print-sheet").first().getAttribute("data-letterhead-mode"), "preprinted", "Marketing analysis must offer a without-background preview mode");
+  await desktop.getByRole("tab", { name: "With Background" }).click();
   await desktop.close();
 
   const mobile = await pageFor({ width: 390, height: 844 });
@@ -120,6 +131,10 @@ try {
   await mobile.screenshot({ path: "artifacts/employee-report/employee-picker-open-mobile.png", animations: "disabled" });
   await mobile.keyboard.press("Escape");
   await mobile.screenshot({ path: "artifacts/employee-report/employee-daily-mobile.png", fullPage: true, animations: "disabled" });
+  await mobile.getByRole("button", { name: "Print Preview" }).click();
+  await mobile.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+  assert.equal(await mobile.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, "Print preview controls must not overflow the mobile viewport");
+  await mobile.screenshot({ path: "artifacts/employee-report/employee-print-preview-mobile.png", fullPage: true, animations: "disabled" });
 
   await mobile.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
   await mobile.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();

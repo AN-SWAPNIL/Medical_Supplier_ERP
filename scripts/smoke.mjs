@@ -161,11 +161,14 @@ await preprinted.close();
 
 const reportPrint = await preparePage({ name: "report-print-modes", width: 1440, height: 1000, user: people.super });
 await reportPrint.goto(baseUrl + "/app/reports?view=imports", { waitUntil: "networkidle", timeout: 60000 });
-await reportPrint.getByTestId("letterhead-print-controls").waitFor();
+if (await reportPrint.getByRole("tab", { name: "Without Background" }).count()) issues.push("Operational report page still exposes stationery choices outside print preview.");
+await reportPrint.getByRole("button", { name: "Print Preview" }).click();
+await reportPrint.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+if (new URL(reportPrint.url()).pathname !== "/app/print/operational-report/imports") issues.push("Operational report did not navigate to the shared print preview.");
 await reportPrint.getByRole("tab", { name: "Without Background" }).click();
-if (await reportPrint.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Operational report without-background mode was not applied.");
+if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Operational report without-background mode was not applied.");
 await reportPrint.getByRole("tab", { name: "With Background" }).click();
-if (await reportPrint.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
+if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
 await reportPrint.screenshot({ path: "artifacts/report-print-modes.png", fullPage: true });
 await reportPrint.close();
 
@@ -205,7 +208,7 @@ await employeeReport.getByTestId("employee-activity-performance").waitFor({ time
 if (new URL(employeeReport.url()).pathname !== "/app/employees") issues.push("Sales team comparison did not open the canonical Employee report.");
 await employeeReport.getByRole("tab", { name: "Monthly" }).click();
 await employeeReport.getByLabel("Report Month").fill("2026-08");
-await employeeReport.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+await employeeReport.getByRole("button", { name: "Print Preview" }).waitFor();
 const performanceText = await employeeReport.locator(".employee-report-screen").textContent();
 if (!/delivered sales/i.test(performanceText ?? "") || !/collections/i.test(performanceText ?? "")) issues.push("Canonical employee report summary is incomplete.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
@@ -223,11 +226,16 @@ for (const expectedMetric of ["Verified Visits", "New Leads", "Collections", "Ov
   if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity & Performance is missing " + expectedMetric + ".");
 }
 await employeeHub.screenshot({ path: "artifacts/employee-hub-activity-flow.png", fullPage: true });
+if (await employeeHub.getByRole("tab", { name: "Without Background" }).count()) issues.push("Employee workspace still exposes stationery choices outside print preview.");
+await employeeHub.getByRole("button", { name: "Print Preview" }).click();
 await employeeHub.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+if (!new URL(employeeHub.url()).pathname.startsWith("/app/print/employee-activity/")) issues.push("Employee report did not navigate to the shared print preview.");
 await employeeHub.getByRole("tab", { name: "Without Background" }).click();
-if (await employeeHub.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Employee report without-background mode was not applied to its A4 sheet.");
+if (await employeeHub.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Employee report without-background mode was not applied to its A4 sheet.");
 await employeeHub.getByRole("tab", { name: "With Background" }).click();
-if (await employeeHub.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "digital") issues.push("Employee report background mode was not restored.");
+if (await employeeHub.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "digital") issues.push("Employee report background mode was not restored.");
+await employeeHub.getByRole("button", { name: "Back" }).click();
+await employeeHub.getByTestId("employee-activity-performance").waitFor();
 const reportUrl = new URL(employeeHub.url());
 if (reportUrl.pathname !== "/app/employees" || reportUrl.searchParams.get("view") !== "activity" || reportUrl.searchParams.get("employee") !== "sales1") issues.push("Employee report left its canonical Employees workspace.");
 await employeeHub.close();

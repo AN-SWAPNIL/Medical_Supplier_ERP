@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   Download,
   MapPinned,
+  Printer,
   RefreshCw,
   Target
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import EmployeePicker from "../../components/employees/EmployeePicker";
 import Avatar from "../../components/ui/Avatar";
 import Button from "../../components/ui/Button";
@@ -23,7 +25,6 @@ import { ErrorBlock, LoadingBlock, Segmented, TableFrame, inputClass, labelClass
 import type { MarketingActivity, MarketingPerformanceRow } from "../erp.types";
 import { marketingActivityLabel } from "../marketing/activityCategories";
 import { employeeService, marketingService, reportService } from "../services";
-import { LetterheadPrintControls, LetterheadReportPortal, useLetterheadPrint } from "../print/LetterheadPrint";
 import {
   employeeReportPeriod,
   employeeReportTitle,
@@ -98,7 +99,7 @@ function PeriodInput({ frequency, date, weekDate, month, customFrom, customTo, o
 
 export default function EmployeeActivityPerformance({ actor, employeeId, onEmployeeChange, onFieldMap }: { actor: User; employeeId?: string; onEmployeeChange: (employeeId: string) => void; onFieldMap: (employeeId: string) => void }) {
   const pushToast = useToastStore((state) => state.push);
-  const letterheadPrint = useLetterheadPrint();
+  const navigate = useNavigate();
   const today = businessDate();
   const [frequency, setFrequency] = useState<EmployeeReportFrequency>("Daily");
   const [reportKind, setReportKind] = useState<EmployeeReportKind>("Complete");
@@ -163,6 +164,16 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
     }
   };
 
+  const openPrintPreview = () => {
+    const params = new URLSearchParams({
+      from: dates.from,
+      to: dates.to,
+      frequency,
+      reportKind
+    });
+    navigate(`/app/print/employee-activity/${selectedId}?${params.toString()}`);
+  };
+
   return <div className="employee-report-workspace grid gap-4" data-testid="employee-activity-performance">
     <section className="no-print overflow-hidden rounded-md border border-blue-200 bg-[#eef6ff] shadow-sm">
       <div className="flex flex-col gap-2 bg-blue-950 px-4 py-3 text-white sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold">Employee Report Builder</h2><p className="text-xs text-blue-100">Select an employee, period and content. The on-screen review and official print use the same filtered data.</p></div><span className="text-xs font-semibold text-cyan-300">Auto-refreshes every 15 seconds</span></div>
@@ -175,11 +186,10 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
           <Button icon={<RefreshCw className="h-4 w-4" />} onClick={() => void snapshotQuery.refetch()}>Refresh</Button>
           <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onFieldMap(selectedId)}>Field Map</Button>
           {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>CSV</Button> : null}
+          {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>Print Preview</Button> : null}
         </div>
       </div>
     </section>
-
-    {canPrint ? <LetterheadPrintControls controller={letterheadPrint} title="Employee report printing" /> : null}
 
     <section className="employee-report-screen overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm" data-testid="employee-report-screen">
       <header className="border-l-4 border-red-600 bg-blue-50/70 px-4 py-4 sm:px-5">
@@ -227,55 +237,5 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
         <div className="rounded-md border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs leading-5 text-slate-600"><strong className="text-blue-950">Data note:</strong> Employee-submitted field activity and connected ERP transactions are shown for the selected period. Financial values reflect posted records; the activity score follows configured rules and is not a subjective employee rating. Signatures and official stationery appear only in the print output.</div>
       </div>
     </section>
-    {canPrint && letterheadPrint.identity ? <LetterheadReportPortal
-      identity={letterheadPrint.identity}
-      mode={letterheadPrint.mode}
-      title={employeeReportTitle(reportKind, frequency).toUpperCase()}
-      subtitle="Employee performance and activity recorded through the linked ERP user ID"
-      reference={reportReference}
-      date={periodText}
-      multiPage
-    >
-      <EmployeeLetterheadContent snapshot={snapshot} actor={actor} activities={activities} periodText={periodText} reportKind={reportKind} showTargets={showTargets} showPlans={showPlans} showFollowUps={showFollowUps} showPipeline={showPipeline} />
-    </LetterheadReportPortal> : null}
   </div>;
-}
-
-function EmployeeLetterheadContent({ snapshot, actor, activities, periodText, reportKind, showTargets, showPlans, showFollowUps, showPipeline }: {
-  snapshot: Awaited<ReturnType<typeof marketingService.employeeSnapshot>>;
-  actor: User;
-  activities: MarketingActivity[];
-  periodText: string;
-  reportKind: EmployeeReportKind;
-  showTargets: boolean;
-  showPlans: boolean;
-  showFollowUps: boolean;
-  showPipeline: boolean;
-}) {
-  const verified = activities.filter((activity) => ["GPS_VERIFIED", "SYSTEM_VERIFIED"].includes(activity.verification)).length;
-  return <div className="grid gap-4 text-[9px]">
-    <section className="grid grid-cols-[18mm_1fr] gap-4 border border-slate-300 bg-white/90 p-3">
-      <Avatar className="h-[18mm] w-[18mm] rounded border border-slate-300 object-cover" src={snapshot.employee.avatarUrl} name={snapshot.employee.name} />
-      <div><div className="flex items-start justify-between gap-4"><div><strong className="block text-[13px] text-blue-950">{snapshot.employee.name}</strong><span className="font-semibold text-cyan-800">{snapshot.employee.employeeCode} | {snapshot.employee.title}</span></div><StatusBadge status={snapshot.employee.status} /></div><dl className="mt-3 grid grid-cols-4 gap-2"><div><dt className="text-slate-500">Department</dt><dd className="font-semibold">{snapshot.employee.department}</dd></div><div><dt className="text-slate-500">Territory</dt><dd className="font-semibold">{snapshot.employee.territory ?? "Not assigned"}</dd></div><div><dt className="text-slate-500">Report scope</dt><dd className="font-semibold">{reportKind}</dd></div><div><dt className="text-slate-500">Prepared by</dt><dd className="font-semibold">{actor.name}</dd></div></dl></div>
-    </section>
-
-    <section><h2 className="mb-2 text-[11px] font-bold text-blue-950">Management Summary</h2><div className="grid grid-cols-6 gap-px border border-slate-200 bg-slate-200">{[
-      ["Activities", formatNumber(activities.length)], ["Verified", formatNumber(verified)], ["Visits", formatNumber(snapshot.performance.completedVisits)], ["New Leads", formatNumber(snapshot.performance.newLeads)], ["Orders", formatNumber(snapshot.performance.orders)], ["Collections", formatCurrency(snapshot.performance.collectionsBdt, true)]
-    ].map(([label, value]) => <div className="bg-white/95 p-2" key={label}><span className="block text-[7px] font-bold uppercase text-slate-500">{label}</span><strong className="mt-1 block text-[11px] text-blue-950">{value}</strong></div>)}</div></section>
-
-    {showTargets ? <section><h2 className="mb-2 text-[11px] font-bold text-blue-950">Target vs Actual</h2><TargetTable row={snapshot.performance} /></section> : null}
-
-    <section><div className="mb-2 flex items-end justify-between"><h2 className="text-[11px] font-bold text-blue-950">Employee Activity Log</h2><span className="text-slate-500">{periodText} | {activities.length} records</span></div><table className="w-full table-fixed border-collapse text-[7.5px]"><thead><tr className="bg-blue-950 text-white"><th className="w-[25mm] border border-blue-950 p-1.5 text-left">Occurred</th><th className="w-[34mm] border border-blue-950 p-1.5 text-left">Activity / Subject</th><th className="border border-blue-950 p-1.5 text-left">Purpose & Outcome</th><th className="w-[31mm] border border-blue-950 p-1.5 text-left">Evidence / Reference</th></tr></thead><tbody>{activities.map((activity) => <tr className="break-inside-avoid" key={activity.id}><td className="border border-slate-300 p-1.5 align-top">{dateTimeLabel(activity.occurredAt)}<span className="mt-1 block text-slate-500">Submitted: {dateTimeLabel(activity.submittedAt)}</span></td><td className="border border-slate-300 p-1.5 align-top"><strong>{marketingActivityLabel(activity.activityType)}</strong><span className="mt-1 block text-slate-600">{activity.subjectName ?? "General activity"}</span></td><td className="border border-slate-300 p-1.5 align-top"><strong>{activity.purpose ?? "General work"}</strong><span className="mt-1 block text-slate-600">{activity.remarks ?? "No additional outcome recorded."}</span></td><td className="border border-slate-300 p-1.5 align-top"><strong className="text-cyan-800">{activity.verification.replaceAll("_", " ")}</strong><span className="mt-1 block">{activity.referenceNumber ?? "Manual entry"}</span>{activity.nextFollowUpAt ? <span className="mt-1 block text-slate-500">Next: {dateTimeLabel(activity.nextFollowUpAt)}</span> : null}</td></tr>)}{!activities.length ? <tr><td className="border border-slate-300 p-6 text-center text-slate-500" colSpan={4}>No matching activity was recorded in this period.</td></tr> : null}</tbody></table></section>
-
-    {showPlans ? <EmployeePrintTable title="Daily & Monthly Plan Review" columns={["Date / Month", "Planned Work", "Direction / Purpose", "Status"]} rows={[...snapshot.dailyPlans.flatMap((plan) => plan.plannedVisits.map((visit) => [dateLabel(plan.date), visit.subjectName, `${visit.plannedTime || "Open time"} | ${visit.purpose}`, visit.completed ? "Completed" : "Pending"])), ...snapshot.monthlyPlans.map((plan) => [plan.month, plan.territory, `${plan.plannedActivities} activities | ${plan.prioritySubjects.join(", ")}${plan.notes ? ` | ${plan.notes}` : ""}`, plan.status])]} /> : null}
-    {showFollowUps ? <EmployeePrintTable title="Follow-up Status" columns={["Due", "Customer / Lead", "Purpose", "Status"]} rows={snapshot.followUps.map((item) => [dateTimeLabel(item.dueAt), item.subjectName, item.purpose, item.status])} /> : null}
-    {showPipeline ? <EmployeePrintTable title="Lead Pipeline" columns={["Reference", "Organization", "Organization Type", "Stage / Next Action"]} rows={snapshot.leads.map((lead) => [lead.leadNumber, lead.organizationName, lead.organizationType, `${lead.stage} | ${lead.nextFollowUpAt ? dateTimeLabel(lead.nextFollowUpAt) : "Not scheduled"}`])} /> : null}
-
-    <section className="grid grid-cols-3 gap-3"><div className="border border-slate-300 p-2"><span className="text-slate-500">Plans completed</span><strong className="block text-[11px] text-blue-950">{snapshot.dailyPlans.flatMap((plan) => plan.plannedVisits).filter((visit) => visit.completed).length} / {snapshot.dailyPlans.flatMap((plan) => plan.plannedVisits).length}</strong></div><div className="border border-slate-300 p-2"><span className="text-slate-500">Open follow-ups</span><strong className="block text-[11px] text-blue-950">{snapshot.followUps.filter((item) => ["PENDING", "OVERDUE"].includes(item.status)).length}</strong></div><div className="border border-slate-300 p-2"><span className="text-slate-500">Active opportunities</span><strong className="block text-[11px] text-blue-950">{snapshot.leads.filter((lead) => !["PAYMENT", "LOST"].includes(lead.stage)).length}</strong></div></section>
-    <footer className="mt-12 grid grid-cols-3 gap-10 text-center"><span className="border-t border-slate-500 pt-2">Employee<br /><b>{snapshot.employee.name}</b></span><span className="border-t border-slate-500 pt-2">Reviewed by<br /><b>Sales Manager / Supervisor</b></span><span className="border-t border-slate-500 pt-2">Approved by<br /><b>Authorized Management</b></span></footer>
-  </div>;
-}
-
-function EmployeePrintTable({ title, columns, rows }: { title: string; columns: string[]; rows: string[][] }) {
-  return <section><div className="mb-2 flex items-end justify-between"><h2 className="text-[11px] font-bold text-blue-950">{title}</h2><span className="text-slate-500">{rows.length} rows</span></div><table className="w-full table-fixed border-collapse text-[7.5px]"><thead><tr className="bg-blue-950 text-white">{columns.map((column) => <th className="border border-blue-950 p-1.5 text-left" key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr className="break-inside-avoid" key={`${title}-${rowIndex}`}>{row.map((value, columnIndex) => <td className="break-words border border-slate-300 p-1.5 align-top" key={`${title}-${rowIndex}-${columnIndex}`}>{value || "-"}</td>)}</tr>)}{!rows.length ? <tr><td className="border border-slate-300 p-5 text-center text-slate-500" colSpan={columns.length}>No records are available for this section.</td></tr> : null}</tbody></table></section>;
 }
