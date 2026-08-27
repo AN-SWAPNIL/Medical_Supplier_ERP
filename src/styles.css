@@ -46,6 +46,21 @@ button:disabled {
   cursor: not-allowed;
 }
 
+@media screen {
+  .erp-table-frame > table > thead {
+    background: #172554 !important;
+    color: #ffffff !important;
+  }
+
+  .erp-table-frame > table > thead th {
+    color: inherit !important;
+  }
+
+  .erp-table-frame > table > tbody > tr:hover {
+    background: #ecfeff;
+  }
+}
+
 @page {
   size: A4;
   margin: 0;

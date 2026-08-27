@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, Printer, SlidersHorizontal, X } from "lucide-react";
+import { BarChart3, Download, FileSpreadsheet, Printer, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import EmployeePicker from "../../components/employees/EmployeePicker";
 import Button from "../../components/ui/Button";
 import { useAuthStore } from "../../lib/auth/session";
@@ -50,7 +51,8 @@ export default function MarketingReportWorkspace({ from, to, preset = "", initia
     const query = subjectSearch.trim().toLowerCase();
     return (subjectsQuery.data ?? []).filter((entry) => entry.value === subjectId || !query || `${entry.label} ${entry.type}`.toLowerCase().includes(query));
   }, [subjectId, subjectSearch, subjectsQuery.data]);
-  const advancedFilterCount = [territory, activityType, subjectId, verification, status, groupBy === "Date" ? "" : groupBy].filter(Boolean).length;
+  const selectedEmployee = (directoryQuery.data ?? []).find((employee) => employee.id === employeeId);
+  const advancedFilterCount = [!selfScope && employeeId !== "all" ? employeeId : "", territory, activityType, subjectId, verification, status, groupBy === "Date" ? "" : groupBy].filter(Boolean).length;
 
   useEffect(() => {
     if (tables.length && !tables.some((table) => table.id === tableId)) setTableId(tables[0].id);
@@ -83,14 +85,15 @@ export default function MarketingReportWorkspace({ from, to, preset = "", initia
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-4">
-      <Panel className="min-w-0" title="Marketing Report Builder" subtitle="Performance, customer activity, field verification, and connected sales results in one report" actions={<>{canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>CSV</Button> : null}{canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button> : null}</>}>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1fr)_minmax(260px,1fr)_auto] lg:items-end">
-          <div><EmployeePicker employees={directoryQuery.data ?? []} value={employeeId} onChange={setEmployeeId} allowAll={!selfScope} allLabel="All Permitted Employees" /></div>
-          <div><span className={labelClass}>Report View</span><Segmented value={mode} onChange={setMode} ariaLabel="Marketing report detail" options={[{ value: "Summary", label: "Summary" }, { value: "Detail", label: "Detail" }]} /></div>
+      <Panel className="min-w-0" title="Marketing Team Analysis" subtitle="Cross-team activity, territory, funnel, verification, follow-up and target analysis" actions={<>{canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Analysis</Button> : null}{canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Analysis</Button> : null}</>}>
+        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(280px,1fr)_minmax(260px,.8fr)_auto] lg:items-end">
+          <div className="flex min-h-16 items-center gap-3 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded bg-blue-950 text-cyan-300"><BarChart3 className="h-4 w-4" /></span><div><strong className="block text-sm text-blue-950">Operational marketing analysis</strong><p className="text-xs leading-5 text-slate-600">Grouped evidence for management decisions, not an employee personnel report.</p></div></div>
+          <div><span className={labelClass}>Analysis Depth</span><Segmented value={mode} onChange={setMode} ariaLabel="Marketing analysis detail" options={[{ value: "Summary", label: "Summary" }, { value: "Detail", label: "Detailed Rows" }]} /></div>
           <Button className="w-full lg:w-auto" icon={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setAdvancedOpen((open) => !open)} aria-expanded={advancedOpen}>More Filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}</Button>
         </div>
-        {advancedOpen ? <div className="border-t border-slate-100 bg-slate-50/60 p-4">
+        {advancedOpen ? <div className="border-t border-blue-100 bg-blue-50/40 p-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>{selfScope ? <div><span className={labelClass}>Employee Scope</span><div className="flex h-10 items-center gap-2 rounded-md border border-blue-200 bg-white px-3 text-sm text-blue-950"><UserRound className="h-4 w-4 text-cyan-700" /><strong>{selectedEmployee?.name ?? user?.name ?? "My records"}</strong><span className="text-slate-500">(own activity)</span></div></div> : <><EmployeePicker employees={directoryQuery.data ?? []} value={employeeId} onChange={setEmployeeId} allowAll allLabel="All Permitted Team" label="Employee Filter" />{selectedEmployee ? <Link className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-cyan-800 hover:underline" to={`/app/employees?view=activity&employee=${selectedEmployee.id}`}><UserRound className="h-3.5 w-3.5" />Open named employee report</Link> : null}</>}</div>
             <label><span className={labelClass}>Territory</span><select className={inputClass} value={territory} onChange={(event) => setTerritory(event.target.value)}><option value="">All territories</option>{[...new Set((directoryQuery.data ?? []).map((employee) => employee.territory).filter(Boolean))].map((value) => <option key={value}>{value}</option>)}</select></label>
             <label><span className={labelClass}>Activity Category</span><select className={inputClass} value={activityType} onChange={(event) => setActivityType(event.target.value)}><option value="">All activities</option>{allMarketingActivityTypes.map((value) => <option value={value} key={value}>{marketingActivityLabel(value)}</option>)}</select></label>
             <div><span className={labelClass}>Customer / Lead</span><input className={`${inputClass} mb-2`} value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search customer or lead" /><select aria-label="Customer or lead" className={inputClass} value={subjectId} onChange={(event) => setSubjectId(event.target.value)}><option value="">All customers and leads</option><optgroup label="Leads">{filteredSubjects.filter((entry) => entry.type === "Lead").map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}</optgroup><optgroup label="Customers">{filteredSubjects.filter((entry) => entry.type === "Customer").map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}</optgroup></select></div>
@@ -98,15 +101,15 @@ export default function MarketingReportWorkspace({ from, to, preset = "", initia
             <label><span className={labelClass}>Lead / Follow-up / Visit Status</span><select className={inputClass} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{["NEW", "CONTACTED", "INTERESTED", "PRESENTATION", "SAMPLE", "QUOTATION", "NEGOTIATION", "ORDER", "DELIVERED", "PAYMENT", "LOST", "PENDING", "OVERDUE", "COMPLETED", "CANCELLED", "PLANNED", "CHECKED_IN", "MISSED"].map((value) => <option value={value} key={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
             <label><span className={labelClass}>Group By</span><select className={inputClass} value={groupBy} onChange={(event) => setGroupBy(event.target.value)}><option>Date</option><option>Employee</option><option>Territory</option><option>Customer</option><option>Activity Type</option><option>Lead Stage</option></select></label>
           </div>
-          {advancedFilterCount ? <div className="mt-3 flex justify-end"><Button variant="ghost" icon={<X className="h-4 w-4" />} onClick={() => { setTerritory(""); setActivityType(""); setSubjectId(""); setSubjectSearch(""); setVerification(""); setStatus(""); setGroupBy("Date"); }}>Clear Filters</Button></div> : null}
+          {advancedFilterCount ? <div className="mt-3 flex justify-end"><Button variant="ghost" icon={<X className="h-4 w-4" />} onClick={() => { if (!selfScope) setEmployeeId("all"); setTerritory(""); setActivityType(""); setSubjectId(""); setSubjectSearch(""); setVerification(""); setStatus(""); setGroupBy("Date"); }}>Clear Filters</Button></div> : null}
         </div> : null}
       </Panel>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Marketing report summary">{data.summary.map((row) => <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm" key={row.label}><span className="text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl text-slate-950">{displaySummary(row.label, row.value)}</strong></div>)}</section>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Marketing analysis summary">{data.summary.map((row, index) => <div className={`rounded-md border bg-white p-4 shadow-sm ${index % 5 === 0 ? "border-blue-200 border-t-blue-700" : index % 5 === 1 ? "border-cyan-200 border-t-cyan-600" : index % 5 === 2 ? "border-emerald-200 border-t-emerald-600" : index % 5 === 3 ? "border-amber-200 border-t-amber-500" : "border-red-200 border-t-red-500"} border-t-4`} key={row.label}><span className="text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl text-blue-950">{displaySummary(row.label, row.value)}</strong></div>)}</section>
 
-      <div className="min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white p-3 shadow-sm"><Segmented value={selected?.id ?? tableId} onChange={setTableId} ariaLabel="Marketing report types" options={tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))} /></div>
-      <Panel className="min-w-0" title={selected?.title ?? "Marketing Report"} subtitle={`${from} to ${to} | ${mode} | grouped by ${groupBy}`} actions={<span className="flex items-center gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" />{selected?.rows.length ?? 0} rows</span>}>
-        {selected ? <MarketingDataTable table={selected} /> : <div className="p-8 text-center text-sm text-slate-500">No report matches the current view.</div>}
+      <div className="min-w-0 overflow-hidden rounded-md border border-blue-200 bg-blue-50/50 p-3 shadow-sm"><Segmented value={selected?.id ?? tableId} onChange={setTableId} ariaLabel="Marketing analysis tables" options={tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))} /></div>
+      <Panel className="min-w-0" title={selected?.title ?? "Marketing Analysis"} subtitle={`${from} to ${to} | ${mode} | grouped by ${groupBy}${employeeId !== "all" && selectedEmployee ? ` | filtered to ${selectedEmployee.name}` : ""}`} actions={<span className="flex items-center gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" />{selected?.rows.length ?? 0} analytical rows</span>}>
+        {selected ? <MarketingDataTable table={selected} /> : <div className="p-8 text-center text-sm text-slate-500">No analysis table matches the current view.</div>}
       </Panel>
     </div>
   );

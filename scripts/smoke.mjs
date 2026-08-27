@@ -178,7 +178,7 @@ await collectionDialog.getByText("Post customer collection", { exact: true }).wa
 if (await collectionDialog.locator("select").first().inputValue() !== "cus-popular") issues.push("Customer-to-collection shortcut did not carry the customer context.");
 await customerActions.goto(baseUrl + "/app/sales?view=customers", { waitUntil: "networkidle", timeout: 60000 });
 await customerActions.getByRole("button", { name: "Open marketing history for Popular Medicine & Departmental Store" }).click();
-await customerActions.getByRole("heading", { name: "Marketing Report Builder" }).waitFor({ timeout: 30000 });
+await customerActions.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor({ timeout: 30000 });
 if (await customerActions.getByText("Customer / Lead", { exact: true }).locator("..").locator("select").inputValue() !== "customer:cus-popular") issues.push("Customer marketing-history shortcut did not retain the selected subject.");
 await customerActions.screenshot({ path: "artifacts/customer-marketing-history.png", fullPage: true });
 await customerActions.close();
@@ -187,19 +187,17 @@ const employeeReport = await preparePage({ name: "employee-performance-desktop",
 await employeeReport.goto(baseUrl + "/app/reports?view=sales&table=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
 await employeeReport.getByLabel("From Date").fill("2026-08-01");
 await employeeReport.getByLabel("To Date").fill("2026-08-31");
-await employeeReport.getByRole("heading", { name: "Salesperson Performance" }).waitFor({ timeout: 30000 });
-await employeeReport.getByTestId("employee-picker").locator("button").first().click();
-await employeeReport.getByPlaceholder("Search name, ID, designation...").fill("SE-001");
-await employeeReport.getByTestId("employee-picker").getByRole("listbox").getByRole("option", { name: /Rafiq Ahmed/ }).click();
-await employeeReport.getByText(/Rafiq Ahmed \| Activity details/).waitFor({ timeout: 30000 });
-await employeeReport.getByRole("button", { name: "Print Report" }).waitFor();
-await employeeReport.getByRole("button", { name: "Field Map" }).waitFor();
-const performanceText = await employeeReport.locator("body").textContent();
-if (!performanceText?.includes("Delivered Sales") || !performanceText.includes("Collections")) issues.push("Employee report summary is incomplete.");
+await employeeReport.getByRole("heading", { name: "Sales Team Comparison", exact: true }).waitFor({ timeout: 30000 });
+await employeeReport.getByPlaceholder("Name / ID / territory").fill("SE-001");
+await employeeReport.getByRole("button", { name: "Rafiq Ahmed", exact: true }).click();
+await employeeReport.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
+if (new URL(employeeReport.url()).pathname !== "/app/employees") issues.push("Sales team comparison did not open the canonical Employee report.");
+await employeeReport.getByRole("tab", { name: "Monthly" }).click();
+await employeeReport.getByLabel("Report Month").fill("2026-08");
+await employeeReport.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+const performanceText = await employeeReport.locator(".employee-print-report").textContent();
+if (!/delivered sales/i.test(performanceText ?? "") || !/collections/i.test(performanceText ?? "")) issues.push("Canonical employee report summary is incomplete.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
-await employeeReport.getByRole("button", { name: "Print Report" }).click();
-await employeeReport.getByText("SALES EMPLOYEE PERFORMANCE REPORT", { exact: true }).waitFor({ timeout: 30000 });
-await employeeReport.screenshot({ path: "artifacts/print-employee-performance.png", fullPage: true });
 await employeeReport.close();
 
 const employeeHub = await preparePage({ name: "employee-hub-activity-flow", width: 1440, height: 1100, user: people.salesManager });

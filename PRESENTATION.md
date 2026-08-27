@@ -605,11 +605,13 @@ The From/To dates are sent to the API and applied before period totals/tables ar
 
 Detailed tables include import register, cost breakdown, landed cost by product/batch, current batch stock, expiry attention, movements, sales by customer/product/month, collections, receivables, running customer ledger, daily expenditure, category summary, TA/DA sheet data, and cash/bank transactions. Realized delivered profit uses the actual dispatched batch landed cost and is owner/capability-only.
 
-The global Marketing report builder remains useful for cross-employee operational analysis: it offers Today, Yesterday, This/Last Week, This/Last Month, and Custom periods with territory, activity, customer/lead, verification, status, and grouping filters. It is not required to understand or print one employee. Daily/Weekly/Monthly/Custom named employee reporting lives entirely under **Employees -> Activity & Reports**. The global report therefore serves portfolio comparison and ad hoc analysis, while the Employee view serves supervision, discussion, signature, and personnel-file printing without cross-module navigation.
+**Reports -> Marketing Analysis** is the management analysis surface. It offers Today, Yesterday, This/Last Week, This/Last Month, and Custom periods with employee, territory, activity, customer/lead, verification, status, target and grouping filters. It answers team questions such as which territory has the most verified visits, where follow-ups are overdue, and how activity converts into opportunities. It exports or prints the currently filtered analysis, but it does not create a second personnel report.
 
-### Salesperson Performance
+**Employees -> Activity & Reports** is the single source for a named employee's Daily/Weekly/Monthly/Custom review and A4 personnel print. When a manager filters Marketing Analysis to one employee, the interface provides **Open named employee report**, which opens that canonical Employee view. The two areas share authoritative activity records but serve different decisions: cross-team operational analysis versus individual supervision, discussion, signature and personnel-file printing.
 
-Under **Reports -> Sales & Collection -> Salesperson Performance**, management uses the existing From/To range and an employee selector. **All Sales Employees** compares quotes, conversions, orders, delivered sales, collections, customers, dues, and conversion rate. Selecting one executive opens quotation, order, delivery/challan, collection, customer, and product details plus an A4 employee report.
+### Sales Team Comparison
+
+Under **Reports -> Sales & Collection -> Sales Team Comparison**, management compares quotes, conversions, orders, delivered sales, collections, customers, dues and conversion rate for all visible sales employees. Employee names are links to the same **Employees -> Activity & Reports** workspace; Reports does not maintain a duplicate employee detail or print layout. A Sales Executive, who cannot browse other employees, sees only their own role-safe sales detail.
 
 Attribution follows business ownership rather than whoever typed the action:
 

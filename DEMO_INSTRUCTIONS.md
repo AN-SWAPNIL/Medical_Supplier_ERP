@@ -125,8 +125,9 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Expense does not change landed cost.
 - [ ] Reports reflect operational records.
 - [ ] Report From/To changes data and CSV contains actual rows.
-- [ ] Salesperson Performance compares all employees and prints one selected employee.
-- [ ] Sales Executive can open only their own performance report.
+- [ ] Sales Team Comparison compares all permitted employees; clicking a name opens the canonical Employee Activity & Reports view.
+- [ ] Marketing Analysis groups and filters cross-team field evidence without duplicating the named employee report.
+- [ ] Sales Executive can open only their own role-safe sales detail and activity report.
 - [ ] TA/DA Approved Sheet and owner realized-profit report render.
 - [ ] Settings are Super Admin-only.
 - [ ] Roles show only their permitted navigation.

@@ -1,12 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
   ArrowUpDown,
   Download,
   FileDown,
   FileSpreadsheet,
   PackageSearch,
-  MapPinned,
   Printer,
   ReceiptText,
   ShieldCheck,
@@ -28,7 +26,6 @@ import type { ReportTable, SalespersonPerformanceData, SalespersonPerformanceSum
 import { ErrorBlock, LoadingBlock, Panel, Segmented, TableFrame, inputClass, labelClass } from "../components";
 import { aiService, reportService, settingsService } from "../services";
 import { useAIContextStore } from "../../lib/ai/context";
-import EmployeePicker from "../../components/employees/EmployeePicker";
 import type { Role } from "../../types";
 import MarketingReportWorkspace from "./MarketingReportWorkspace";
 
@@ -89,7 +86,7 @@ export default function ReportsPage() {
   const user = useAuthStore((state) => state.session?.user);
   const canExport = hasEffectivePermission(user, "reports", "export");
   const canPrint = hasEffectivePermission(user, "print", "view");
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const preset = params.get("preset") ?? "";
   const requestedFrom = params.get("from");
   const requestedTo = params.get("to");
@@ -102,7 +99,7 @@ export default function ReportsPage() {
   const [to, setTo] = useState(hasRequestedPeriod ? requestedTo! : initialPeriod.to);
   const [tableId, setTableId] = useState(params.get("table") ?? (role === "Sales Executive" ? "salesperson-performance" : ""));
   const [taDaEmployee, setTaDaEmployee] = useState("All employees");
-  const [salesEmployeeId, setSalesEmployeeId] = useState(params.get("employee") ?? (role === "Sales Executive" ? "self" : "all"));
+  const salesEmployeeId = role === "Sales Executive" ? "self" : "all";
   const navigate = useNavigate();
   const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
   const canAudit = ["Super Admin", "Managing Director", "Accounts"].includes(role);
@@ -205,7 +202,7 @@ export default function ReportsPage() {
         ariaLabel="Report groups"
         options={[
           ...(role === "Sales Executive" ? [] : [{ value: "overview" as const, label: "Overview" }]),
-          ...(canMarketing ? [{ value: "marketing" as const, label: "Marketing" }] : []),
+          ...(canMarketing ? [{ value: "marketing" as const, label: "Marketing Analysis" }] : []),
           ...groups.map((group) => ({ value: group.id, label: group.title })),
           ...(canAudit ? [{ value: "audit" as const, label: "Audit" }] : [])
         ]}
@@ -224,12 +221,8 @@ export default function ReportsPage() {
           taDaEmployee={taDaEmployee}
           onTaDaEmployeeChange={setTaDaEmployee}
           performance={performanceQuery.data}
-          salesEmployeeId={performanceQuery.data?.selectedEmployeeId ?? salesEmployeeId}
           role={role}
-          onSalesEmployeeChange={(employeeId) => { setSalesEmployeeId(employeeId); setParams((current) => { const next = new URLSearchParams(current); next.set("view", "sales"); next.set("table", "salesperson-performance"); next.set("employee", employeeId); return next; }, { replace: true }); }}
-          onPrintEmployee={(employeeId) => navigate(`/app/print/employee-performance/${employeeId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)}
-          onViewMarketingActivity={(employeeId) => navigate(`/app/employees?view=activity&employee=${employeeId}`)}
-          onViewFieldActivity={(employeeId) => navigate(`/app/employees?view=field-team&employee=${employeeId}`)}
+          onOpenEmployeeReport={(employeeId) => navigate(`/app/employees?view=activity&employee=${employeeId}`)}
         />
       ) : null}
       {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}
@@ -271,7 +264,7 @@ function ReportOverview({ groups, onOpen }: { groups: Array<{ id: ReportGroupId;
   );
 }
 
-function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, salesEmployeeId, role, onSalesEmployeeChange, onPrintEmployee, onViewMarketingActivity, onViewFieldActivity }: {
+function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, role, onOpenEmployeeReport }: {
   group: { id: ReportGroupId; title: string; rows: { label: string; value: string }[]; tables: ReportTable[] };
   selectedTable?: ReportTable;
   tableId: string;
@@ -281,25 +274,21 @@ function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, t
   taDaEmployee: string;
   onTaDaEmployeeChange: (value: string) => void;
   performance?: SalespersonPerformanceData;
-  salesEmployeeId: string;
   role: Role;
-  onSalesEmployeeChange: (value: string) => void;
-  onPrintEmployee: (employeeId: string) => void;
-  onViewMarketingActivity: (employeeId: string) => void;
-  onViewFieldActivity: (employeeId: string) => void;
+  onOpenEmployeeReport: (employeeId: string) => void;
 }) {
   const isTaDa = selectedTable?.id === "ta-da";
   const isSalesPerformance = group.id === "sales" && tableId === "salesperson-performance";
   const employees = isTaDa ? ["All employees", ...new Set(selectedTable.rows.map((row) => row.employee).filter(Boolean))] : [];
   const visibleRows = isTaDa && taDaEmployee !== "All employees" ? selectedTable.rows.filter((row) => row.employee === taDaEmployee) : selectedTable?.rows ?? [];
-  const tableOptions = group.id === "sales" ? [{ value: "salesperson-performance", label: "Salesperson Performance", count: performance?.comparison.length }, ...group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))] : group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }));
+  const tableOptions = group.id === "sales" ? [{ value: "salesperson-performance", label: "Sales Team Comparison", count: performance?.comparison.length }, ...group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))] : group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }));
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {group.rows.map((row, index) => <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm" key={row.label}><span className="block text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl" style={{ color: colors[index % colors.length] }}>{displayValue(row.value, row.label)}</strong></div>)}
       </div>
       <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"><Segmented value={tableId} onChange={onTableChange} ariaLabel={`${group.title} report types`} options={tableOptions} /></div>
-      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} employeeId={salesEmployeeId} role={role} onEmployeeChange={onSalesEmployeeChange} onPrint={onPrintEmployee} onViewMarketingActivity={onViewMarketingActivity} onViewFieldActivity={onViewFieldActivity} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
+      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} role={role} onOpenEmployeeReport={onOpenEmployeeReport} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
         <div className="flex flex-wrap items-end justify-end gap-4 border-b border-slate-200 p-4">
           {isTaDa ? <label className="w-full sm:w-64"><span className={labelClass}>Employee</span><select className={inputClass} value={taDaEmployee} onChange={(event) => onTaDaEmployeeChange(event.target.value)}>{employees.map((name) => <option key={name}>{name}</option>)}</select></label> : <div className="flex items-center justify-end gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" /> {visibleRows.length} filtered rows</div>}
         </div>
@@ -350,7 +339,7 @@ function comparisonTable(data: SalespersonPerformanceData): ReportTable {
       { key: "customers", label: "Customers", align: "right" },
       { key: "conversion", label: "Conversion", align: "right" }
     ],
-    rows: data.comparison.map((row) => ({ employee: row.name, territory: row.territory ?? "-", quotes: String(row.quotationsCreated), converted: String(row.convertedQuotations), orders: String(row.ordersCreated), sales: row.deliveredSalesValue, collections: row.collectionsReceived, visits: String(row.verifiedVisits), leads: String(row.newLeads), score: String(row.activityScore), target: `${row.targetProgress}%`, customers: String(row.customersHandled), conversion: `${row.conversionRate}%` }))
+    rows: data.comparison.map((row) => ({ employeeId: row.id, employee: row.name, territory: row.territory ?? "-", quotes: String(row.quotationsCreated), converted: String(row.convertedQuotations), orders: String(row.ordersCreated), sales: row.deliveredSalesValue, collections: row.collectionsReceived, visits: String(row.verifiedVisits), leads: String(row.newLeads), score: String(row.activityScore), target: `${row.targetProgress}%`, customers: String(row.customersHandled), conversion: `${row.conversionRate}%` }))
   };
 }
 
@@ -360,7 +349,7 @@ function buildPerformanceExportTables(data?: SalespersonPerformanceData) {
   return [comparisonTable(data), ...Object.values(data.selected.tables)];
 }
 
-function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeChange, onPrint, onViewMarketingActivity, onViewFieldActivity, from, to }: { data: SalespersonPerformanceData; employeeId: string; role: Role; onEmployeeChange: (value: string) => void; onPrint: (employeeId: string) => void; onViewMarketingActivity: (employeeId: string) => void; onViewFieldActivity: (employeeId: string) => void; from: string; to: string }) {
+function SalespersonPerformanceWorkspace({ data, role, onOpenEmployeeReport, from, to }: { data: SalespersonPerformanceData; role: Role; onOpenEmployeeReport: (employeeId: string) => void; from: string; to: string }) {
   const [detailTableId, setDetailTableId] = useState("quotations");
   const [territory, setTerritory] = useState("");
   const [search, setSearch] = useState("");
@@ -372,7 +361,6 @@ function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeCha
   const selectedTable = detailTables.find(([key]) => key === detailTableId)?.[1] ?? detailTables[0]?.[1];
   const managementView = role !== "Sales Executive";
   const territories = [...new Set(data.employees.map((employee) => employee.territory).filter(Boolean))].sort() as string[];
-  const pickerEmployees = data.employees.filter((employee) => !territory || employee.territory === territory);
   const filteredComparison = data.comparison
     .filter((employee) => (!territory || employee.territory === territory) && (!search.trim() || [employee.name, employee.employeeCode ?? employee.id, employee.territory ?? ""].some((value) => value.toLowerCase().includes(search.trim().toLowerCase()))))
     .sort((a, b) => {
@@ -385,21 +373,19 @@ function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeCha
   const pageRows = filteredComparison.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return (
     <section className="grid gap-4" data-testid="salesperson-performance-report">
-      <div className="grid gap-4 rounded-md border border-slate-200 bg-white p-4 shadow-sm xl:grid-cols-[minmax(260px,1fr)_minmax(300px,420px)_220px_auto] xl:items-end">
-        <div><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-blue-50 text-blue-800"><Users className="h-4 w-4" /></span><div><h2 className="text-base font-bold text-slate-950">Salesperson Performance</h2><p className="text-xs text-slate-500">Business ownership stays with the executive even when a manager or Accounts posts the action.</p></div></div></div>
-        <EmployeePicker employees={pickerEmployees} value={employeeId} onChange={onEmployeeChange} allowAll={managementView} />
-        {managementView ? <label><span className={labelClass}>Territory</span><select className={inputClass} value={territory} onChange={(event) => { const next = event.target.value; setTerritory(next); setPage(1); if (detail && next && detail.employee.territory !== next) onEmployeeChange("all"); }}><option value="">All territories</option>{territories.map((entry) => <option key={entry}>{entry}</option>)}</select></label> : <div />}
-        {detail ? <div className="flex flex-wrap gap-2 xl:justify-end"><Button icon={<Activity className="h-4 w-4" />} onClick={() => onViewMarketingActivity(detail.employee.id)}>Daily Activity</Button><Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onViewFieldActivity(detail.employee.id)}>Field Map</Button><Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => onPrint(detail.employee.id)}>Print Report</Button></div> : null}
+      <div className="grid gap-4 rounded-md border border-blue-200 bg-blue-50/50 p-4 shadow-sm lg:grid-cols-[minmax(280px,1fr)_240px] lg:items-end">
+        <div><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded bg-blue-950 text-cyan-300"><Users className="h-5 w-5" /></span><div><h2 className="text-base font-bold text-blue-950">{managementView ? "Sales Team Comparison" : "My Sales Performance"}</h2><p className="text-xs leading-5 text-slate-600">{managementView ? "Cross-employee sales ownership analysis. Select an employee name in the table for the complete personnel report." : "Your transaction-attributed sales results for the selected report period."}</p></div></div></div>
+        {managementView ? <label><span className={labelClass}>Territory</span><select className={inputClass} value={territory} onChange={(event) => { setTerritory(event.target.value); setPage(1); }}><option value="">All territories</option>{territories.map((entry) => <option key={entry}>{entry}</option>)}</select></label> : <div className="rounded-md border border-cyan-200 bg-white px-3 py-2 text-xs font-semibold text-cyan-900">Scope locked to signed-in employee</div>}
       </div>
 
       {!detail ? (
         <>
-          <Panel title="Sales team comparison" subtitle={`${from} to ${to}. Values come from owned quotations, inherited orders/deliveries and attributed collections.`}>
+          <Panel title="Comparison Results" subtitle={`${from} to ${to}. Values come from owned quotations, inherited orders/deliveries and attributed collections.`}>
             <div className="grid gap-2 border-b border-slate-200 p-4 sm:grid-cols-[minmax(220px,1fr)_220px_auto] sm:items-end"><label><span className={labelClass}>Search Team</span><span className="relative block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={inputClass + " pl-9"} placeholder="Name / ID / territory" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></span></label><label><span className={labelClass}>Sort By</span><select className={inputClass} value={sortField} onChange={(event) => { setSortField(event.target.value as typeof sortField); setPage(1); }}><option value="deliveredSalesValue">Delivered Sales</option><option value="collectionsReceived">Collections</option><option value="activityScore">Activity Score</option><option value="targetProgress">Target Progress</option><option value="conversionRate">Quotation Conversion</option><option value="ordersCreated">Orders</option><option value="assignedCustomerDue">Outstanding Due</option></select></label><Button icon={<ArrowUpDown className="h-4 w-4" />} onClick={() => setAscending((value) => !value)}>{ascending ? "Ascending" : "Descending"}</Button></div>
             <div className="h-72 p-4">
               <ResponsiveContainer width="100%" height="100%"><BarChart data={filteredComparison.map((row) => ({ name: row.name.split(" ")[0], sales: Number(row.deliveredSalesValue), collections: Number(row.collectionsReceived) }))} margin={{ top: 10, right: 10, left: 10, bottom: 15 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} /><Tooltip formatter={(value) => formatCurrency(String(value))} /><Bar dataKey="sales" name="Delivered sales" fill="#075985" radius={[3, 3, 0, 0]} /><Bar dataKey="collections" name="Collections" fill="#059669" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer>
             </div>
-            <ReportDataTable table={comparisonTable({ ...data, comparison: pageRows })} rows={comparisonTable({ ...data, comparison: pageRows }).rows} />
+            <ReportDataTable table={comparisonTable({ ...data, comparison: pageRows })} rows={comparisonTable({ ...data, comparison: pageRows }).rows} onOpenEmployee={managementView ? onOpenEmployeeReport : undefined} />
             <div className="flex flex-col gap-2 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>Showing {pageRows.length} of {filteredComparison.length} employees</span><div className="flex items-center gap-2"><Button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1}>Previous</Button><b className="text-slate-700">Page {currentPage} / {pageCount}</b><Button onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount}>Next</Button></div></div>
           </Panel>
         </>
@@ -428,13 +414,13 @@ function SalespersonPerformanceWorkspace({ data, employeeId, role, onEmployeeCha
   );
 }
 
-function ReportDataTable({ table, rows }: { table: ReportTable; rows: Record<string, string>[] }) {
+function ReportDataTable({ table, rows, onOpenEmployee }: { table: ReportTable; rows: Record<string, string>[]; onOpenEmployee?: (employeeId: string) => void }) {
   return (
     <TableFrame>
       <table className="w-full min-w-[860px] text-left text-sm">
         <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr>{table.columns.map((column) => <th className={`px-4 py-3 ${column.align === "right" ? "text-right" : ""}`} key={column.key}>{column.label}</th>)}</tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map((row, rowIndex) => <tr className="hover:bg-cyan-50/40" key={`${table.id}-${rowIndex}`}>{table.columns.map((column) => <td className={`px-4 py-3 ${column.align === "right" ? "text-right font-semibold" : "text-slate-600"}`} key={column.key}>{displayValue(row[column.key] ?? "-", column.key)}</td>)}</tr>)}
+          {rows.map((row, rowIndex) => <tr className="hover:bg-cyan-50/40" key={`${table.id}-${rowIndex}`}>{table.columns.map((column) => <td className={`px-4 py-3 ${column.align === "right" ? "text-right font-semibold" : "text-slate-600"}`} key={column.key}>{column.key === "employee" && row.employeeId && onOpenEmployee ? <button className="font-bold text-cyan-800 hover:underline" type="button" onClick={() => onOpenEmployee(row.employeeId)}>{displayValue(row[column.key] ?? "-", column.key)}</button> : displayValue(row[column.key] ?? "-", column.key)}</td>)}</tr>)}
           {!rows.length ? <tr><td className="px-4 py-10 text-center text-slate-500" colSpan={table.columns.length}>No posted records fall inside this period.</td></tr> : null}
         </tbody>
       </table>

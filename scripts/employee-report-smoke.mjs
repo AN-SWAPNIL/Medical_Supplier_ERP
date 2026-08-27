@@ -57,8 +57,11 @@ try {
   await desktop.getByTestId("employee-activity-performance").waitFor();
   await desktop.getByTestId("employee-picker").getByRole("button").first().click();
   await desktop.getByPlaceholder("Search name, ID, designation...").fill("SE-014");
-  const employeeListbox = desktop.getByTestId("employee-picker").getByRole("listbox");
+  const employeeListbox = desktop.getByRole("listbox", { name: "Employee Linked to Report" });
+  const employeeSearchBox = await desktop.getByPlaceholder("Search name, ID, designation...").boundingBox();
+  assert.ok(employeeSearchBox && employeeSearchBox.x >= 0 && employeeSearchBox.x + employeeSearchBox.width <= 1440, "Employee search dropdown must stay inside the viewport");
   assert.equal(await employeeListbox.getByRole("option").count(), 1, "Typed employee search must not retain the All Employees option");
+  await desktop.screenshot({ path: "artifacts/employee-report/employee-picker-open-desktop.png", animations: "disabled" });
   await employeeListbox.getByRole("option", { name: /Shamima Sultana/ }).click();
   await desktop.getByRole("heading", { name: "Shamima Sultana", exact: true }).waitFor();
 
@@ -73,6 +76,22 @@ try {
   assert.match(await desktop.locator(".employee-print-report").innerText(), /Employee Activity Log/);
   await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-desktop.png", fullPage: true, animations: "disabled" });
 
+  await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
+  await desktop.getByRole("button", { name: /More Filters/ }).click();
+  await desktop.getByTestId("employee-picker").getByRole("button").first().click();
+  await desktop.getByPlaceholder("Search name, ID, designation...").fill("SE-014");
+  const analysisSearchBox = await desktop.getByPlaceholder("Search name, ID, designation...").boundingBox();
+  assert.ok(analysisSearchBox && analysisSearchBox.x >= 0 && analysisSearchBox.x + analysisSearchBox.width <= 1440, "Marketing employee filter must stay inside the viewport");
+  await desktop.screenshot({ path: "artifacts/employee-report/marketing-picker-open-desktop.png", animations: "disabled" });
+  await desktop.getByRole("listbox", { name: "Employee Filter" }).getByRole("option", { name: /Shamima Sultana/ }).click();
+  const namedReportLink = desktop.getByRole("link", { name: "Open named employee report" });
+  await namedReportLink.waitFor();
+  await desktop.screenshot({ path: "artifacts/employee-report/marketing-analysis-desktop.png", fullPage: true, animations: "disabled" });
+  await namedReportLink.click();
+  await desktop.getByTestId("employee-activity-performance").waitFor();
+  assert.equal(new URL(desktop.url()).pathname, "/app/employees", "Named employee reporting must leave team analysis for the canonical Employees workspace");
+
   await desktop.emulateMedia({ media: "print" });
   assert.equal(await desktop.locator(".no-print").isVisible(), false, "Report controls must be hidden in print media");
   assert.equal(await desktop.locator(".employee-print-report header").isVisible(), true, "Branded employee report header must print");
@@ -83,7 +102,23 @@ try {
   await mobile.goto(`${base}/app/employees?view=activity&employee=sales1`, { waitUntil: "networkidle" });
   await mobile.getByTestId("employee-activity-performance").waitFor();
   assert.equal(await mobile.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, "Employee reports must not overflow the mobile viewport");
+  await mobile.getByTestId("employee-picker").getByRole("button").first().click();
+  await mobile.getByPlaceholder("Search name, ID, designation...").fill("SE-014");
+  const mobileEmployeeSearchBox = await mobile.getByPlaceholder("Search name, ID, designation...").boundingBox();
+  assert.ok(mobileEmployeeSearchBox && mobileEmployeeSearchBox.x >= 0 && mobileEmployeeSearchBox.x + mobileEmployeeSearchBox.width <= 390, "Employee picker must fit the mobile viewport");
+  await mobile.screenshot({ path: "artifacts/employee-report/employee-picker-open-mobile.png", animations: "disabled" });
+  await mobile.keyboard.press("Escape");
   await mobile.screenshot({ path: "artifacts/employee-report/employee-daily-mobile.png", fullPage: true, animations: "disabled" });
+
+  await mobile.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await mobile.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
+  await mobile.getByRole("button", { name: /More Filters/ }).click();
+  await mobile.getByTestId("employee-picker").getByRole("button").first().click();
+  await mobile.getByPlaceholder("Search name, ID, designation...").fill("SE-014");
+  const mobileAnalysisSearchBox = await mobile.getByPlaceholder("Search name, ID, designation...").boundingBox();
+  assert.ok(mobileAnalysisSearchBox && mobileAnalysisSearchBox.x >= 0 && mobileAnalysisSearchBox.x + mobileAnalysisSearchBox.width <= 390, "Marketing employee filter must fit the mobile viewport");
+  await mobile.screenshot({ path: "artifacts/employee-report/marketing-picker-open-mobile.png", animations: "disabled" });
+  assert.equal(await mobile.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, "Marketing analysis must not overflow the mobile viewport");
   await mobile.close();
 
   const publicPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });

@@ -200,7 +200,8 @@ Customs duty is entered as the final assessed amount per product. The applicatio
 - Collection requires a real active account, reduces customer/order due and credits that account.
 - Operating expenses never affect landed cost.
 - Reports apply API-side date filters and export actual detail rows.
-- Salesperson performance preserves the business owner through quotation, order, delivery and collection; Sales Executives can request only their own report.
+- Sales Team Comparison preserves the business owner through quotation, order, delivery and collection; management opens a named employee in the canonical Employee Activity & Reports view, while Sales Executives can request only their own role-safe detail.
+- Marketing Analysis is a cross-team operational view for period, territory, funnel, verification, follow-up and target analysis. Named Daily/Weekly/Monthly/Custom employee reports are owned only by Employees.
 - Uploaded import/cost/expense files open through an authorized API endpoint; sensitive cost documents require the same cost capability as the record.
 - MIPRO AI receives route/entity/selected-employee/report-period context and only role-scoped records. It can summarize permitted employee activity or explain access read-only, but cannot grant access, finalize, post or override business records.
 - Digital/preprinted A4 prints use the supplied MIPRO/LED stationery and Order Receiving Sheet structure.
