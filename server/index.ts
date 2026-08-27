@@ -1673,19 +1673,53 @@ app.get("/api/reports/marketing", (req, res) => {
   const followUps = visibleMarketingFollowUps(req).filter((followUp) => matchesEmployeeScope(followUp.assignedUserId) && inTimestampPeriod(followUp.dueAt, period.from, period.to) && matchesSubject(followUp.leadId, followUp.customerId) && (!status || followUp.status === status));
   const visits = fieldVisits.filter((visit) => marketingEmployeeIds(user).has(visit.userId) && matchesEmployeeScope(visit.userId) && inTimestampPeriod(visit.plannedAt, period.from, period.to) && matchesSubject(visit.leadId, visit.customerId) && (!verification || visit.verification === verification) && (!status || visit.status.toUpperCase().replace(" ", "_") === status));
   const performance = performanceRowsFor(req, period.from, period.to).filter((row) => (employeeId === "all" || row.employee.id === employeeId) && (!territory || row.employee.territory === territory));
-  const grouped = new Map<string, number>();
-  if (groupBy === "Lead Stage") for (const lead of leads) grouped.set(lead.stage, (grouped.get(lead.stage) ?? 0) + 1);
-  else for (const activity of activities) {
-    const key = groupBy === "Employee" ? activity.employeeName : groupBy === "Territory" ? activity.territory ?? "Unassigned" : groupBy === "Customer" ? activity.subjectName ?? "Unassigned" : groupBy === "Activity Type" ? activity.activityType.replaceAll("_", " ") : businessDate(new Date(activity.occurredAt));
-    grouped.set(key, (grouped.get(key) ?? 0) + 1);
-  }
+  const conciseList = (values: Array<string | undefined>, limit = 3) => {
+    const unique = [...new Set(values.filter((value): value is string => Boolean(value && value !== "-")))].sort();
+    return unique.length > limit ? `${unique.slice(0, limit).join(", ")} +${unique.length - limit}` : unique.join(", ") || "-";
+  };
+  const readableActivity = (value: string) => value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const groupKey = (activity: MarketingActivity) => groupBy === "Employee" ? activity.employeeName : groupBy === "Territory" ? activity.territory ?? "Unassigned" : groupBy === "Customer" ? activity.subjectName ?? "Unassigned" : groupBy === "Activity Type" ? readableActivity(activity.activityType) : businessDate(new Date(activity.occurredAt));
+  const activityGroups = new Map<string, MarketingActivity[]>();
+  for (const activity of activities) activityGroups.set(groupKey(activity), [...(activityGroups.get(groupKey(activity)) ?? []), activity]);
+  const fieldWorkTypes = new Set(["CHECK_IN", "CHECK_OUT", "CUSTOMER_VISIT", "DOCTOR_MEETING", "PROCUREMENT_MEETING", "DEALER_VISIT", "PRODUCT_PRESENTATION", "PRODUCT_DEMONSTRATION", "SAMPLE_DELIVERED", "COLLECTION_VISIT", "TRAINING_SESSION", "SERVICE_FOLLOW_UP", "MARKET_SURVEY"]);
+  const followUpTypes = new Set(["FOLLOW_UP_COMPLETED", "TENDER_FOLLOW_UP", "SERVICE_FOLLOW_UP"]);
+  const groupedActivityRows = [...activityGroups].sort(([left], [right]) => groupBy === "Date" ? right.localeCompare(left) : left.localeCompare(right)).map(([group, rows]) => {
+    const categoryCounts = new Map<string, number>();
+    for (const activity of rows) categoryCounts.set(readableActivity(activity.activityType), (categoryCounts.get(readableActivity(activity.activityType)) ?? 0) + 1);
+    const activityMix = [...categoryCounts].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, 3).map(([label, count]) => `${label} ${count}`).join("; ");
+    const collection = rows.filter((activity) => activity.activityType === "PAYMENT_COLLECTED").reduce((sum, activity) => sum.plus(activity.amountBdt ?? 0), new Decimal(0));
+    return {
+      group,
+      employees: conciseList(rows.map((activity) => activity.employeeName)),
+      subjects: conciseList(rows.map((activity) => activity.subjectName)),
+      mix: activityMix || "-",
+      fieldWork: String(rows.filter((activity) => fieldWorkTypes.has(activity.activityType)).length),
+      followUps: String(rows.filter((activity) => followUpTypes.has(activity.activityType)).length),
+      business: `Quotations ${rows.filter((activity) => activity.activityType === "QUOTATION_SUBMITTED").length} | Orders ${rows.filter((activity) => activity.activityType === "ORDER_RECEIVED").length}`,
+      collections: money(collection),
+      verified: String(rows.filter((activity) => ["GPS_VERIFIED", "SYSTEM_VERIFIED"].includes(activity.verification)).length),
+      count: String(rows.length)
+    };
+  });
+  const leadStageGroups = new Map<string, typeof leads>();
+  for (const lead of leads) leadStageGroups.set(lead.stage, [...(leadStageGroups.get(lead.stage) ?? []), lead]);
+  const groupedLeadRows = [...leadStageGroups].sort(([left], [right]) => left.localeCompare(right)).map(([group, rows]) => ({
+    group,
+    employees: conciseList(rows.map((lead) => demoUsers.find((entry) => entry.id === lead.assignedUserId)?.name ?? lead.assignedUserId)),
+    subjects: conciseList(rows.map((lead) => lead.organizationName)),
+    next: rows.map((lead) => lead.nextFollowUpAt).filter((value): value is string => Boolean(value)).sort()[0] ?? "Not scheduled",
+    count: String(rows.length)
+  }));
+  const groupedTable = groupBy === "Lead Stage"
+    ? { id: "marketing-grouped", title: "Lead Pipeline by Stage", columns: [{ key: "group", label: "Lead Stage" }, { key: "employees", label: "Assigned Employees" }, { key: "subjects", label: "Organizations" }, { key: "next", label: "Earliest Next Follow-up" }, { key: "count", label: "Leads", align: "right" as const }], rows: groupedLeadRows }
+    : { id: "marketing-grouped", title: `Activity by ${groupBy}`, columns: [{ key: "group", label: groupBy }, { key: "employees", label: "Employees" }, { key: "subjects", label: "Customers / Leads" }, { key: "mix", label: "Activity Mix" }, { key: "fieldWork", label: "Field Work", align: "right" as const }, { key: "followUps", label: "Follow-ups", align: "right" as const }, { key: "business", label: "Quotes / Orders" }, { key: "collections", label: "Collections", align: "right" as const }, { key: "verified", label: "Verified", align: "right" as const }, { key: "count", label: "Total", align: "right" as const }], rows: groupedActivityRows };
   const data: MarketingReportData = {
     period,
     filters: { employeeId, territory, activityType, subjectId, verification, status, groupBy, mode },
     summary: [{ label: "Activities", value: String(activities.length) }, { label: "New Leads", value: String(leads.length) }, { label: "Follow-ups", value: String(followUps.length) }, { label: "Verified Visits", value: String(visits.filter((visit) => visit.status === "Completed" && ["GPS_VERIFIED", "SYSTEM_VERIFIED"].includes(visit.verification ?? "UNVERIFIED")).length) }, { label: "Activity Score", value: String(performance.reduce((sum, row) => sum + row.activityScore, 0)) }],
     tables: [
-      { id: "marketing-activity", title: "Daily Marketing Activity", columns: [{ key: "date", label: "Date / Time" }, { key: "employee", label: "Employee" }, { key: "territory", label: "Territory" }, { key: "activity", label: "Activity" }, { key: "subject", label: "Customer / Lead" }, { key: "verification", label: "Verification" }, { key: "reference", label: "ERP Reference" }], rows: activities.map((activity) => ({ date: activity.occurredAt, employee: activity.employeeName, territory: activity.territory ?? "-", activity: activity.activityType.replaceAll("_", " "), subject: activity.subjectName ?? "-", verification: activity.verification.replaceAll("_", " "), reference: activity.referenceNumber ?? "Manual" })) },
-      { id: "marketing-grouped", title: `Activity by ${groupBy}`, columns: [{ key: "group", label: groupBy }, { key: "count", label: "Activities", align: "right" as const }], rows: [...grouped].sort(([left], [right]) => left.localeCompare(right)).map(([group, count]) => ({ group, count: String(count) })) },
+      { id: "marketing-activity", title: "Daily Marketing Activity", columns: [{ key: "date", label: "Date / Time" }, { key: "employee", label: "Employee" }, { key: "territory", label: "Territory" }, { key: "activity", label: "Activity" }, { key: "subject", label: "Customer / Lead" }, { key: "outcome", label: "Purpose / Outcome" }, { key: "verification", label: "Verification" }, { key: "reference", label: "ERP Reference" }, { key: "amount", label: "Linked Value", align: "right" as const }, { key: "next", label: "Next Follow-up" }], rows: activities.map((activity) => ({ date: activity.occurredAt, employee: activity.employeeName, territory: activity.territory ?? "-", activity: readableActivity(activity.activityType), subject: activity.subjectName ?? "-", outcome: [activity.purpose, activity.remarks].filter(Boolean).join(" | ") || "No outcome recorded", verification: activity.verification.replaceAll("_", " "), reference: activity.referenceNumber ?? "Manual", amount: activity.amountBdt ?? "-", next: activity.nextFollowUpAt ?? "-" })) },
+      groupedTable,
       { id: "lead-funnel", title: "Lead Funnel", columns: [{ key: "lead", label: "Lead" }, { key: "organization", label: "Organization" }, { key: "employee", label: "Assigned Employee" }, { key: "stage", label: "Stage" }, { key: "next", label: "Next Follow-up" }], rows: leads.map((lead) => ({ lead: lead.leadNumber, organization: lead.organizationName, employee: demoUsers.find((entry) => entry.id === lead.assignedUserId)?.name ?? lead.assignedUserId, stage: lead.stage, next: lead.nextFollowUpAt ?? "-" })) },
       { id: "follow-up-status", title: "Follow-up Status", columns: [{ key: "due", label: "Due" }, { key: "employee", label: "Employee" }, { key: "subject", label: "Customer / Lead" }, { key: "purpose", label: "Purpose" }, { key: "status", label: "Status" }], rows: followUps.map((followUp) => ({ due: followUp.dueAt, employee: demoUsers.find((entry) => entry.id === followUp.assignedUserId)?.name ?? followUp.assignedUserId, subject: followUp.subjectName, purpose: followUp.purpose, status: followUp.status })) },
       { id: "target-actual", title: "Target vs Actual", columns: [{ key: "employee", label: "Employee" }, { key: "sales", label: "Delivered Sales" }, { key: "collection", label: "Collections" }, { key: "visits", label: "Verified Visits" }, { key: "customers", label: "New Customers" }, { key: "progress", label: "Overall", align: "right" as const }], rows: performance.map((row) => ({ employee: row.employee.name, sales: `${row.deliveredSalesBdt} / ${row.targets.salesTargetBdt}`, collection: `${row.collectionsBdt} / ${row.targets.collectionTargetBdt}`, visits: `${row.verifiedVisits} / ${row.targets.visitTarget}`, customers: `${row.convertedCustomers} / ${row.targets.newCustomerTarget}`, progress: `${row.progress.overall}%` })) },

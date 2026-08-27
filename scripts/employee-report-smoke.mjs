@@ -104,6 +104,11 @@ try {
   await desktop.getByRole("listbox", { name: "Employee Filter" }).getByRole("option", { name: /Shamima Sultana/ }).click();
   const namedReportLink = desktop.getByRole("link", { name: "Open named employee report" });
   await namedReportLink.waitFor();
+  await desktop.getByRole("tab", { name: /Activity by Date/ }).click();
+  for (const heading of ["Date", "People & Accounts", "Activity Summary", "Field / Follow-up", "Business Results", "Evidence", "Details"]) await desktop.getByRole("columnheader", { name: heading, exact: true }).waitFor();
+  await desktop.getByRole("button", { name: /View details for/ }).first().click();
+  await desktop.getByText(/Underlying records for/).waitFor();
+  await desktop.getByRole("columnheader", { name: "Purpose / Outcome", exact: true }).waitFor();
   await desktop.screenshot({ path: "artifacts/employee-report/marketing-analysis-desktop.png", fullPage: true, animations: "disabled" });
   await namedReportLink.click();
   await desktop.getByTestId("employee-activity-performance").waitFor();

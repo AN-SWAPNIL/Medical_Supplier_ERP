@@ -681,6 +681,9 @@ async function run() {
   const marketingReport = await api("/api/reports/marketing?from=" + monthStart + "&to=" + today + "&employeeId=all&groupBy=Employee&mode=Detail", { as: identities.salesManager });
   assert.ok(marketingReport.tables.some((entry) => entry.id === "marketing-activity"));
   assert.ok(marketingReport.tables.some((entry) => entry.id === "lead-funnel"));
+  const groupedMarketing = marketingReport.tables.find((entry) => entry.id === "marketing-grouped");
+  assert.deepEqual(groupedMarketing.columns.map((column) => column.key), ["group", "employees", "subjects", "mix", "fieldWork", "followUps", "business", "collections", "verified", "count"]);
+  assert.ok(groupedMarketing.rows.some((entry) => entry.employees && entry.mix && entry.subjects), "Grouped marketing analysis must preserve operational context, not only counts.");
   assert.ok(marketingReport.performance.some((entry) => entry.employee.id === identities.sales1.id));
   const employeeSnapshot = await api("/api/marketing/employees/" + identities.sales1.id + "/snapshot?from=" + monthStart + "&to=" + today, { as: identities.salesManager });
   assert.deepEqual(employeeSnapshot.period, { from: monthStart, to: today });
