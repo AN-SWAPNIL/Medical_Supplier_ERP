@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import ContactCTA from "./components/ContactCTA";
-import PublicPageHero from "./components/PublicPageHero";
 import { publicSiteService } from "./publicSiteService";
 import type { PublicResource } from "./public.types";
 import { usePublicMeta } from "./usePublicMeta";
@@ -41,18 +40,24 @@ export default function ResourceDetailPage() {
   return (
     <>
       <ResourceMeta resource={item} />
-      <PublicPageHero
-        eyebrow={item.kind}
-        title={item.title}
-        body={item.summary}
-        image={item.image}
-        imageAlt={item.imageAlt ?? item.title}
-        actions={<div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-200"><span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4 text-cyan-300" />{formatDate(item.publishedOn)}</span><span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4 text-cyan-300" />{item.readingMinutes ?? 3} min read</span></div>}
-      />
-
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-4 text-sm sm:px-6 lg:px-8"><Link className="font-semibold text-slate-500 hover:text-blue-900" to="/news">News & Resources</Link><span className="text-slate-300">/</span><span className="truncate font-semibold text-blue-950">{item.title}</span></div>
       </section>
+
+      <header className="border-b border-slate-200 bg-white py-10 sm:py-14">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,.95fr)] lg:items-center lg:px-8">
+          <div className="min-w-0">
+            <p className="inline-flex items-center gap-2 text-xs font-bold uppercase text-cyan-700"><BookOpen className="h-4 w-4" />{item.kind}</p>
+            <h1 className="mt-4 text-4xl font-bold leading-tight text-blue-950 sm:text-5xl">{item.title}</h1>
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">{item.summary}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200 pt-5 text-sm text-slate-500"><span className="font-bold text-blue-950">{item.author || "MIPRO Healthcare Corporation"}</span><span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4 text-cyan-700" />{formatDate(item.publishedOn)}</span><span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4 text-cyan-700" />{item.readingMinutes ?? 3} min read</span></div>
+          </div>
+          <figure className="min-w-0">
+            <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5"><img className="mx-auto aspect-[4/3] max-h-[520px] w-full object-contain" src={item.image} alt={item.imageAlt ?? item.title} /></div>
+            {item.imageAlt ? <figcaption className="mt-3 text-sm leading-6 text-slate-500">{item.imageAlt}</figcaption> : null}
+          </figure>
+        </div>
+      </header>
 
       <article className="bg-white py-14 sm:py-20">
         <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[minmax(0,760px)_280px] lg:justify-between lg:px-8">
