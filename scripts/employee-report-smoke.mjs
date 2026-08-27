@@ -70,10 +70,16 @@ try {
   await desktop.getByLabel("Report Content").selectOption("Field Work");
   await desktop.getByRole("heading", { name: "Weekly Employee Field Work Report" }).waitFor();
   await desktop.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+  await desktop.getByRole("tab", { name: "Without Background" }).click();
+  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "preprinted", "Employee report must offer a content-only preprinted-paper mode");
+  assert.equal(await desktop.locator(".report-letterhead-sheet").evaluate((element) => window.getComputedStyle(element).backgroundImage), "none", "Preprinted employee report must omit background artwork");
+  await desktop.getByRole("tab", { name: "With Background" }).click();
+  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "digital", "Employee report must restore its digital background mode");
+  assert.match(await desktop.locator(".report-letterhead-sheet").evaluate((element) => window.getComputedStyle(element).backgroundImage), /url\(/, "Digital employee report must use configured letterhead artwork");
   await desktop.getByRole("button", { name: "CSV" }).waitFor();
-  assert.match(await desktop.locator(".employee-print-report").innerText(), /Shamima Sultana/);
-  assert.match(await desktop.locator(".employee-print-report").innerText(), /SE-014/);
-  assert.match(await desktop.locator(".employee-print-report").innerText(), /Employee Activity Log/);
+  assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /Shamima Sultana/);
+  assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /SE-014/);
+  assert.match(await desktop.getByTestId("employee-report-screen").innerText(), /Employee Activity Log/);
   await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-desktop.png", fullPage: true, animations: "disabled" });
 
   await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
@@ -87,14 +93,19 @@ try {
   await desktop.getByRole("listbox", { name: "Employee Filter" }).getByRole("option", { name: /Shamima Sultana/ }).click();
   const namedReportLink = desktop.getByRole("link", { name: "Open named employee report" });
   await namedReportLink.waitFor();
+  await desktop.getByRole("tab", { name: "Without Background" }).click();
+  assert.equal(await desktop.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode"), "preprinted", "Marketing analysis must offer a without-background print mode");
+  await desktop.getByRole("tab", { name: "With Background" }).click();
   await desktop.screenshot({ path: "artifacts/employee-report/marketing-analysis-desktop.png", fullPage: true, animations: "disabled" });
   await namedReportLink.click();
   await desktop.getByTestId("employee-activity-performance").waitFor();
   assert.equal(new URL(desktop.url()).pathname, "/app/employees", "Named employee reporting must leave team analysis for the canonical Employees workspace");
 
   await desktop.emulateMedia({ media: "print" });
-  assert.equal(await desktop.locator(".no-print").isVisible(), false, "Report controls must be hidden in print media");
-  assert.equal(await desktop.locator(".employee-print-report header").isVisible(), true, "Branded employee report header must print");
+  assert.equal(await desktop.locator(".no-print:visible").count(), 0, "Report controls must be hidden in print media");
+  assert.equal(await desktop.locator(".report-letterhead-sheet").isVisible(), true, "Calibrated employee letterhead sheet must print");
+  assert.equal(await desktop.locator(".report-letterhead-sheet header").isVisible(), true, "Shared report title and reference header must print");
+  await desktop.screenshot({ path: "artifacts/employee-report/employee-weekly-print.png", fullPage: true, animations: "disabled" });
   await desktop.pdf({ path: "artifacts/employee-report/employee-weekly-print.pdf", format: "A4", printBackground: true });
   await desktop.close();
 

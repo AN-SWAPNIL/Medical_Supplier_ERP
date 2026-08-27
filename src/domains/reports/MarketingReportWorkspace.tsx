@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Download, FileSpreadsheet, Printer, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { BarChart3, Download, FileSpreadsheet, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import EmployeePicker from "../../components/employees/EmployeePicker";
@@ -11,6 +11,7 @@ import { ErrorBlock, LoadingBlock, Panel, Segmented, TableFrame, inputClass, lab
 import type { ReportTable } from "../erp.types";
 import { employeeService, marketingService, reportService } from "../services";
 import { allMarketingActivityTypes, marketingActivityLabel } from "../marketing/activityCategories";
+import { LetterheadPrintControls, LetterheadReportPortal, useLetterheadPrint } from "../print/LetterheadPrint";
 
 function csvCell(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
@@ -22,6 +23,7 @@ function displaySummary(label: string, value: string) {
 
 export default function MarketingReportWorkspace({ from, to, preset = "", initialEmployeeId, initialSubjectId }: { from: string; to: string; preset?: string; initialEmployeeId?: string; initialSubjectId?: string }) {
   const user = useAuthStore((state) => state.session?.user);
+  const letterheadPrint = useLetterheadPrint();
   const canExport = hasEffectivePermission(user, "marketing", "export");
   const canPrint = hasEffectivePermission(user, "print", "view");
   const selfScope = getMarketingEmployeeScope(user) === "SELF";
@@ -85,7 +87,7 @@ export default function MarketingReportWorkspace({ from, to, preset = "", initia
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-4">
-      <Panel className="min-w-0" title="Marketing Team Analysis" subtitle="Cross-team activity, territory, funnel, verification, follow-up and target analysis" actions={<>{canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Analysis</Button> : null}{canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Analysis</Button> : null}</>}>
+      <Panel className="min-w-0" title="Marketing Team Analysis" subtitle="Cross-team activity, territory, funnel, verification, follow-up and target analysis" actions={canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Analysis</Button> : undefined}>
         <div className="grid gap-3 p-4 lg:grid-cols-[minmax(280px,1fr)_minmax(260px,.8fr)_auto] lg:items-end">
           <div className="flex min-h-16 items-center gap-3 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded bg-blue-950 text-cyan-300"><BarChart3 className="h-4 w-4" /></span><div><strong className="block text-sm text-blue-950">Operational marketing analysis</strong><p className="text-xs leading-5 text-slate-600">Grouped evidence for management decisions, not an employee personnel report.</p></div></div>
           <div><span className={labelClass}>Analysis Depth</span><Segmented value={mode} onChange={setMode} ariaLabel="Marketing analysis detail" options={[{ value: "Summary", label: "Summary" }, { value: "Detail", label: "Detailed Rows" }]} /></div>
@@ -105,14 +107,35 @@ export default function MarketingReportWorkspace({ from, to, preset = "", initia
         </div> : null}
       </Panel>
 
+      {canPrint ? <LetterheadPrintControls controller={letterheadPrint} title="Marketing analysis printing" /> : null}
+
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Marketing analysis summary">{data.summary.map((row, index) => <div className={`rounded-md border bg-white p-4 shadow-sm ${index % 5 === 0 ? "border-blue-200 border-t-blue-700" : index % 5 === 1 ? "border-cyan-200 border-t-cyan-600" : index % 5 === 2 ? "border-emerald-200 border-t-emerald-600" : index % 5 === 3 ? "border-amber-200 border-t-amber-500" : "border-red-200 border-t-red-500"} border-t-4`} key={row.label}><span className="text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl text-blue-950">{displaySummary(row.label, row.value)}</strong></div>)}</section>
 
       <div className="min-w-0 overflow-hidden rounded-md border border-blue-200 bg-blue-50/50 p-3 shadow-sm"><Segmented value={selected?.id ?? tableId} onChange={setTableId} ariaLabel="Marketing analysis tables" options={tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))} /></div>
       <Panel className="min-w-0" title={selected?.title ?? "Marketing Analysis"} subtitle={`${from} to ${to} | ${mode} | grouped by ${groupBy}${employeeId !== "all" && selectedEmployee ? ` | filtered to ${selectedEmployee.name}` : ""}`} actions={<span className="flex items-center gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" />{selected?.rows.length ?? 0} analytical rows</span>}>
         {selected ? <MarketingDataTable table={selected} /> : <div className="p-8 text-center text-sm text-slate-500">No analysis table matches the current view.</div>}
       </Panel>
+      {canPrint && letterheadPrint.identity && selected ? <LetterheadReportPortal
+        identity={letterheadPrint.identity}
+        mode={letterheadPrint.mode}
+        title="MARKETING TEAM ANALYSIS"
+        subtitle={`${selected.title} | ${mode} | Grouped by ${groupBy}${selectedEmployee ? ` | ${selectedEmployee.name}` : ""}`}
+        reference={`MKT-${selected.id.toUpperCase()}-${to.replaceAll("-", "")}`}
+        date={`${from} to ${to}`}
+        multiPage
+      >
+        <MarketingLetterheadContent summary={data.summary} table={selected} />
+      </LetterheadReportPortal> : null}
     </div>
   );
+}
+
+function MarketingLetterheadContent({ summary, table }: { summary: Array<{ label: string; value: string }>; table: ReportTable }) {
+  return <div className="grid gap-4 text-[8px]">
+    <section className="grid grid-cols-5 gap-px border border-slate-200 bg-slate-200">{summary.slice(0, 10).map((row) => <div className="bg-white/95 p-2" key={row.label}><span className="block text-[7px] font-bold uppercase text-slate-500">{row.label}</span><strong className="mt-1 block text-[10px] text-blue-950">{displaySummary(row.label, row.value)}</strong></div>)}</section>
+    <section><div className="mb-2 flex items-end justify-between"><h2 className="text-[11px] font-bold text-blue-950">{table.title}</h2><span className="text-slate-500">{table.rows.length} analytical rows</span></div><table className="w-full table-fixed border-collapse"><thead><tr className="bg-blue-950 text-white">{table.columns.map((column) => <th className={`border border-blue-950 p-1.5 ${column.align === "right" ? "text-right" : "text-left"}`} key={column.key}>{column.label}</th>)}</tr></thead><tbody>{table.rows.map((row, index) => <tr className="break-inside-avoid" key={`${table.id}-print-${index}`}>{table.columns.map((column) => <td className={`border border-slate-300 p-1.5 align-top ${column.align === "right" ? "text-right" : "text-left"}`} key={column.key}>{row[column.key] || "-"}</td>)}</tr>)}{!table.rows.length ? <tr><td className="border border-slate-300 p-6 text-center text-slate-500" colSpan={table.columns.length}>No records match the selected filters.</td></tr> : null}</tbody></table></section>
+    <footer className="mt-12 grid grid-cols-3 gap-10 text-center"><span className="border-t border-slate-500 pt-2">Prepared by</span><span className="border-t border-slate-500 pt-2">Reviewed by</span><span className="border-t border-slate-500 pt-2">Approved by</span></footer>
+  </div>;
 }
 
 function MarketingDataTable({ table }: { table: ReportTable }) {

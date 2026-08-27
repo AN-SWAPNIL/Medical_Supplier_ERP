@@ -111,6 +111,7 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Owner-only price preview shows FIFO COGS and profit/loss.
 - [ ] Quotation lines carry into order.
 - [ ] Actual MIPRO/LED digital and calibrated preprinted quotation views render.
+- [ ] Every formal report offers With Background and Without Background using the same selected identity and calibrated safe area.
 - [ ] Order Receiving Sheet uses the supplied structure.
 - [ ] Delivery selects an actual batch and reduces stock.
 - [ ] Delivery creates customer due.
@@ -129,6 +130,7 @@ End as Sales Executive to show own-record Sales and Reports, direct-URL denial, 
 - [ ] Marketing Analysis groups and filters cross-team field evidence without duplicating the named employee report.
 - [ ] Sales Executive can open only their own role-safe sales detail and activity report.
 - [ ] TA/DA Approved Sheet and owner realized-profit report render.
+- [ ] Employee, Marketing, operational, audit and TA/DA printouts contain the active period/filter data rather than the surrounding application screen.
 - [ ] Settings are Super Admin-only.
 - [ ] Roles show only their permitted navigation.
 - [ ] Unauthorized direct URLs show Access denied.

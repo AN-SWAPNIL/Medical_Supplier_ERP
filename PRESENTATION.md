@@ -584,7 +584,7 @@ The generated employee report combines:
 - daily plans that fall within the selected period and monthly plans that overlap it;
 - an activity-category composition, management interpretation, late/verified submission summary, report reference, and prepared-by identity.
 
-The printable A4 report visibly names the employee and includes profile image/initials, employee code, designation, department, territory, status, report period, report type, generation time, prepared-by user, KPIs, target-versus-actual rows, detailed activity, plans, follow-ups, pipeline, and Employee/Reviewed by/Approved by signature lines. **Print / Save PDF** uses the same preview; CSV follows the report-export permission. Mobile uses readable activity cards instead of squeezing the desktop table.
+The on-screen Employee view follows the same operational panel style as the rest of the ERP; it is not decorated as fake stationery. **Print / Save PDF** separately builds the calibrated official A4 report from the same filters and data. That output visibly names the employee and includes profile image/initials, employee code, designation, department, territory, status, report period, report type, prepared-by user, KPIs, target-versus-actual rows, detailed activity, plans, follow-ups, pipeline, and Employee/Reviewed by/Approved by signature lines. CSV follows the report-export permission, while mobile uses readable activity cards instead of squeezing the desktop table.
 
 New transactions store exact `createdAt`, `submittedAt`, or `postedAt` values. A legacy record that has only a date displays **Time unavailable** instead of an invented hour. **Field Map** focuses the employee in the canonical map. All report generation remains in **Employees -> Activity & Reports**, so a manager does not lose context by being sent to another module.
 
@@ -1123,9 +1123,9 @@ The server automatically consumes the oldest eligible batch and continues into t
 
 No ordinary reopen is allowed after the first receipt because stock already inherited that valuation. A future formal valuation-adjustment workflow would be required.
 
-**Are the quotation and order forms based on the supplied stationery?**
+**Do business documents and reports use the supplied stationery?**
 
-Yes. Digital mode uses the supplied MIPRO or LED TRACKERS background; preprinted mode keeps the same millimetre content coordinates without printing the artwork. The Order Receiving Sheet includes the supplied customer, payment, responsibility, and office-use structure.
+Yes. Quotation, order, challan, receipt, import cost, employee activity, Marketing Analysis, operational reports, audit and TA/DA all use the same calibrated A4 print system. **With Background** includes the selected MIPRO or LED TRACKERS artwork for PDF or plain paper. **Without Background** preserves the same millimetre content coordinates while omitting the image for existing preprinted letterhead. The Order Receiving Sheet still includes the supplied customer, payment, responsibility and office-use structure.
 
 **Where is invoice generation?**
 

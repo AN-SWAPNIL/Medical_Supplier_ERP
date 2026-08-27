@@ -80,6 +80,10 @@ button:disabled {
   border-radius: 999px;
 }
 
+.report-print-portal {
+  display: none;
+}
+
 @media print {
   html,
   body {
@@ -102,6 +106,53 @@ button:disabled {
     padding: 0 !important;
   }
 
+  body:has(> .report-print-portal) > #root {
+    display: none !important;
+  }
+
+  body > .report-print-portal {
+    display: block !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .letterhead-sheet {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .report-letterhead-sheet {
+    page: report-letterhead;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    overflow: visible !important;
+    background-repeat: no-repeat !important;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .report-letterhead-sheet > div {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .report-letterhead-fixed-footer {
+    position: fixed;
+    z-index: 3;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 210mm;
+    background-position: bottom left;
+    background-repeat: no-repeat;
+    background-size: 210mm 297mm;
+  }
+
   .print-preview {
     overflow: visible !important;
     padding: 0 !important;
@@ -118,57 +169,4 @@ button:disabled {
     -webkit-print-color-adjust: exact;
   }
 
-  main:has(> .print-report-sheet) > :not(.print-report-sheet) {
-    display: none !important;
-  }
-
-  .print-report-sheet {
-    display: block !important;
-    width: 210mm;
-    min-height: 297mm;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  body:has(.employee-print-report) main > :not(.employee-report-workspace) {
-    display: none !important;
-  }
-
-  body:has(.employee-print-report) .employee-report-workspace > :not(.employee-print-report) {
-    display: none !important;
-  }
-
-  .employee-print-report {
-    display: block !important;
-    width: 210mm !important;
-    min-height: 297mm;
-    overflow: visible !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  .employee-print-report header {
-    display: block !important;
-  }
-
-  .employee-print-report section,
-  .employee-print-report footer {
-    break-inside: avoid;
-  }
-
-  .employee-report-mobile {
-    display: none !important;
-  }
-
-  .employee-report-table {
-    display: block !important;
-  }
-
-  .employee-report-table table {
-    min-width: 0 !important;
-    table-layout: fixed;
-  }
 }

@@ -7,8 +7,7 @@ import { ErrorBlock, LoadingBlock, Segmented } from "../components";
 import { importService, printService, reportService, salesService } from "../services";
 import type { Collection, Delivery, ImportCase, PrintIdentity, Quotation, SalesOrder, SalespersonPerformanceDetail } from "../erp.types";
 import { formatCurrency, formatNumber } from "../../utils/format";
-
-type LetterheadMode = "digital" | "preprinted";
+import { LetterheadSheet, letterheadModeOptions, printModeFromConfiguration, type LetterheadMode } from "./LetterheadPrint";
 type Printable = Quotation | SalesOrder | Delivery | Collection | ImportCase | SalespersonPerformanceDetail;
 
 export default function PrintPage() {
@@ -42,8 +41,8 @@ export default function PrintPage() {
   const record = recordQuery.data;
   const identity = config.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config.identities[0];
   const title = documentType === "quotation" ? "QUOTATION" : documentType === "order" ? "ORDER RECEIVING SHEET" : documentType === "challan" ? "DELIVERY CHALLAN" : documentType === "receipt" ? "MONEY RECEIPT" : documentType === "employee-performance" ? "SALES EMPLOYEE PERFORMANCE REPORT" : "IMPORT LANDED COST";
-  const effectiveMode: LetterheadMode = mode || (config.defaultLetterheadMode === "Digital" ? "digital" : "preprinted");
-  const digital = effectiveMode === "digital";
+  const effectiveMode = printModeFromConfiguration(config, mode);
+  const documentReference = getDocumentReference(documentType, record);
 
   return (
     <>
@@ -51,42 +50,27 @@ export default function PrintPage() {
         <Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(-1)}>Back</Button>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><Stamp className="h-4 w-4" /><select className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm" value={identity.id} onChange={(event) => setIdentityId(event.target.value)}>{config.identities.map((entry) => <option value={entry.id} key={entry.id}>{entry.displayName}</option>)}</select></label>
-          <Segmented value={effectiveMode} onChange={setMode} ariaLabel="Letterhead mode" options={[{ value: "digital", label: "Digital Letterhead" }, { value: "preprinted", label: "Preprinted Paper" }]} />
+          <Segmented value={effectiveMode} onChange={setMode} ariaLabel="Letterhead artwork" options={letterheadModeOptions} />
         </div>
         <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button>
       </div>
 
       <div className="print-preview overflow-x-auto rounded-md bg-slate-200 p-3 sm:p-6">
-        <article
-          className="print-sheet relative mx-auto overflow-hidden bg-white text-slate-950 shadow-xl"
-          data-document-type={documentType}
-          data-letterhead-mode={effectiveMode}
-          data-print-identity={identity.id}
-          style={{
-            width: "210mm",
-            minHeight: "297mm",
-            backgroundImage: digital ? `url(${identity.backgroundImageUrl})` : "none",
-            backgroundPosition: "top left",
-            backgroundRepeat: "no-repeat",
-            backgroundSize: "210mm 297mm"
-          }}
+        <LetterheadSheet
+          identity={identity}
+          mode={effectiveMode}
+          title={title}
+          reference={documentReference.reference}
+          date={documentReference.date}
+          className="print-sheet shadow-xl"
         >
-          <div style={{ paddingTop: `${identity.safeArea.topMm}mm`, paddingRight: `${identity.safeArea.rightMm}mm`, paddingBottom: `${identity.safeArea.bottomMm}mm`, paddingLeft: `${identity.safeArea.leftMm}mm` }}>
-            {!digital ? <PreprintedGuide identity={identity} /> : null}
-            <div className="flex items-start justify-between gap-8 border-b border-blue-900 pb-3">
-              <div><h1 className="text-[18px] font-black tracking-normal text-blue-950">{title}</h1><div className="mt-1 h-1 w-14 bg-cyan-500" /></div>
-              <DocumentReference type={documentType} record={record} />
-            </div>
-            <div className="mt-5">
               {documentType === "quotation" ? <QuotationDocument record={record as Quotation} /> : null}
               {documentType === "order" ? <OrderReceivingSheet record={record as SalesOrder} identity={identity} /> : null}
               {documentType === "challan" ? <ChallanDocument record={record as Delivery} /> : null}
               {documentType === "receipt" ? <ReceiptDocument record={record as Collection} /> : null}
               {documentType === "import-cost" ? <ImportCostDocument record={record as ImportCase} /> : null}
               {documentType === "employee-performance" ? <EmployeePerformanceDocument record={record as SalespersonPerformanceDetail} from={searchParams.get("from") ?? ""} to={searchParams.get("to") ?? ""} /> : null}
-            </div>
-          </div>
-        </article>
+        </LetterheadSheet>
       </div>
       <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Physical calibration:</strong> 210 x 297 mm, zero browser margin, content safe area {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm. Choose "Actual size / 100%" in the print dialog.</p></div>
     </>
@@ -99,11 +83,7 @@ function find<T extends { id: string }>(rows: T[], id: string) {
   return record;
 }
 
-function PreprintedGuide({ identity }: { identity: PrintIdentity }) {
-  return <div className="no-print absolute left-2 top-2 border border-dashed border-cyan-400 bg-cyan-50 p-2 text-[9px] text-cyan-900">Preprinted {identity.displayName}: artwork omitted; calibrated content only.</div>;
-}
-
-function DocumentReference({ type, record }: { type: string; record: Printable }) {
+function getDocumentReference(type: string, record: Printable) {
   let reference = "";
   let date = "";
   if (type === "quotation") { reference = (record as Quotation).quotationNumber; date = (record as Quotation).date; }
@@ -112,7 +92,7 @@ function DocumentReference({ type, record }: { type: string; record: Printable }
   if (type === "receipt") { reference = (record as Collection).receiptNumber; date = (record as Collection).date; }
   if (type === "import-cost") { reference = (record as ImportCase).primaryReference; date = (record as ImportCase).snapshot?.finalizedAt.slice(0, 10) ?? ""; }
   if (type === "employee-performance") { reference = (record as SalespersonPerformanceDetail).employee.name; date = "Selected period"; }
-  return <dl className="grid gap-1 text-right text-[10px]"><div><dt className="inline text-slate-500">Reference: </dt><dd className="inline font-bold">{reference}</dd></div><div><dt className="inline text-slate-500">Date: </dt><dd className="inline font-bold">{date}</dd></div></dl>;
+  return { reference, date };
 }
 
 function CustomerBlock({ name, address, phone, contact, terms }: { name: string; address?: string; phone?: string; contact?: string; terms?: string }) {

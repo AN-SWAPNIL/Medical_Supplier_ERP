@@ -148,7 +148,8 @@ for (const [name, path, width, height] of printRoutes) {
 
 const preprinted = await preparePage({ name: "print-quotation-preprinted", width: 1200, height: 1000, user: people.super });
 await preprinted.goto(baseUrl + "/app/print/quotation/quo-1", { waitUntil: "networkidle", timeout: 60000 });
-await preprinted.getByRole("tab", { name: "Preprinted Paper" }).click();
+await preprinted.getByRole("tab", { name: "Without Background" }).click();
+if (await preprinted.locator(".print-sheet").getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Quotation without-background mode did not remove digital stationery artwork.");
 await preprinted.waitForFunction(() => {
   const table = document.querySelector(".print-sheet table");
   return table && table.getBoundingClientRect().width > 500;
@@ -157,6 +158,16 @@ await preprinted.screenshot({ path: "artifacts/print-quotation-preprinted.png", 
 const preprintedWidth = await preprinted.locator(".print-sheet table").evaluate((element) => element.getBoundingClientRect().width);
 if (preprintedWidth < 500) issues.push("Preprinted quotation content did not retain the calibrated A4 safe width.");
 await preprinted.close();
+
+const reportPrint = await preparePage({ name: "report-print-modes", width: 1440, height: 1000, user: people.super });
+await reportPrint.goto(baseUrl + "/app/reports?view=imports", { waitUntil: "networkidle", timeout: 60000 });
+await reportPrint.getByTestId("letterhead-print-controls").waitFor();
+await reportPrint.getByRole("tab", { name: "Without Background" }).click();
+if (await reportPrint.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Operational report without-background mode was not applied.");
+await reportPrint.getByRole("tab", { name: "With Background" }).click();
+if (await reportPrint.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
+await reportPrint.screenshot({ path: "artifacts/report-print-modes.png", fullPage: true });
+await reportPrint.close();
 
 const customerLedger = await preparePage({ name: "customer-ledger-desktop", width: 1440, height: 1000, user: people.super });
 await customerLedger.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
@@ -195,7 +206,7 @@ if (new URL(employeeReport.url()).pathname !== "/app/employees") issues.push("Sa
 await employeeReport.getByRole("tab", { name: "Monthly" }).click();
 await employeeReport.getByLabel("Report Month").fill("2026-08");
 await employeeReport.getByRole("button", { name: "Print / Save PDF" }).waitFor();
-const performanceText = await employeeReport.locator(".employee-print-report").textContent();
+const performanceText = await employeeReport.locator(".employee-report-screen").textContent();
 if (!/delivered sales/i.test(performanceText ?? "") || !/collections/i.test(performanceText ?? "")) issues.push("Canonical employee report summary is incomplete.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
 await employeeReport.close();
@@ -206,13 +217,17 @@ await employeeHub.getByTestId("employee-activity-performance").waitFor({ timeout
 await employeeHub.getByRole("tab", { name: "Monthly" }).click();
 await employeeHub.getByLabel("Report Month").fill("2026-08");
 await employeeHub.getByRole("heading", { name: "Monthly Employee Activity & Performance Report" }).waitFor();
-await employeeHub.getByText("Employee Activity Log", { exact: true }).waitFor();
+await employeeHub.getByTestId("employee-report-screen").getByText("Employee Activity Log", { exact: true }).waitFor();
 const employeeHubText = await employeeHub.locator("body").textContent();
 for (const expectedMetric of ["Verified Visits", "New Leads", "Collections", "Overall Target", "Target vs Actual", "Daily & Monthly Plan Review"]) {
   if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity & Performance is missing " + expectedMetric + ".");
 }
 await employeeHub.screenshot({ path: "artifacts/employee-hub-activity-flow.png", fullPage: true });
 await employeeHub.getByRole("button", { name: "Print / Save PDF" }).waitFor();
+await employeeHub.getByRole("tab", { name: "Without Background" }).click();
+if (await employeeHub.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Employee report without-background mode was not applied to its A4 sheet.");
+await employeeHub.getByRole("tab", { name: "With Background" }).click();
+if (await employeeHub.locator(".report-letterhead-sheet").getAttribute("data-letterhead-mode") !== "digital") issues.push("Employee report background mode was not restored.");
 const reportUrl = new URL(employeeHub.url());
 if (reportUrl.pathname !== "/app/employees" || reportUrl.searchParams.get("view") !== "activity" || reportUrl.searchParams.get("employee") !== "sales1") issues.push("Employee report left its canonical Employees workspace.");
 await employeeHub.close();
@@ -426,7 +441,9 @@ await planDialog.getByText("Completion is posted by a verified field check-out, 
 if ((await planDialog.locator("select").count()) < 1) issues.push("Daily plan is missing canonical customer/lead selectors.");
 await salesPage.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
 await salesPage.getByRole("button", { name: "Open Queue" }).click();
-await salesPage.getByRole("dialog").getByRole("button", { name: "Reschedule" }).first().waitFor();
+const followUpQueue = salesPage.getByRole("dialog");
+if ((await followUpQueue.getByRole("button", { name: "Reschedule" }).count()) === 0) await followUpQueue.getByRole("tab", { name: "Overdue" }).click();
+await followUpQueue.getByRole("button", { name: "Reschedule" }).first().waitFor();
 await salesPage.screenshot({ path: "artifacts/marketing-connected-actions.png", fullPage: true });
 await salesPage.close();
 

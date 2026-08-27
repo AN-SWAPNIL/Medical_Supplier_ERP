@@ -5,7 +5,6 @@ import {
   FileDown,
   FileSpreadsheet,
   PackageSearch,
-  Printer,
   ReceiptText,
   ShieldCheck,
   ShoppingCart,
@@ -28,6 +27,7 @@ import { aiService, reportService, settingsService } from "../services";
 import { useAIContextStore } from "../../lib/ai/context";
 import type { Role } from "../../types";
 import MarketingReportWorkspace from "./MarketingReportWorkspace";
+import { LetterheadPrintControls, LetterheadReportPortal, useLetterheadPrint } from "../print/LetterheadPrint";
 
 type View = "overview" | "marketing" | "imports" | "inventory" | "sales" | "expenses" | "audit";
 type ReportGroupId = Exclude<View, "overview" | "marketing" | "audit">;
@@ -82,6 +82,7 @@ function displayValue(value: string, key = "") {
 
 export default function ReportsPage() {
   const today = businessDate();
+  const letterheadPrint = useLetterheadPrint();
   const role = useEffectiveRole();
   const user = useAuthStore((state) => state.session?.user);
   const canExport = hasEffectivePermission(user, "reports", "export");
@@ -144,7 +145,12 @@ export default function ReportsPage() {
   if (!report) return <ErrorBlock error={new Error("Report data is unavailable for the selected period.")} />;
 
   const performanceTables = buildPerformanceExportTables(performanceQuery.data);
-  const exportedTables = tableId === "salesperson-performance" ? performanceTables : selectedTable ? [selectedTable] : groups.flatMap((group) => group.tables);
+  const filteredSelectedTable = selectedTable?.id === "ta-da" && taDaEmployee !== "All employees" ? { ...selectedTable, rows: selectedTable.rows.filter((row) => row.employee === taDaEmployee) } : selectedTable;
+  const auditTable = auditReportTable(auditQuery.data ?? []);
+  const exportedTables = view === "audit" ? [auditTable] : tableId === "salesperson-performance" ? performanceTables : filteredSelectedTable ? [filteredSelectedTable] : groups.flatMap((group) => group.tables);
+  const printTables = view === "overview" ? groups.flatMap((group) => group.tables) : exportedTables;
+  const printSummary = view === "overview" ? groups.flatMap((group) => group.rows.slice(0, 2).map((row) => ({ label: `${group.title}: ${row.label}`, value: row.value }))) : selectedGroup?.rows ?? (view === "audit" ? [{ label: "Protected events", value: String(auditTable.rows.length) }] : []);
+  const printTitle = view === "overview" ? "OPERATIONAL REPORT OVERVIEW" : view === "audit" ? "NARROW AUDIT REPORT" : tableId === "salesperson-performance" ? (role === "Sales Executive" ? "MY SALES PERFORMANCE" : "SALES TEAM COMPARISON") : (filteredSelectedTable?.title ?? selectedGroup?.title ?? "OPERATIONAL REPORT").toUpperCase();
   const exportCsv = async () => {
     await reportService.authorizeExport();
     const lines: string[] = [];
@@ -178,10 +184,11 @@ export default function ReportsPage() {
         actions={
           <>
             {canExport && view !== "marketing" ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Current Data</Button> : null}
-            {canPrint && view !== "marketing" ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Current Report</Button> : null}
           </>
         }
       />
+
+      {canPrint && view !== "marketing" ? <LetterheadPrintControls controller={letterheadPrint} title="Current report printing" /> : null}
 
       <Panel>
         <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[190px_190px_190px_1fr] lg:items-end">
@@ -226,6 +233,17 @@ export default function ReportsPage() {
         />
       ) : null}
       {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}
+      {canPrint && view !== "marketing" && letterheadPrint.identity ? <LetterheadReportPortal
+        identity={letterheadPrint.identity}
+        mode={letterheadPrint.mode}
+        title={printTitle}
+        subtitle={`${role} role-safe report | Main Warehouse${filteredSelectedTable?.id === "ta-da" ? ` | Employee: ${taDaEmployee}` : ""}`}
+        reference={`RPT-${view.toUpperCase()}-${to.replaceAll("-", "")}`}
+        date={`${from} to ${to}`}
+        multiPage
+      >
+        <OperationalLetterheadContent summary={printSummary} tables={printTables} />
+      </LetterheadReportPortal> : null}
     </>
   );
 }
@@ -294,7 +312,6 @@ function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, t
         </div>
         {selectedTable ? <ReportDataTable table={selectedTable} rows={visibleRows} /> : <div className="p-8 text-center text-sm text-slate-500">No report is available in this group.</div>}
       </Panel>}
-      {isTaDa && selectedTable ? <TaDaPrintSheet rows={visibleRows} from={from} to={to} employee={taDaEmployee} /> : null}
     </>
   );
 }
@@ -428,18 +445,27 @@ function ReportDataTable({ table, rows, onOpenEmployee }: { table: ReportTable; 
   );
 }
 
-function TaDaPrintSheet({ rows, from, to, employee }: { rows: Record<string, string>[]; from: string; to: string; employee: string }) {
-  const totalTa = rows.reduce((sum, row) => sum + numeric(row.ta ?? "0"), 0);
-  const totalDa = rows.reduce((sum, row) => sum + numeric(row.da ?? "0"), 0);
-  const designation = rows.find((row) => row.designation)?.designation ?? "-";
-  return (
-    <section className="print-report-sheet hidden bg-white p-10 print:block">
-      <div className="border-b-2 border-cyan-700 pb-4 text-center"><h1 className="text-xl font-bold text-blue-950">MIPRO HEALTHCARE CORPORATION</h1><h2 className="mt-1 text-base font-bold text-cyan-700">TA/DA Approved Sheet</h2></div>
-      <div className="mt-5 grid grid-cols-2 gap-2 text-sm"><p><b>Period:</b> {from} to {to}</p><p><b>Name:</b> {employee}</p><p><b>Designation:</b> {designation}</p></div>
-      <table className="mt-5 w-full border-collapse text-sm"><thead><tr className="bg-blue-950 text-white"><th className="border p-2 text-left">Date</th><th className="border p-2 text-right">TA Amount</th><th className="border p-2 text-right">DA Amount</th><th className="border p-2 text-left">Remarks</th></tr></thead><tbody>{rows.map((row, index) => <tr key={index}><td className="border p-2">{row.date}</td><td className="border p-2 text-right">{formatCurrency(row.ta)}</td><td className="border p-2 text-right">{formatCurrency(row.da)}</td><td className="border p-2">{row.remarks}</td></tr>)}</tbody><tfoot><tr className="font-bold"><td className="border p-2">Total</td><td className="border p-2 text-right">{formatCurrency(totalTa)}</td><td className="border p-2 text-right">{formatCurrency(totalDa)}</td><td className="border p-2">Combined: {formatCurrency(totalTa + totalDa)}</td></tr></tfoot></table>
-      <div className="mt-20 grid grid-cols-2 gap-20 text-center text-sm"><span className="border-t border-slate-600 pt-2">Audited By</span><span className="border-t border-slate-600 pt-2">Approved By</span></div>
-    </section>
-  );
+function auditReportTable(events: Awaited<ReturnType<typeof settingsService.audit>>): ReportTable {
+  return {
+    id: "audit-events",
+    title: "Protected Action Audit Trail",
+    columns: [
+      { key: "timestamp", label: "Timestamp" },
+      { key: "user", label: "User / Role" },
+      { key: "action", label: "Action" },
+      { key: "record", label: "Record" },
+      { key: "summary", label: "Summary / Reason" }
+    ],
+    rows: events.map((event) => ({ timestamp: new Date(event.timestamp).toLocaleString(), user: `${event.userName} | ${event.role}`, action: event.action, record: `${event.entityType} | ${event.entityId}`, summary: `${event.summary}${event.reason ? ` | Reason: ${event.reason}` : ""}` }))
+  };
+}
+
+function OperationalLetterheadContent({ summary, tables }: { summary: Array<{ label: string; value: string }>; tables: ReportTable[] }) {
+  return <div className="grid gap-5 text-[8px]">
+    {summary.length ? <section className="grid grid-cols-4 gap-px border border-slate-200 bg-slate-200">{summary.slice(0, 8).map((row) => <div className="bg-white/95 p-2" key={row.label}><span className="block text-[7px] font-bold uppercase text-slate-500">{row.label}</span><strong className="mt-1 block text-[10px] text-blue-950">{displayValue(row.value, row.label)}</strong></div>)}</section> : null}
+    {tables.map((table) => <section className="break-before-auto" key={table.id}><div className="mb-2 flex items-end justify-between"><h2 className="text-[11px] font-bold text-blue-950">{table.title}</h2><span className="text-slate-500">{table.rows.length} rows</span></div><table className={`w-full table-fixed border-collapse ${table.columns.length > 8 ? "text-[6px]" : table.columns.length > 6 ? "text-[7px]" : "text-[8px]"}`}><thead><tr className="bg-blue-950 text-white">{table.columns.map((column) => <th className={`break-words border border-blue-950 p-1.5 ${column.align === "right" ? "text-right" : "text-left"}`} key={column.key}>{column.label}</th>)}</tr></thead><tbody>{table.rows.map((row, rowIndex) => <tr className="break-inside-avoid" key={`${table.id}-letterhead-${rowIndex}`}>{table.columns.map((column) => <td className={`break-words border border-slate-300 p-1.5 align-top ${column.align === "right" ? "text-right" : "text-left"}`} key={column.key}>{displayValue(row[column.key] ?? "-", column.key)}</td>)}</tr>)}{!table.rows.length ? <tr><td className="border border-slate-300 p-6 text-center text-slate-500" colSpan={table.columns.length}>No posted records fall inside this report period.</td></tr> : null}</tbody></table></section>)}
+    <footer className="mt-12 grid grid-cols-3 gap-10 text-center"><span className="border-t border-slate-500 pt-2">Prepared by</span><span className="border-t border-slate-500 pt-2">Reviewed by</span><span className="border-t border-slate-500 pt-2">Approved by</span></footer>
+  </div>;
 }
 
 function AuditReport({ events }: { events: Awaited<ReturnType<typeof settingsService.audit>> }) {

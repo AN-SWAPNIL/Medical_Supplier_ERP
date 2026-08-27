@@ -39,7 +39,7 @@ Operating expenses and cash/bank transactions are tracked separately. A fully au
 
 `Dashboard`, `Imports`, `Inventory`, `Sales & Marketing`, `Expenses & Accounts`, `Employees`, `Reports`, `Settings`.
 
-Unauthorized destinations and Employee subtabs are hidden by effective access. Employees composes Directory, Login Account, Access & Roles, the shared Field Team map, and Activity & Reports. Named Daily/Weekly/Monthly/Custom employee reports stay in that Employee tab and print from the same preview. Sales staff submit their own daily field activity in Sales & Marketing under the signed-in user ID. Protected PDF/image viewing, Smart Insights, reviewed import-document extraction, and floating role-safe MIPRO AI remain contextual. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
+Unauthorized destinations and Employee subtabs are hidden by effective access. Employees composes Directory, Login Account, Access & Roles, the shared Field Team map, and Activity & Reports. Named Daily/Weekly/Monthly/Custom employee reports stay in that Employee tab. Every formal report and business-document print uses the shared calibrated A4 stationery engine with **With Background** and **Without Background** choices. Sales staff submit their own daily field activity in Sales & Marketing under the signed-in user ID. Protected PDF/image viewing, Smart Insights, reviewed import-document extraction, and floating role-safe MIPRO AI remain contextual. Native mobile/background tracking, HR/payroll, fleet and full accounting remain deferred.
 
 ## Stack
 
@@ -204,7 +204,7 @@ Customs duty is entered as the final assessed amount per product. The applicatio
 - Marketing Analysis is a cross-team operational view for period, territory, funnel, verification, follow-up and target analysis. Named Daily/Weekly/Monthly/Custom employee reports are owned only by Employees.
 - Uploaded import/cost/expense files open through an authorized API endpoint; sensitive cost documents require the same cost capability as the record.
 - MIPRO AI receives route/entity/selected-employee/report-period context and only role-scoped records. It can summarize permitted employee activity or explain access read-only, but cannot grant access, finalize, post or override business records.
-- Digital/preprinted A4 prints use the supplied MIPRO/LED stationery and Order Receiving Sheet structure.
+- Business documents, employee reports, Marketing Analysis, operational tables, audit and TA/DA share one calibrated MIPRO/LED A4 system. With Background is for PDF/plain paper; Without Background omits artwork for preprinted stationery.
 
 ## Commands
 
