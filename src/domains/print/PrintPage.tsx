@@ -6,9 +6,10 @@ import Button from "../../components/ui/Button";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import type { Role, User } from "../../types";
 import { ErrorBlock, LoadingBlock, Segmented } from "../components";
-import { importService, marketingService, printService, reportService, salesService, settingsService } from "../services";
+import { accountsService, importService, marketingService, printService, reportService, salesService, settingsService } from "../services";
 import type {
   AuditEvent,
+  AccountTransaction,
   Collection,
   Delivery,
   EmployeeMarketingSnapshot,
@@ -18,6 +19,7 @@ import type {
   Quotation,
   ReportData,
   SalesOrder,
+  SalesInvoice,
   SalespersonPerformanceData,
   SalespersonPerformanceDetail
 } from "../erp.types";
@@ -42,6 +44,8 @@ type PrintPayload =
   | { kind: "order"; record: SalesOrder }
   | { kind: "challan"; record: Delivery }
   | { kind: "receipt"; record: Collection }
+  | { kind: "invoice"; record: SalesInvoice }
+  | { kind: "voucher"; record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER" }
   | { kind: "import-cost"; record: ImportCase }
   | { kind: "employee-performance"; record: SalespersonPerformanceDetail }
   | { kind: "employee-activity"; snapshot: EmployeeMarketingSnapshot }
@@ -74,6 +78,8 @@ export default function PrintPage() {
       if (documentType === "order") return { kind: "order", record: find(await salesService.orders(), id) };
       if (documentType === "challan") return { kind: "challan", record: find(await salesService.deliveries(), id) };
       if (documentType === "receipt") return { kind: "receipt", record: find(await salesService.collections(), id) };
+      if (documentType === "invoice") return { kind: "invoice", record: find(await salesService.invoices(), id) };
+      if (documentType === "debit-voucher" || documentType === "credit-voucher") return { kind: "voucher", record: find(await accountsService.transactions(), id), voucherType: documentType === "credit-voucher" ? "CREDIT VOUCHER" : "DEBIT VOUCHER" };
       if (documentType === "import-cost") return { kind: "import-cost", record: await importService.get(id) };
       if (documentType === "employee-performance") {
         const today = new Date().toISOString().slice(0, 10);
@@ -105,7 +111,7 @@ export default function PrintPage() {
         const { from, to } = requiredPeriod(searchParams);
         const table = searchParams.get("table") ?? "";
         const [report, performance, audit] = await Promise.all([
-          reportService.get(from, to),
+          reportService.get(from, to, searchParams.get("employeeId") ?? "all"),
           table === "salesperson-performance" ? reportService.salespeople(from, to, searchParams.get("employeeId") ?? "all") : Promise.resolve(undefined),
           (searchParams.get("view") ?? id) === "audit" ? settingsService.audit() : Promise.resolve([])
         ]);
@@ -148,7 +154,7 @@ export default function PrintPage() {
           {page}
         </LetterheadSheet>)}
       </div>
-      <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Physical calibration:</strong> 210 x 297 mm, zero browser margin, content safe area {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm. Choose "Actual size / 100%" in the print dialog.</p></div>
+      <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>A4 print setup:</strong> choose A4, Margins: None, Scale: 100%, Background graphics: On, and Headers and footers: Off. Browser "Save to PDF" preserves edge-to-edge artwork; a physical printer or Microsoft Print to PDF may still impose its own non-printable margin, which the website cannot override. Content safe area: {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm.</p></div>
     </>
   );
 }
@@ -171,6 +177,8 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
   if (payload.kind === "order") return { title: "ORDER RECEIVING SHEET", reference: payload.record.orderNumber, date: payload.record.date, content: <OrderReceivingSheet record={payload.record} identity={identity} /> };
   if (payload.kind === "challan") return { title: "DELIVERY CHALLAN", reference: payload.record.challanNumber, date: payload.record.date, content: <ChallanDocument record={payload.record} /> };
   if (payload.kind === "receipt") return { title: "MONEY RECEIPT", reference: payload.record.receiptNumber, date: payload.record.date, content: <ReceiptDocument record={payload.record} /> };
+  if (payload.kind === "invoice") return { title: "SALES INVOICE", reference: payload.record.invoiceNumber, date: payload.record.date, content: <InvoiceDocument record={payload.record} /> };
+  if (payload.kind === "voucher") return { title: payload.voucherType, reference: payload.record.voucherNumber ?? payload.record.id, date: payload.record.date, content: <VoucherDocument record={payload.record} voucherType={payload.voucherType} /> };
   if (payload.kind === "import-cost") return { title: "IMPORT LANDED COST", reference: payload.record.primaryReference, date: payload.record.snapshot?.finalizedAt.slice(0, 10) ?? "", content: <ImportCostDocument record={payload.record} /> };
   if (payload.kind === "employee-performance") return { title: "SALES EMPLOYEE PERFORMANCE REPORT", reference: payload.record.employee.name, date: "Selected period", content: <EmployeePerformanceDocument record={payload.record} from={params.get("from") ?? ""} to={params.get("to") ?? ""} /> };
 
@@ -285,7 +293,15 @@ function ChallanDocument({ record }: { record: Delivery }) {
 }
 
 function ReceiptDocument({ record }: { record: Collection }) {
-  return <><CustomerBlock name={record.customerName} /><div className="border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-xs text-slate-600">via {record.paymentMode}</span></div><dl className="mt-5 grid gap-3 text-[10px] sm:grid-cols-2"><div><dt className="text-slate-500">Order Reference</dt><dd className="font-semibold">{record.orderId ?? "Customer ledger"}</dd></div><div><dt className="text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl><SignatureRow labels={["Received From", "Accounts", "Authorized Signatory"]} /></>;
+  return <><CustomerBlock name={record.customerName} /><div className="border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-xs text-slate-600">via {record.paymentMode}</span></div><dl className="mt-5 grid gap-3 text-[10px] sm:grid-cols-2"><div><dt className="text-slate-500">Invoice / Order Reference</dt><dd className="font-semibold">{record.invoiceId ?? record.orderId ?? "Customer ledger"}</dd></div><div><dt className="text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl><SignatureRow labels={["Received From", "Accounts", "Authorized Signatory"]} /></>;
+}
+
+function InvoiceDocument({ record }: { record: SalesInvoice }) {
+  return <><CustomerBlock name={record.customerName} address={record.customerAddressSnapshot} phone={record.customerPhoneSnapshot} contact={record.customerContactSnapshot} /><div className="mb-3 grid grid-cols-2 gap-4 border border-slate-300 bg-white/90 p-3 text-[9px]"><div><span className="text-slate-500">Order reference</span><strong className="block">{record.orderId ?? "-"}</strong></div><div className="text-right"><span className="text-slate-500">Delivery reference(s)</span><strong className="block">{record.deliveryIds.join(", ")}</strong></div></div><LinesTable lines={record.lines} /><Totals subtotal={record.subtotal} discount={record.discountTotal} total={record.total} /><p className="mt-4 text-[9px] text-slate-600"><b>Status:</b> {record.status} | <b>Remarks:</b> {record.remarks ?? "-"}</p><SignatureRow labels={["Prepared By", "Accounts", "Authorized Signatory"]} /></>;
+}
+
+function VoucherDocument({ record, voucherType }: { record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER" }) {
+  return <div className="text-[10px]"><div className="grid grid-cols-2 gap-4 border border-slate-400 bg-white/90 p-4"><div><span className="text-slate-500">Paid to / Received from</span><strong className="mt-1 block text-[13px]">{record.partyName ?? "-"}</strong></div><div className="text-right"><span className="text-slate-500">Account</span><strong className="mt-1 block">{record.accountName}</strong></div></div><div className="mt-4 border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">{voucherType === "DEBIT VOUCHER" ? "Amount Paid" : "Amount Received"}</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong></div><dl className="mt-5 grid grid-cols-2 gap-4 border border-slate-300 bg-white/90 p-4"><div><dt className="text-slate-500">Transaction type</dt><dd className="font-bold">{record.sourceType}</dd></div><div><dt className="text-slate-500">External reference</dt><dd className="font-bold">{record.reference ?? "-"}</dd></div><div className="col-span-2"><dt className="text-slate-500">Particulars</dt><dd className="font-bold">{record.description}</dd></div><div className="col-span-2"><dt className="text-slate-500">Remarks</dt><dd>{record.remarks ?? "-"}</dd></div></dl><SignatureRow labels={[voucherType === "DEBIT VOUCHER" ? "Paid By" : "Received By", "Accounts", "Authorized Signatory"]} /></div>;
 }
 
 function ImportCostDocument({ record }: { record: ImportCase }) {

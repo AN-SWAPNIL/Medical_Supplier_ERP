@@ -396,12 +396,37 @@ export type Delivery = {
   lines: DeliveryLine[];
 };
 
+export type SalesInvoice = {
+  id: string;
+  invoiceNumber: string;
+  orderId?: string;
+  deliveryIds: string[];
+  customerId: string;
+  customerName: string;
+  customerAddressSnapshot?: string;
+  customerPhoneSnapshot?: string;
+  customerContactSnapshot?: string;
+  ownerId: string;
+  date: string;
+  createdAt: string;
+  approvedAt?: string;
+  lines: SalesLine[];
+  subtotal: DecimalString;
+  discountTotal: DecimalString;
+  total: DecimalString;
+  status: "Draft" | "Approved" | "Cancelled";
+  remarks?: string;
+  approvedByUserId?: string;
+  cancellationReason?: string;
+};
+
 export type Collection = {
   id: string;
   receiptNumber: string;
   customerId: string;
   customerName: string;
   orderId?: string;
+  invoiceId?: string;
   date: string;
   amount: DecimalString;
   paymentMode: "Cash" | "bKash" | "Bank Transfer" | "Cheque";
@@ -456,9 +481,16 @@ export type AccountTransaction = {
   accountName: string;
   direction: "In" | "Out";
   amount: DecimalString;
-  sourceType: "Collection" | "Expense" | "Import Cost" | "Opening Balance";
+  sourceType: "Collection" | "Expense" | "Import Cost" | "Opening Balance" | "Advance" | "Company Loan" | "Manual Authorized";
   sourceId: string;
   description: string;
+  partyId?: string;
+  partyName?: string;
+  reference?: string;
+  remarks?: string;
+  voucherNumber?: string;
+  createdByUserId?: string;
+  createdByName?: string;
 };
 
 export type AuditEvent = {
@@ -506,7 +538,7 @@ export type ProductAlias = {
 export type CustomerLedgerEntry = {
   id: string;
   date: string;
-  type: "Opening Due" | "Delivery" | "Collection";
+  type: "Opening Due" | "Legacy Delivery" | "Invoice" | "Collection" | "Reversal";
   reference: string;
   debit: DecimalString;
   credit: DecimalString;
@@ -517,10 +549,12 @@ export type CustomerLedgerEntry = {
 export type CustomerLedger = {
   customer: Customer;
   deliveredSales: DecimalString;
+  invoicedSales: DecimalString;
   collected: DecimalString;
   currentDue: DecimalString;
   entries: CustomerLedgerEntry[];
   deliveries: Delivery[];
+  invoices: SalesInvoice[];
   collections: Collection[];
 };
 
@@ -653,6 +687,7 @@ export type MarketingActivityType =
   | "QUOTATION_SUBMITTED"
   | "ORDER_RECEIVED"
   | "DELIVERY_POSTED"
+  | "INVOICE_APPROVED"
   | "PAYMENT_COLLECTED"
   | "LEAD_CONVERTED";
 
@@ -663,7 +698,7 @@ export type MarketingActivity = {
   employeeName: string;
   territory?: string;
   activityType: MarketingActivityType;
-  source: "MANUAL" | "FIELD_VISIT" | "QUOTATION" | "ORDER" | "DELIVERY" | "COLLECTION" | "LEAD";
+  source: "MANUAL" | "FIELD_VISIT" | "QUOTATION" | "ORDER" | "DELIVERY" | "INVOICE" | "COLLECTION" | "LEAD";
   occurredAt: string;
   submittedAt: string;
   leadId?: string;

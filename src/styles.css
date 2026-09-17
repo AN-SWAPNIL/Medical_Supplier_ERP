@@ -62,7 +62,7 @@ button:disabled {
 }
 
 @page {
-  size: A4;
+  size: 210mm 297mm;
   margin: 0;
 }
 
@@ -84,7 +84,16 @@ button:disabled {
   html,
   body {
     width: 210mm;
+    min-width: 210mm;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
+  }
+
+  #root {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .app-header,
@@ -109,7 +118,9 @@ button:disabled {
 
   .letterhead-sheet {
     width: 210mm !important;
+    height: 297mm !important;
     min-height: 297mm !important;
+    margin: 0 !important;
     border: 0 !important;
     box-shadow: none !important;
     print-color-adjust: exact;

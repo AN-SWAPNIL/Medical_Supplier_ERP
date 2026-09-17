@@ -12,6 +12,7 @@ import type {
   ProfitPreview,
   Quotation,
   SalesLine,
+  SalesInvoice,
   SalesOrder,
   StockBatch
 } from "../erp.types";
@@ -198,8 +199,9 @@ export function DeliveryForm({
   );
 }
 
-export function CollectionForm({ initialCustomerId, customers, orders, accounts, busy, onSubmit }: { initialCustomerId?: string; customers: Customer[]; orders: SalesOrder[]; accounts: CashBankAccount[]; busy: boolean; onSubmit: (payload: Partial<Collection>) => void }) {
+export function CollectionForm({ initialCustomerId, customers, orders, invoices, accounts, busy, onSubmit }: { initialCustomerId?: string; customers: Customer[]; orders: SalesOrder[]; invoices: SalesInvoice[]; accounts: CashBankAccount[]; busy: boolean; onSubmit: (payload: Partial<Collection>) => void }) {
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+  const [invoiceId, setInvoiceId] = useState("");
   const [orderId, setOrderId] = useState("");
   const [date, setDate] = useState(businessDate());
   const [amount, setAmount] = useState(() => customers.find((entry) => entry.id === initialCustomerId)?.currentDue ?? "");
@@ -209,13 +211,15 @@ export function CollectionForm({ initialCustomerId, customers, orders, accounts,
   const [remarks, setRemarks] = useState("");
   const customer = customers.find((entry) => entry.id === customerId);
   const relatedOrders = orders.filter((order) => order.customerId === customerId && Number(order.due) > 0);
+  const relatedInvoices = invoices.filter((invoice) => invoice.customerId === customerId && invoice.status === "Approved");
   return (
-    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (!customer || !accountId) return; onSubmit({ customerId, customerName: customer.name, orderId: orderId || undefined, date, amount, paymentMode, accountId, referenceNumber, remarks }); }}>
-      <label className="sm:col-span-2"><span className={labelClass}>Customer</span><select className={inputClass} required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setOrderId(""); const selected = customers.find((entry) => entry.id === event.target.value); setAmount(selected?.currentDue ?? ""); }}><option value="">Select customer</option>{customers.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · due {formatCurrency(entry.currentDue)}</option>)}</select></label>
-      <label><span className={labelClass}>Sales Order (optional)</span><select className={inputClass} value={orderId} onChange={(event) => { setOrderId(event.target.value); const selected = orders.find((entry) => entry.id === event.target.value); if (selected) setAmount(selected.due); }}><option value="">Customer-level collection</option>{relatedOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.orderNumber} · {formatCurrency(entry.due)}</option>)}</select></label>
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (!customer || !accountId) return; onSubmit({ customerId, customerName: customer.name, invoiceId: invoiceId || undefined, orderId: orderId || undefined, date, amount, paymentMode, accountId, referenceNumber, remarks }); }}>
+      <label className="sm:col-span-2"><span className={labelClass}>Customer</span><select className={inputClass} required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setInvoiceId(""); setOrderId(""); const selected = customers.find((entry) => entry.id === event.target.value); setAmount(selected?.currentDue ?? ""); }}><option value="">Select customer</option>{customers.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · due {formatCurrency(entry.currentDue)}</option>)}</select></label>
+      <label><span className={labelClass}>Approved Invoice (recommended)</span><select className={inputClass} value={invoiceId} onChange={(event) => { const selected = invoices.find((entry) => entry.id === event.target.value); setInvoiceId(event.target.value); if (selected) { setOrderId(selected.orderId ?? ""); setAmount(selected.total); } }}><option value="">Customer-level collection</option>{relatedInvoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.invoiceNumber} · {formatCurrency(entry.total)}</option>)}</select></label>
+      <label><span className={labelClass}>Sales Order (optional)</span><select className={inputClass} value={orderId} onChange={(event) => { setOrderId(event.target.value); setInvoiceId(""); const selected = orders.find((entry) => entry.id === event.target.value); if (selected) setAmount(selected.due); }}><option value="">Customer ledger</option>{relatedOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.orderNumber} · {formatCurrency(entry.due)}</option>)}</select></label>
       <label><span className={labelClass}>Date</span><input className={inputClass} type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label>
       <label><span className={labelClass}>Amount</span><input className={inputClass} type="number" min="0.01" max={customer?.currentDue} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
-      <label><span className={labelClass}>Payment Mode</span><select className={inputClass} value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as Collection["paymentMode"])}><option>Cash</option><option>bKash</option><option>Bank Transfer</option><option>Cheque</option></select><small className="mt-1 block text-slate-500">Outstanding credit is represented by the order due, not as a received collection.</small></label>
+      <label><span className={labelClass}>Payment Mode</span><select className={inputClass} value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as Collection["paymentMode"])}><option>Cash</option><option>bKash</option><option>Bank Transfer</option><option>Cheque</option></select><small className="mt-1 block text-slate-500">Outstanding credit is represented by an approved invoice due, not a received collection.</small></label>
       <label><span className={labelClass}>Deposit Account</span><select className={inputClass} required value={accountId} onChange={(event) => setAccountId(event.target.value)}><option value="">Select cash / bank ledger</option>{accounts.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.type}</option>)}</select></label>
       <label><span className={labelClass}>Cheque / Transfer Ref</span><input className={inputClass} value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} /></label>
       <label className="sm:col-span-2"><span className={labelClass}>Remarks</span><textarea className={textareaClass} value={remarks} onChange={(event) => setRemarks(event.target.value)} /></label>

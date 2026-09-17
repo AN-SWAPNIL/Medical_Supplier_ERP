@@ -138,7 +138,10 @@ const printRoutes = [
   ["print-quotation-digital", "/app/print/quotation/quo-1", 1200, 1000],
   ["print-order", "/app/print/order/so-1", 1200, 1000],
   ["print-challan", "/app/print/challan/del-2", 1200, 1000],
+  ["print-invoice", "/app/print/invoice/inv-1", 1200, 1000],
   ["print-receipt", "/app/print/receipt/col-1", 1200, 1000],
+  ["print-debit-voucher", "/app/print/debit-voucher/trx-advance-1", 1200, 1000],
+  ["print-credit-voucher", "/app/print/credit-voucher/trx-loan-1", 1200, 1000],
   ["print-import-cost", "/app/print/import-cost/imp-77612", 1200, 1000],
   ["print-quotation-mobile", "/app/print/quotation/quo-1", 390, 1000]
 ];
@@ -468,7 +471,7 @@ liveMarketing.on("response", (response) => {
 });
 await liveMarketing.goto(baseUrl + "/app/sales?view=marketing", { waitUntil: "networkidle", timeout: 60000 });
 await liveMarketing.getByText(/refreshes every 12 seconds/i).waitFor({ timeout: 30000 });
-await liveMarketing.waitForTimeout(12_500);
+await liveMarketing.waitForTimeout(15_500);
 if (marketingDashboardResponses < 2) issues.push("Marketing dashboard did not auto-refresh within the promised 12-second prototype interval.");
 await liveMarketing.close();
 

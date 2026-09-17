@@ -28,9 +28,9 @@ export function LetterheadSheet({ identity, mode, title, subtitle, reference, da
         width: "210mm",
         minHeight: "297mm",
         backgroundImage: digital ? `url(${identity.backgroundImageUrl})` : "none",
-        backgroundPosition: "top left",
+        backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
-        backgroundSize: "210mm 297mm"
+        backgroundSize: digital ? "213mm 300mm" : "210mm 297mm"
       }}
     >
       <div style={{ paddingTop: `${identity.safeArea.topMm}mm`, paddingRight: `${identity.safeArea.rightMm}mm`, paddingBottom: `${identity.safeArea.bottomMm}mm`, paddingLeft: `${identity.safeArea.leftMm}mm` }}>

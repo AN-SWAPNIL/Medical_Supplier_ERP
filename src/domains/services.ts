@@ -49,6 +49,7 @@ import type {
   Product,
   Quotation,
   ReportData,
+  SalesInvoice,
   SalespersonPerformanceData,
   SalesOrder,
   StockBatch,
@@ -102,6 +103,7 @@ import {
   ProductSchema,
   QuotationSchema,
   ReportSchema,
+  SalesInvoiceSchema,
   SalespersonPerformanceSchema,
   SalesOrderSchema,
   StockBatchSchema,
@@ -196,6 +198,11 @@ export const salesService = {
   updateOrder: (id: string, payload: Partial<SalesOrder>) => patch<SalesOrder>("/api/orders/" + id, payload, SalesOrderSchema),
   deliveries: () => get<Delivery[]>("/api/deliveries", z.array(DeliverySchema)),
   createDelivery: (payload: Partial<Delivery>) => post<Delivery>("/api/deliveries", payload, DeliverySchema),
+  invoices: () => get<SalesInvoice[]>("/api/invoices", z.array(SalesInvoiceSchema)),
+  createInvoice: (payload: { orderId?: string; deliveryIds: string[]; date: string; remarks?: string }) => post<SalesInvoice>("/api/invoices", payload, SalesInvoiceSchema),
+  updateInvoice: (id: string, payload: Partial<SalesInvoice>) => patch<SalesInvoice>("/api/invoices/" + id, payload, SalesInvoiceSchema),
+  approveInvoice: (id: string) => post<SalesInvoice>("/api/invoices/" + id + "/approve", {}, SalesInvoiceSchema),
+  cancelInvoice: (id: string, reason: string) => post<SalesInvoice>("/api/invoices/" + id + "/cancel", { reason }, SalesInvoiceSchema),
   collections: () => get<Collection[]>("/api/collections", z.array(CollectionSchema)),
   createCollection: (payload: Partial<Collection>) => post<Collection>("/api/collections", payload, CollectionSchema),
   profitPreview: (lines: Quotation["lines"]) => post<ProfitPreview>("/api/sales/profit-preview", { lines }, ProfitPreviewSchema),
@@ -250,11 +257,12 @@ export const accountsService = {
   categories: () => get<ExpenseCategory[]>("/api/expense-categories", z.array(ExpenseCategorySchema)),
   createCategory: (name: string) => post<ExpenseCategory>("/api/expense-categories", { name }, ExpenseCategorySchema),
   accounts: () => get<CashBankAccount[]>("/api/accounts", z.array(AccountSchema)),
-  transactions: () => get<AccountTransaction[]>("/api/account-transactions", z.array(AccountTransactionSchema))
+  transactions: () => get<AccountTransaction[]>("/api/account-transactions", z.array(AccountTransactionSchema)),
+  createTransaction: (payload: Partial<AccountTransaction>) => post<AccountTransaction>("/api/account-transactions", payload, AccountTransactionSchema)
 };
 
 export const reportService = {
-  get: (from: string, to: string) => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, ReportSchema),
+  get: (from: string, to: string, employeeId = "all") => get<ReportData>(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, ReportSchema),
   salespeople: (from: string, to: string, employeeId = "all") => get<SalespersonPerformanceData>(`/api/reports/salespeople?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&employeeId=${encodeURIComponent(employeeId)}`, SalespersonPerformanceSchema),
   marketing: (filters: { from: string; to: string; employeeId?: string; territory?: string; activityType?: string; subjectId?: string; verification?: string; status?: string; groupBy?: string; mode?: "Summary" | "Detail" }) => {
     const params = new URLSearchParams(filters as Record<string, string>);

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
+  BookOpenText,
   CalendarDays,
   CheckCircle2,
   Download,
@@ -185,6 +186,7 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
         <div className="flex flex-wrap items-end gap-2 xl:justify-end">
           <Button icon={<RefreshCw className="h-4 w-4" />} onClick={() => void snapshotQuery.refetch()}>Refresh</Button>
           <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onFieldMap(selectedId)}>Field Map</Button>
+          <Button icon={<BookOpenText className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=sales&preset=this-month&table=salesman-ledger&employeeId=${encodeURIComponent(selectedId)}`)}>Sales Ledger</Button>
           {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>CSV</Button> : null}
           {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>Print Preview</Button> : null}
         </div>

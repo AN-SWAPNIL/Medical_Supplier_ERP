@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CreditCard, Eye, Landmark, Plus, RotateCcw, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CreditCard, Eye, Landmark, Plus, Printer, RotateCcw, Save, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
@@ -8,7 +8,7 @@ import ExpenseEntryForm from "./ExpenseEntryForm";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Modal, Panel, Segmented, TableFrame, inputClass, labelClass, textareaClass } from "../components";
-import type { DocumentRecord, Expense } from "../erp.types";
+import type { AccountTransaction, DocumentRecord, Expense } from "../erp.types";
 import { accountsService, employeeService, salesService } from "../services";
 import { useAuthStore } from "../../lib/auth/session";
 import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
@@ -28,6 +28,7 @@ export default function AccountsPage() {
   const [reverseExpense, setReverseExpense] = useState<Expense | null>(null);
   const [reverseReason, setReverseReason] = useState("");
   const [viewingDocument, setViewingDocument] = useState<DocumentRecord | null>(null);
+  const [transactionOpen, setTransactionOpen] = useState(false);
   const user = useAuthStore((state) => state.session?.user);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -79,6 +80,7 @@ export default function AccountsPage() {
       setCategoryOpen(false);
       setReverseExpense(null);
       setReverseReason("");
+      setTransactionOpen(false);
       pushToast({ kind: "success", title: task.success });
     },
     onError: (error) => pushToast({ kind: "error", title: "Accounts action failed", message: error instanceof Error ? error.message : undefined })
@@ -104,7 +106,7 @@ export default function AccountsPage() {
         eyebrow="Operational finance"
         title="Expenses & Accounts"
         subtitle="Daily expenditure, TA/DA, collections, customer dues and simple cash/bank transactions. This is not a full accounting replacement."
-        actions={view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : undefined}
+        actions={view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "transactions" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setTransactionOpen(true)}>Post Voucher</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : undefined}
       />
 
       <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
@@ -147,9 +149,9 @@ export default function AccountsPage() {
       ) : null}
 
       {view === "transactions" ? (
-        <Panel title="Account ledger" subtitle="Every collection, expense and reversal identifies its source record.">
+        <Panel title="Account ledger" subtitle="Every collection, expense, advance and company loan identifies its source record and voucher.">
           <TableFrame>
-            <table className="min-w-[950px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">In</th><th className="px-4 py-3 text-right">Out</th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.map((transaction) => <tr key={transaction.id}><td className="px-4 py-3 text-slate-600">{transaction.date}</td><td className="px-4 py-3 font-semibold">{transaction.accountName}</td><td className="px-4 py-3"><span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{transaction.sourceType}</span></td><td className="px-4 py-3 text-slate-600">{transaction.description}</td><td className="px-4 py-3 text-right font-bold text-emerald-700">{transaction.direction === "In" ? formatCurrency(transaction.amount) : "-"}</td><td className="px-4 py-3 text-right font-bold text-red-700">{transaction.direction === "Out" ? formatCurrency(transaction.amount) : "-"}</td></tr>)}</tbody></table>
+            <table className="min-w-[1120px] w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Date / Voucher</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Party / Description</th><th className="px-4 py-3 text-right">In</th><th className="px-4 py-3 text-right">Out</th><th className="px-4 py-3 text-right">Print</th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.map((transaction) => <tr key={transaction.id}><td className="px-4 py-3 text-slate-600">{transaction.date}<small className="block font-semibold text-slate-900">{transaction.voucherNumber ?? "-"}</small></td><td className="px-4 py-3 font-semibold">{transaction.accountName}</td><td className="px-4 py-3"><span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{transaction.sourceType}</span></td><td className="px-4 py-3 text-slate-600">{transaction.partyName ? <strong className="block text-slate-900">{transaction.partyName}</strong> : null}{transaction.description}</td><td className="px-4 py-3 text-right font-bold text-emerald-700">{transaction.direction === "In" ? formatCurrency(transaction.amount) : "-"}</td><td className="px-4 py-3 text-right font-bold text-red-700">{transaction.direction === "Out" ? formatCurrency(transaction.amount) : "-"}</td><td className="px-4 py-3 text-right">{transaction.voucherNumber ? <Button variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => navigate(`/app/print/${transaction.direction === "In" ? "credit-voucher" : "debit-voucher"}/${transaction.id}`)} aria-label={`Print ${transaction.voucherNumber}`} title="Print voucher" /> : null}</td></tr>)}</tbody></table>
           </TableFrame>
         </Panel>
       ) : null}
@@ -169,9 +171,16 @@ export default function AccountsPage() {
       <Modal open={expenseOpen} title="Post daily expense" subtitle="Choose who or which operating unit incurred the expense; Entered By comes from your login." onClose={() => setExpenseOpen(false)} width="max-w-4xl"><ExpenseEntryForm categories={categoriesQuery.data ?? []} accounts={accounts} employees={employeesQuery.data ?? []} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createExpense(payload), success: "Expense posted to operational ledger" })} /></Modal>
       <Modal open={categoryOpen} title="Add expense category" subtitle="Categories remain dynamic; existing expense history keeps its posted name." onClose={() => setCategoryOpen(false)}><CategoryForm busy={action.isPending} onSubmit={(name) => action.mutate({ run: () => accountsService.createCategory(name), success: "Expense category added" })} /></Modal>
       <Modal open={Boolean(reverseExpense)} title="Reverse posted expense" subtitle="Reversal restores the selected account balance and creates an audit trail." onClose={() => { setReverseExpense(null); setReverseReason(""); }}><form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); if (reverseExpense) action.mutate({ run: () => accountsService.reverseExpense(reverseExpense.id, reverseReason), success: "Expense reversed and balance restored" }); }}><div className="rounded-md bg-slate-50 p-3 text-sm"><strong>{reverseExpense?.categoryName}</strong><span className="block text-slate-500">{formatCurrency(reverseExpense?.amount ?? 0)} · {reverseExpense?.remarks}</span></div><label><span className={labelClass}>Reversal Reason</span><textarea className={textareaClass} minLength={5} required value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} /></label><div className="flex justify-end"><Button type="submit" variant="primary" icon={<RotateCcw className="h-4 w-4" />} disabled={action.isPending || reverseReason.trim().length < 5}>Post Reversal</Button></div></form></Modal>
+      <Modal open={transactionOpen} title="Post debit or credit voucher" subtitle="Use Advance and Company Loan only for controlled non-expense movements. The selected direction determines the voucher type." onClose={() => setTransactionOpen(false)}><TransactionForm accounts={accounts} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createTransaction(payload), success: "Voucher posted to account ledger" })} /></Modal>
       <DocumentViewer document={viewingDocument} onClose={() => setViewingDocument(null)} />
     </>
   );
+}
+
+function TransactionForm({ accounts, busy, onSubmit }: { accounts: Array<{ id: string; name: string }>; busy: boolean; onSubmit: (payload: Partial<AccountTransaction>) => void }) {
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), accountId: "", sourceType: "Advance" as AccountTransaction["sourceType"], direction: "Out" as AccountTransaction["direction"], amount: "", partyName: "", reference: "", description: "", remarks: "" });
+  const change = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  return <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}><label><span className={labelClass}>Date</span><input className={inputClass} type="date" required value={form.date} onChange={(event) => change("date", event.target.value)} /></label><label><span className={labelClass}>Cash / Bank Account</span><select className={inputClass} required value={form.accountId} onChange={(event) => change("accountId", event.target.value)}><option value="">Select account</option>{accounts.map((account) => <option value={account.id} key={account.id}>{account.name}</option>)}</select></label><label><span className={labelClass}>Movement Type</span><select className={inputClass} value={form.sourceType} onChange={(event) => change("sourceType", event.target.value)}><option>Advance</option><option>Company Loan</option><option>Manual Authorized</option></select></label><label><span className={labelClass}>Voucher Direction</span><select className={inputClass} value={form.direction} onChange={(event) => change("direction", event.target.value)}><option value="Out">Debit Voucher · Cash Out</option><option value="In">Credit Voucher · Cash In</option></select></label><label><span className={labelClass}>Party / Employee</span><input className={inputClass} required value={form.partyName} onChange={(event) => change("partyName", event.target.value)} /></label><label><span className={labelClass}>Amount</span><input className={inputClass} type="number" min="0.01" step="0.01" required value={form.amount} onChange={(event) => change("amount", event.target.value)} /></label><label><span className={labelClass}>External Reference</span><input className={inputClass} value={form.reference} onChange={(event) => change("reference", event.target.value)} /></label><label><span className={labelClass}>Description</span><input className={inputClass} required value={form.description} onChange={(event) => change("description", event.target.value)} /></label><label className="sm:col-span-2"><span className={labelClass}>Remarks</span><textarea className={textareaClass} value={form.remarks} onChange={(event) => change("remarks", event.target.value)} /></label><div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Post {form.direction === "In" ? "Credit" : "Debit"} Voucher</Button></div></form>;
 }
 
 function CategoryForm({ busy, onSubmit }: { busy: boolean; onSubmit: (name: string) => void }) {

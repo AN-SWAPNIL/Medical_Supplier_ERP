@@ -36,7 +36,7 @@ export default function ProductDetailPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-blue-900" to="/products"><ArrowLeft className="h-4 w-4" /> Back to products</Link>
           <div className="mt-7 grid gap-10 lg:grid-cols-[1fr_1fr] lg:items-center">
-            <div className="grid aspect-square max-h-[580px] place-items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-7"><img className="h-full w-full object-contain" src={entry.images[0]} alt={entry.imageAlt} /></div>
+            <div><div className="grid aspect-square max-h-[580px] place-items-center overflow-hidden rounded-md border border-slate-200 bg-white p-7"><img className="h-full w-full object-contain" src={entry.images[0]} alt={entry.imageAlt} /></div>{entry.images.length > 1 ? <div className="mt-3 grid grid-cols-3 gap-3">{entry.images.map((image, index) => <a className="grid aspect-[4/3] place-items-center overflow-hidden rounded-md border border-slate-200 bg-white p-2 hover:border-cyan-500" href={image} target="_blank" rel="noreferrer" key={image}><img className="h-full w-full object-contain" src={image} alt={`${entry.name} supplied literature view ${index + 1}`} /></a>)}</div> : null}</div>
             <div>
               <p className="text-xs font-bold uppercase text-cyan-700">{entry.category}</p>
               <h1 className="mt-3 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">{entry.name}</h1>

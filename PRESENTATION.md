@@ -2,9 +2,9 @@
 
 ## Client Presentation Guide
 
-**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the 27 August 2026 employee activity, reporting, and product-literature refinement
+**Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the supplied dialysis literature and handwritten sales/report-system refinement
 
-**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update7.md` and `files/MIPRO_ERP_Employee_Management_Analysis.md` for the current navigation, Employees hub, Marketing correctness, and reporting UX; the client's 25 August follow-up for employee-linked daily activity and several report strategies; the supplied Dialyzer/Product Catalogue sheets for the homepage; update6 for Marketing operations; update5 for access control; update4 for the public/private platform; update3 for validated import, inventory, and sales workflow
+**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update8.md` and `files/MIPRO_ERP_Marketing_Report_Source_Analysis.md`, supported by the supplied Dialyzer, Blood Line, A.V. Fistula and Product Catalogue sheets; update7 for Employees and activity reporting; update6 for Marketing operations; update5 for access control; update4 for the public/private platform; update3 for validated import, inventory, and sales workflow
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -27,7 +27,7 @@ Imports -> Inventory -> Sales & Marketing -> Expenses & Accounts
                     Employees -> Reports -> Settings
 ```
 
-The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. Its visual homepage rotates approved product and distribution messages, calculates published catalogue/document counts, filters product families, and lets visitors inspect the supply process. A four-view MIPRO product-literature section presents the supplied product range, HD-17H focus, feature sheet, and HD-series technical table with direct source-PDF access and an exact-model disclaimer. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures.
+The public website explains MIPRO's healthcare supply business and provides a B2B product catalogue and business inquiry. Its visual homepage rotates approved product and distribution messages, calculates published catalogue/document counts, filters product families, and lets visitors inspect the supply process. A four-view literature section presents Product Catalogue, Hemodialyzer, Blood Tubing and A.V. Fistula sheets with direct source-PDF access. Core product pages use crops from those client-supplied sheets and expose model, gauge, sterilization and packing facts with exact-model disclaimers. It never exposes ERP stock, costs, supplier terms, internal sales or mock management figures.
 
 Super Admin controls that content inside `Settings -> Website Content`:
 
@@ -54,13 +54,13 @@ PO -> Supplier -> PI -> LC or TT -> Shipment -> Costs -> Finalized landed cost
                                                     WAREHOUSE STOCK
                                                              |
                                                              v
-SALES AND COLLECTION
-Customer -> Quotation -> Order -> Delivery Challan -> Collection -> Customer due
+SALES, RECEIVABLE AND COLLECTION
+Customer -> Quotation -> Order -> Delivery Challan -> Invoice approval -> Collection
 ```
 
 One import record represents one shipment or consignment and may contain many products. The record begins with an internal reference such as `IMP-2026-001`. When an LC is opened, its LC number becomes the main visible reference without recreating the record.
 
-Each shipment cost has its own allocation rule. Finalized landed cost flows into warehouse batches. A delivery consumes an actual batch, and a collection updates both the customer due and the chosen cash or bank account. Daily operating expenses remain separate from product landed cost.
+Each shipment cost has its own allocation rule. Finalized landed cost flows into warehouse batches. A delivery consumes an actual batch but does not create receivable. Invoice approval posts customer/order due; collection then reduces that due and updates the chosen cash or bank account. Daily operating expenses remain separate from product landed cost.
 
 ---
 
@@ -456,7 +456,7 @@ Marketing scope is independent of permission: Sales Executive = self; Sales Mana
 
 ### Customer ledger
 
-The customer's historical spreadsheet tab becomes one customer row plus connected transactions. Opening legacy balances can be posted at a cutover date. The detail ledger shows delivered sales, collections, current due, credit terms, transaction references, discounts/remarks, and a running balance.
+The customer's historical spreadsheet tab becomes one customer row plus connected transactions. Opening legacy balances can be posted at a cutover date. The detail ledger separates delivered value from approved invoiced sales, then shows collections, current due, credit terms, transaction references, remarks, reversals and running balance.
 
 Product aliases from the legacy `Item Mapping` sheet map spelling variants to one approved product, preventing duplicate inventory identities.
 
@@ -474,13 +474,14 @@ Create quotation
 -> Order created with the same line items
 -> Select actual batch for delivery
 -> Delivery challan posts stock-out
--> Order value becomes customer due
+-> Create invoice from one or more challans for the same order
+-> Authorized invoice approval posts customer and order due
 -> Post cash/bKash/bank/cheque collection
 -> Customer and order due decrease
 -> Cash/bank transaction is created
 ```
 
-Outstanding credit is supported by leaving part of the order due unpaid. Invoice generation is intentionally shown as pending client confirmation and is not inserted as a mandatory stage.
+Outstanding credit is supported by leaving part of an approved invoice unpaid. A draft invoice changes no balance. Cancellation requires authority and a reason, reverses receivable, and is blocked when a posted collection is linked to the invoice.
 
 `Credit` is not a collection method. A posted collection must use Cash, bKash/mobile banking, Bank Transfer, or Cheque, must reference an active destination account, and must include a payment reference for non-cash modes. Customer due, order due, account balance, receipt, and account transaction update together.
 
@@ -492,7 +493,10 @@ One record can produce:
 - Quotation calibrated for the same physical preprinted paper
 - Order Receiving Sheet matching the supplied office-use structure
 - Delivery challan
+- Approved sales invoice
 - Money receipt
+- Debit voucher and credit voucher
+- Sales sheet, invoice register, salesman ledger and Monthly A/C Summary
 - Import cost statement
 
 All print sheets use A4 millimetre dimensions and per-identity safe-area settings. Digital mode prints the supplied background image; preprinted mode omits artwork while retaining identical content coordinates.
@@ -729,7 +733,6 @@ A delegated manager cannot edit self, peers, higher-ranked users or any Super Ad
 The queue makes unresolved requirements visible:
 
 - Default allocation for common costs
-- Invoice requirement
 - Accounting depth
 - Number of warehouses
 - Selling-price approval
@@ -821,13 +824,17 @@ You are not showing code for its own sake. You are proving:
 | Method and path | Purpose |
 |---|---|
 | `GET/POST/PATCH/DELETE /api/customers/*` | Customer master with owner-scoped writes |
-| `GET /api/customers/:id/ledger` | Delivered sales, collections and running due |
+| `GET /api/customers/:id/ledger` | Delivered value, approved invoices, collections and running due |
 | `GET/POST/PATCH/DELETE /api/quotations/*` | Quotation workflow |
 | `POST /api/sales/profit-preview` | Owner-only expected FIFO COGS and gross profit |
 | `POST /api/quotations/:id/convert` | Carry quote lines into an order |
 | `GET/PATCH /api/orders/*` | List orders and maintain supplied receiving-sheet fields |
 | `GET/POST /api/deliveries` | Post actual batch delivery and stock-out |
-| `GET/POST /api/collections` | Validate real payment account, post receipt, and reduce due |
+| `GET/POST /api/invoices` | Create a draft invoice from eligible delivery challans |
+| `POST /api/invoices/:id/approve` | Post the approved invoice into customer and order receivable |
+| `POST /api/invoices/:id/cancel` | Reasoned, audited receivable reversal when no collection blocks it |
+| `GET/POST /api/collections` | Link an approved invoice when available, post receipt, and reduce due |
+| `POST /api/account-transactions` | Post controlled Advance, Company Loan or authorized manual debit/credit voucher |
 
 ### Employees
 
@@ -1125,11 +1132,11 @@ No ordinary reopen is allowed after the first receipt because stock already inhe
 
 **Do business documents and reports use the supplied stationery?**
 
-Yes. Quotation, order, challan, receipt, import cost, employee activity, Marketing Analysis, operational reports, audit and TA/DA all open the same dedicated calibrated A4 preview. Operational pages expose one consistent **Print Preview** action rather than stationery controls. In the preview, **With Background** includes the selected MIPRO or LED TRACKERS artwork for PDF or plain paper, while **Without Background** preserves the same millimetre content coordinates and omits the image for existing preprinted letterhead. The Order Receiving Sheet still includes the supplied customer, payment, responsibility and office-use structure.
+Yes. Quotation, order, challan, invoice, receipt, debit/credit voucher, import cost, employee activity, Marketing Analysis, operational reports, audit, sales sheet and TA/DA all open the same dedicated calibrated A4 preview. Operational pages expose one consistent **Print Preview** action rather than stationery controls. In the preview, **With Background** includes the selected MIPRO or LED TRACKERS artwork for PDF or plain paper, while **Without Background** preserves the same millimetre content coordinates and omits the image for existing preprinted letterhead. The content safe area has the requested 1.5 mm left correction and digital artwork includes 1.5 mm edge bleed. In the browser print dialog use A4, Margins None, Scale 100%, Background graphics On, and Headers/footers Off. A physical printer's non-printable hardware margin cannot be removed by browser code.
 
 **Where is invoice generation?**
 
-The latest client flow is quotation -> order -> challan -> collection. Invoice is shown in the confirmation queue until the client defines whether it is mandatory or optional.
+It is contextual inside Sales rather than a new main navigation tab. The confirmed flow is quotation -> order -> delivery challan -> draft invoice -> authorized approval -> collection. Delivery changes stock; approval changes receivable. Reports include the challan register, invoice register, sales sheet, sales by salesperson/customer/product/month, salesman ledger and delivery-versus-invoice references.
 
 **Where are AI, GPS, HR, and fleet?**
 

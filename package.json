@@ -36,7 +36,7 @@
     "react-hook-form": "^7.81.0",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "latest",
-    "recharts": "^3.9.2",
+    "recharts": "3.10.1",
     "tailwindcss": "^4.3.2",
     "zod": "latest",
     "zustand": "^5.0.14"

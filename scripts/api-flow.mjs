@@ -406,7 +406,16 @@ async function run() {
   assert.equal(batchesAfterDelivery.find((entry) => entry.id === expiredBatch.id).quantityAvailable, "30.0000");
   const postedOrder = (await api("/api/orders")).find((entry) => entry.id === order.id);
   assert.equal(postedOrder.status, "Delivered");
-  assert.equal(postedOrder.due, "6000.00");
+  assert.equal(postedOrder.due, "0.00");
+  assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
+  const invoice = await api("/api/invoices", { method: "POST", expected: 201, body: { orderId: order.id, deliveryIds: [delivery.id], date: today, remarks: "Generated after confirmed delivery" } });
+  assert.equal(invoice.status, "Draft");
+  assert.equal(invoice.total, "6000.00");
+  assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
+  const approvedInvoice = await api("/api/invoices/" + invoice.id + "/approve", { method: "POST" });
+  assert.equal(approvedInvoice.status, "Approved");
+  assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "6000.00");
+  assert.equal((await api("/api/orders")).find((entry) => entry.id === order.id).due, "6000.00");
 
   console.log("4. Sales ownership and collection/account integrity");
   await api("/api/quotations", { method: "POST", as: identities.sales1, expected: 403, body: { date: today, customerId: "cus-labaid", validityDays: 15, paymentTerms: "30 days", lines: [{ productId: "prd-d17h", quantity: "1", unitPrice: "700", discount: "0" }] } });
@@ -431,7 +440,7 @@ async function run() {
   const collection = await api("/api/collections", {
     method: "POST",
     expected: 201,
-    body: { customerId: customer.id, orderId: order.id, date: today, amount: "6000", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "BANK-" + suffix, remarks: "Full FIFO order settlement" }
+    body: { customerId: customer.id, invoiceId: invoice.id, orderId: order.id, date: today, amount: "6000", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "BANK-" + suffix, remarks: "Full invoice settlement" }
   });
   assert.match(collection.receiptNumber, /^MR-2026-/);
   const cityAfter = (await api("/api/settings/accounts")).find((entry) => entry.id === "acc-city");
@@ -439,6 +448,8 @@ async function run() {
   assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
   assert.equal((await api("/api/orders")).find((entry) => entry.id === order.id).due, "0.00");
   assert.ok((await api("/api/account-transactions")).some((entry) => entry.sourceId === collection.id && entry.direction === "In"));
+  const customerLedger = await api("/api/customers/" + customer.id + "/ledger");
+  assert.ok(customerLedger.entries.some((entry) => entry.type === "Invoice" && entry.reference === invoice.invoiceNumber));
 
   console.log("5. Opening balances, running ledger and canonical migration data");
   const migrationCustomer = await api("/api/customers", {
@@ -483,12 +494,21 @@ async function run() {
     body: { date: today, categoryId: "ec-4", subtype: "TA/DA", expenseFor: "Employee", employeeId: identities.sales1.id, amount: "999999", taAmount: "20", daAmount: "30", paidFromAccountId: "acc-cash", remarks: "Approved customer visit expense" }
   });
   assert.equal(taDa.amount, "50.00");
+  const cashBeforeAdvance = (await api("/api/settings/accounts")).find((entry) => entry.id === "acc-cash");
+  const advance = await api("/api/account-transactions", { method: "POST", as: identities.accounts, expected: 201, body: { date: today, accountId: "acc-cash", sourceType: "Advance", direction: "Out", amount: "250.00", partyName: "Rafiq Ahmed", reference: "ADV-" + suffix, description: "Field advance", remarks: "Recover through settlement" } });
+  assert.match(advance.voucherNumber, /^DV-2026-/);
+  const cashAfterAdvance = (await api("/api/settings/accounts")).find((entry) => entry.id === "acc-cash");
+  assert.equal(Number(cashBeforeAdvance.balance) - Number(cashAfterAdvance.balance), 250);
   assert.equal((await api("/api/imports/" + importRecord.id)).snapshot.totalShipmentCostBdt, snapshotTotal);
 
   const currentReport = await api("/api/reports?from=" + monthStart + "&to=" + today);
   assert.deepEqual(currentReport.period, { from: monthStart, to: today });
   assert.ok(table(currentReport, "imports", "import-register").rows.some((row) => row.reference === lcReference));
   assert.ok(table(currentReport, "sales", "sales-by-product").rows.some((row) => row.product === product.name));
+  assert.ok(table(currentReport, "sales", "invoice-register").rows.some((row) => row.invoice === invoice.invoiceNumber));
+  assert.ok(table(currentReport, "sales", "sales-sheet").rows.some((row) => row.invoice === invoice.invoiceNumber));
+  assert.ok(table(currentReport, "sales", "sales-by-salesperson").rows.length > 0);
+  assert.ok(table(currentReport, "expenses", "monthly-ac-summary").rows.length > 0);
   assert.ok(table(currentReport, "sales", "customer-ledger").rows.length > 0);
   assert.ok(table(currentReport, "expenses", "daily-expenditure").rows.some((row) => row.expenseFor === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "expenses", "expense-by-person").rows.some((row) => row.employee === "Rafiq Ahmed"));
@@ -497,8 +517,13 @@ async function run() {
   const accountsReport = await api("/api/reports?from=" + monthStart + "&to=" + today, { as: identities.accounts });
   assert.ok(!accountsReport.sales.some((entry) => entry.label === "Realized gross profit"));
   assert.ok(!table(accountsReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
+  const historyReport = await api("/api/reports?from=2026-07-01&to=" + today);
+  assert.ok(table(historyReport, "sales", "delivery-invoice-exceptions").rows.some((row) => row.type === "Delivered not invoiced"));
+  const scopedSalesmanReport = await api("/api/reports?from=2026-08-01&to=" + today + "&employeeId=" + identities.sales1.id, { as: identities.salesManager });
+  assert.ok(table(scopedSalesmanReport, "sales", "salesman-ledger").rows.every((row) => row.salesperson === "Rafiq Ahmed"));
+  await api("/api/reports?from=2026-08-01&to=" + today + "&employeeId=" + identities.sales2.id, { as: identities.sales1, expected: 403 });
   const emptyReport = await api("/api/reports?from=2035-01-01&to=2035-01-31");
-  assert.equal(metric(emptyReport, "sales", "Delivered sales"), "0.00");
+  assert.equal(metric(emptyReport, "sales", "Approved invoice sales"), "0.00");
   assert.equal(metric(emptyReport, "sales", "Collections received"), "0.00");
   assert.equal(metric(emptyReport, "expenses", "Operating expenses"), "0.00");
   assert.equal(table(emptyReport, "sales", "delivered-sales").rows.length, 0);
@@ -660,7 +685,7 @@ async function run() {
   assert.match(linkedQuotation.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/);
   const sentLinkedQuotation = await api("/api/quotations/" + linkedQuotation.id, { method: "PATCH", as: identities.sales1, body: { status: "Sent" } });
   assert.match(sentLinkedQuotation.submittedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/);
-  const timestampedActivities = await api("/api/marketing/activities?from=" + monthStart + "&to=" + today, { as: identities.sales1 });
+  const timestampedActivities = await api("/api/marketing/activities?from=2026-08-01&to=" + today, { as: identities.sales1 });
   assert.equal(timestampedActivities.find((entry) => entry.referenceId === linkedQuotation.id)?.occurredAt, sentLinkedQuotation.submittedAt);
   assert.equal(timestampedActivities.find((entry) => entry.referenceId === "quo-1")?.occurredAt, "2026-08-18", "Legacy date-only sales activity must not receive an invented time.");
   assert.equal((await api("/api/marketing/leads", { as: identities.sales1 })).find((entry) => entry.id === marketingLead.id).stage, "QUOTATION");

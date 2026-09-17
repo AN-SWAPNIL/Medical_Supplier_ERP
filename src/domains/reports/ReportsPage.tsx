@@ -99,14 +99,14 @@ export default function ReportsPage() {
   const [to, setTo] = useState(hasRequestedPeriod ? requestedTo! : initialPeriod.to);
   const [tableId, setTableId] = useState(params.get("table") ?? (role === "Sales Executive" ? "salesperson-performance" : ""));
   const [taDaEmployee, setTaDaEmployee] = useState("All employees");
-  const salesEmployeeId = role === "Sales Executive" ? "self" : "all";
+  const salesEmployeeId = role === "Sales Executive" ? "self" : params.get("employeeId") ?? "all";
   const navigate = useNavigate();
   const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
   const canAudit = ["Super Admin", "Managing Director", "Accounts"].includes(role);
   const canMarketing = hasEffectivePermission(user, "marketing", "view");
   const reportQuery = useQuery({
-    queryKey: ["reports", from, to],
-    queryFn: () => reportService.get(from, to),
+    queryKey: ["reports", from, to, salesEmployeeId],
+    queryFn: () => reportService.get(from, to, salesEmployeeId),
     enabled: Boolean(from && to && from <= to)
   });
   const performanceQuery = useQuery({

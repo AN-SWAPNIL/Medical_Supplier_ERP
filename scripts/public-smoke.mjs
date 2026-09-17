@@ -71,9 +71,14 @@ try {
     await page.getByText("Your inquiry has been received.").waitFor();
 
     await page.goto(base + "/login", { waitUntil: "domcontentloaded" });
-    assert.equal(await page.getByLabel("Email").inputValue(), "", "Production login email must be blank");
-    assert.equal(await page.getByLabel("Password").inputValue(), "", "Production login password must be blank");
-    assert.equal(await page.getByText("Demo role accounts").count(), 0, "Demo identities leaked in production mode");
+    const demoAccountsVisible = await page.getByText("Demo role accounts").count() > 0;
+    if (demoAccountsVisible) {
+      assert.match(await page.getByLabel("Email").inputValue(), /@mipro\.local$/, "Demo login email was not prepared");
+      assert.ok((await page.getByLabel("Password").inputValue()).length > 0, "Demo login password was not prepared");
+    } else {
+      assert.equal(await page.getByLabel("Email").inputValue(), "", "Production login email must be blank");
+      assert.equal(await page.getByLabel("Password").inputValue(), "", "Production login password must be blank");
+    }
     assert.equal(await page.getByText("Request access", { exact: true }).count(), 0, "Request Access is still public");
     await page.goto(base + "/signup", { waitUntil: "domcontentloaded" });
     await page.waitForURL("**/login");

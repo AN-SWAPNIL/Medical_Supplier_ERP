@@ -32,6 +32,7 @@ import {
   publicSiteSettings as seedPublicSiteSettings
 } from "../src/features/public/public.content.js";
 import type {
+  AccountTransaction,
   AIContext,
   AIInsight,
   AIRecommendation,
@@ -71,6 +72,7 @@ import type {
   ProductAlias,
   ProfitPreview,
   Quotation,
+  SalesInvoice,
   SalesOrder,
   SalespersonEmployee,
   SalespersonPerformanceDetail,
@@ -109,6 +111,7 @@ import {
   fieldVisits as seedFieldVisits,
   dailyMarketingPlans as seedDailyMarketingPlans,
   imports as seedImports,
+  invoices as seedInvoices,
   locationHistory as seedLocationHistory,
   marketingActivities as seedMarketingActivities,
   marketingFollowUps as seedMarketingFollowUps,
@@ -152,6 +155,7 @@ const customers = structuredClone(seedCustomers);
 const quotations = structuredClone(seedQuotations);
 const orders = structuredClone(seedOrders);
 const deliveries = structuredClone(seedDeliveries);
+const invoices = structuredClone(seedInvoices);
 const collections = structuredClone(seedCollections);
 const expenses = structuredClone(seedExpenses);
 const accounts = structuredClone(seedAccounts);
@@ -495,9 +499,13 @@ function customerLedger(customerId: string): CustomerLedger | null {
   const customer = customers.find((entry) => entry.id === customerId);
   if (!customer) return null;
   const customerDeliveries = deliveries.filter((entry) => entry.customerId === customer.id);
+  const customerInvoices = invoices.filter((entry) => entry.customerId === customer.id);
   const customerCollections = collections.filter((entry) => entry.customerId === customer.id && entry.status === "Posted");
   const transactions = [
-    ...customerDeliveries.map((delivery) => ({ id: delivery.id, date: delivery.date, type: "Delivery" as const, reference: delivery.challanNumber, debit: delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0)), credit: new Decimal(0), remarks: delivery.remarks || "Stock delivered" })),
+    ...customerInvoices.filter((invoice) => invoice.approvedAt).flatMap((invoice) => [
+      { id: invoice.id, date: invoice.date, type: "Invoice" as const, reference: invoice.invoiceNumber, debit: decimal(invoice.total), credit: new Decimal(0), remarks: invoice.remarks || "Approved sales invoice" },
+      ...(invoice.status === "Cancelled" ? [{ id: `${invoice.id}-reversal`, date: invoice.approvedAt!.slice(0, 10), type: "Reversal" as const, reference: invoice.invoiceNumber, debit: new Decimal(0), credit: decimal(invoice.total), remarks: `Invoice cancelled: ${invoice.cancellationReason ?? "Recorded reversal"}` }] : [])
+    ]),
     ...customerCollections.map((collection) => ({ id: collection.id, date: collection.date, type: "Collection" as const, reference: collection.receiptNumber, debit: new Decimal(0), credit: decimal(collection.amount), remarks: `${collection.paymentMode}${collection.referenceNumber ? ` · ${collection.referenceNumber}` : ""}${collection.remarks ? ` · ${collection.remarks}` : ""}` }))
   ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const transactionDebit = transactions.reduce((sum, entry) => sum.plus(entry.debit), new Decimal(0));
@@ -511,7 +519,8 @@ function customerLedger(customerId: string): CustomerLedger | null {
     running = running.plus(entry.debit).minus(entry.credit);
     entries.push({ id: entry.id, date: entry.date, type: entry.type, reference: entry.reference, debit: money(entry.debit), credit: money(entry.credit), runningDue: money(running), remarks: entry.remarks });
   }
-  return { customer, deliveredSales: customer.totalSales, collected: customer.totalCollected, currentDue: customer.currentDue, entries, deliveries: customerDeliveries, collections: customerCollections };
+  const invoicedSales = customerInvoices.filter((invoice) => invoice.status === "Approved").reduce((sum, invoice) => sum.plus(invoice.total), new Decimal(0));
+  return { customer, deliveredSales: customer.totalSales, invoicedSales: money(invoicedSales), collected: customer.totalCollected, currentDue: customer.currentDue, entries, deliveries: customerDeliveries, invoices: customerInvoices, collections: customerCollections };
 }
 
 function audit(req: Request, action: string, entityType: string, entityId: string, summary: string, reason?: string) {
@@ -756,6 +765,11 @@ function unifiedMarketingActivities(req: Request, from?: string, to?: string) {
   for (const delivery of deliveries) {
     const order = orders.find((entry) => entry.id === delivery.orderId);
     const activity = employeeActivity(salesOwnerForDelivery(delivery) ?? "", "DELIVERY_POSTED", "DELIVERY", delivery.postedAt ?? delivery.date, { id: `delivery-${delivery.id}`, leadId: leadIdForOrder(order), customerId: delivery.customerId, subjectName: delivery.customerName, productIds: delivery.lines.map((line) => line.productId), referenceType: "Delivery", referenceId: delivery.id, referenceNumber: delivery.challanNumber, amountBdt: money(delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0))) });
+    if (activity) derived.push(activity);
+  }
+  for (const invoice of invoices.filter((entry) => entry.status === "Approved" && entry.approvedAt)) {
+    const order = invoice.orderId ? orders.find((entry) => entry.id === invoice.orderId) : undefined;
+    const activity = employeeActivity(invoice.ownerId, "INVOICE_APPROVED", "INVOICE", invoice.approvedAt!, { id: `invoice-${invoice.id}`, leadId: leadIdForOrder(order), customerId: invoice.customerId, subjectName: invoice.customerName, productIds: invoice.lines.map((line) => line.productId), referenceType: "SalesInvoice", referenceId: invoice.id, referenceNumber: invoice.invoiceNumber, amountBdt: invoice.total });
     if (activity) derived.push(activity);
   }
   for (const collection of collections.filter((entry) => entry.status === "Posted")) {
@@ -3033,13 +3047,6 @@ app.post("/api/deliveries", (req, res) => {
     batch.quantityAvailable = money(decimal(batch.quantityAvailable).minus(line.quantity));
     stockMovements.unshift({ id: id("mov"), date: delivery.date, productId: line.productId, productName: line.productName, batchId: batch.id, batchNumber: batch.batchNumber, type: "Dispatch", quantity: line.quantity, reference: delivery.challanNumber, reason: usedOverride ? delivery.overrideReason : undefined, createdBy: user.name });
   }
-  const deliveredValue = delivery.lines.reduce((sum, line) => sum.plus(decimal(line.quantity).mul(line.unitPrice).minus(line.discount)), new Decimal(0));
-  const customer = customers.find((entry) => entry.id === order.customerId);
-  if (customer) {
-    customer.currentDue = money(decimal(customer.currentDue).plus(deliveredValue));
-    customer.totalSales = money(decimal(customer.totalSales).plus(deliveredValue));
-  }
-  order.due = money(decimal(order.due).plus(deliveredValue));
   const deliveredByProduct = new Map<string, Decimal>();
   for (const postedDelivery of deliveries.filter((entry) => entry.orderId === order.id)) {
     for (const line of postedDelivery.lines) deliveredByProduct.set(line.productId, (deliveredByProduct.get(line.productId) ?? new Decimal(0)).plus(line.quantity));
@@ -3049,6 +3056,108 @@ app.post("/api/deliveries", (req, res) => {
   if (usedOverride) audit(req, "FIFO overridden", "Delivery", delivery.id, `${delivery.challanNumber} used a newer batch.`, delivery.overrideReason);
   audit(req, "Delivery dispatched", "Delivery", delivery.id, `${delivery.challanNumber} posted and stock reduced.`);
   res.status(201).json(ok(delivery, "Delivery dispatched"));
+});
+
+app.get("/api/invoices", (req, res) => {
+  if (!requireArea(req, res, "sales")) return;
+  res.json(ok(salesScoped(invoices, req), "Sales invoices loaded"));
+});
+app.post("/api/invoices", (req, res) => {
+  const user = requireArea(req, res, "sales");
+  if (!user) return;
+  const deliveryIds: string[] = Array.isArray(req.body.deliveryIds)
+    ? [...new Set((req.body.deliveryIds as unknown[]).map((value) => String(value)))]
+    : [];
+  if (!deliveryIds.length) return fail(res, 422, "Select at least one posted delivery challan.");
+  const selectedDeliveries = deliveryIds.map((deliveryId) => deliveries.find((entry) => entry.id === deliveryId));
+  if (selectedDeliveries.some((delivery) => !delivery)) return fail(res, 404, "One or more selected deliveries were not found.");
+  const first = selectedDeliveries[0]!;
+  if (selectedDeliveries.some((delivery) => delivery!.customerId !== first.customerId || delivery!.orderId !== first.orderId)) return fail(res, 422, "One invoice can include only deliveries from the same order and customer.");
+  const order = orders.find((entry) => entry.id === first.orderId);
+  if (!order) return fail(res, 404, "The selected delivery order was not found.");
+  if (user.role === "Sales Executive" && order.ownerId !== user.id) return fail(res, 403, "You can invoice only your own deliveries.");
+  const alreadyInvoiced = invoices.find((invoice) => invoice.status !== "Cancelled" && deliveryIds.some((deliveryId) => invoice.deliveryIds.includes(deliveryId)));
+  if (alreadyInvoiced) return fail(res, 409, `${alreadyInvoiced.invoiceNumber} already includes one of the selected challans.`);
+  const lines = selectedDeliveries.flatMap((delivery) => delivery!.lines.map((line) => ({ id: id("invoice-line"), productId: line.productId, productCode: line.productCode, productName: line.productName, quantity: line.quantity, unitPrice: line.unitPrice, discount: line.discount, lineTotal: line.lineTotal })));
+  const subtotal = lines.reduce((sum, line) => sum.plus(decimal(line.quantity).mul(line.unitPrice)), new Decimal(0));
+  const discountTotal = lines.reduce((sum, line) => sum.plus(line.discount), new Decimal(0));
+  const customer = customers.find((entry) => entry.id === first.customerId)!;
+  const invoice: SalesInvoice = {
+    id: id("invoice"),
+    invoiceNumber: `INV-2026-${String(invoices.length + 1).padStart(4, "0")}`,
+    orderId: order.id,
+    deliveryIds,
+    customerId: customer.id,
+    customerName: customer.name,
+    customerAddressSnapshot: customer.address,
+    customerPhoneSnapshot: customer.phone,
+    customerContactSnapshot: customer.contactPerson,
+    ownerId: order.ownerId,
+    date: String(req.body.date || businessDate()),
+    createdAt: new Date().toISOString(),
+    lines,
+    subtotal: money(subtotal),
+    discountTotal: money(discountTotal),
+    total: money(subtotal.minus(discountTotal)),
+    status: "Draft",
+    remarks: String(req.body.remarks ?? "").trim() || undefined
+  };
+  invoices.unshift(invoice);
+  audit(req, "Invoice created", "SalesInvoice", invoice.id, `${invoice.invoiceNumber} created from ${deliveryIds.length} delivery challan(s).`);
+  res.status(201).json(ok(invoice, "Draft invoice created from delivered quantities"));
+});
+app.patch("/api/invoices/:invoiceId", (req, res) => {
+  const user = requireArea(req, res, "sales", "edit");
+  if (!user) return;
+  const invoice = invoices.find((entry) => entry.id === req.params.invoiceId);
+  if (!invoice) return fail(res, 404, "Sales invoice not found");
+  if (invoice.status !== "Draft") return fail(res, 423, "Only a draft invoice can be edited.");
+  if (user.role === "Sales Executive" && invoice.ownerId !== user.id) return fail(res, 403, "You can edit only your own draft invoice.");
+  if (req.body.date) invoice.date = String(req.body.date);
+  if (req.body.remarks !== undefined) invoice.remarks = String(req.body.remarks).trim() || undefined;
+  audit(req, "Invoice updated", "SalesInvoice", invoice.id, `${invoice.invoiceNumber} draft details updated.`);
+  res.json(ok(invoice, "Draft invoice updated"));
+});
+app.post("/api/invoices/:invoiceId/approve", (req, res) => {
+  const user = requireArea(req, res, "sales", "approve");
+  if (!user) return;
+  const invoice = invoices.find((entry) => entry.id === req.params.invoiceId);
+  if (!invoice) return fail(res, 404, "Sales invoice not found");
+  if (invoice.status !== "Draft") return fail(res, 409, "Only a draft invoice can be approved.");
+  const customer = customers.find((entry) => entry.id === invoice.customerId);
+  if (!customer) return fail(res, 404, "Invoice customer not found");
+  invoice.status = "Approved";
+  invoice.approvedAt = new Date().toISOString();
+  invoice.approvedByUserId = user.id;
+  customer.currentDue = money(decimal(customer.currentDue).plus(invoice.total));
+  customer.totalSales = money(decimal(customer.totalSales).plus(invoice.total));
+  const order = invoice.orderId ? orders.find((entry) => entry.id === invoice.orderId) : undefined;
+  if (order) order.due = money(decimal(order.due).plus(invoice.total));
+  audit(req, "Invoice approved", "SalesInvoice", invoice.id, `${invoice.invoiceNumber}: Tk ${invoice.total} posted to ${customer.name}.`);
+  res.json(ok(invoice, "Invoice approved and customer receivable posted"));
+});
+app.post("/api/invoices/:invoiceId/cancel", (req, res) => {
+  const user = requireArea(req, res, "sales", "approve");
+  if (!user) return;
+  const invoice = invoices.find((entry) => entry.id === req.params.invoiceId);
+  if (!invoice) return fail(res, 404, "Sales invoice not found");
+  if (invoice.status === "Cancelled") return fail(res, 409, "Invoice is already cancelled.");
+  const reason = String(req.body.reason ?? "").trim();
+  if (reason.length < 5) return fail(res, 422, "Enter a clear cancellation reason.");
+  if (collections.some((collection) => collection.invoiceId === invoice.id && collection.status === "Posted")) return fail(res, 409, "Reverse the linked collection before cancelling this invoice.");
+  if (invoice.status === "Approved") {
+    const customer = customers.find((entry) => entry.id === invoice.customerId);
+    if (customer) {
+      customer.currentDue = money(Decimal.max(0, decimal(customer.currentDue).minus(invoice.total)));
+      customer.totalSales = money(Decimal.max(0, decimal(customer.totalSales).minus(invoice.total)));
+    }
+    const order = invoice.orderId ? orders.find((entry) => entry.id === invoice.orderId) : undefined;
+    if (order) order.due = money(Decimal.max(0, decimal(order.due).minus(invoice.total)));
+  }
+  invoice.status = "Cancelled";
+  invoice.cancellationReason = reason;
+  audit(req, "Invoice cancelled", "SalesInvoice", invoice.id, `${invoice.invoiceNumber} reversed.`, reason);
+  res.json(ok(invoice, "Invoice cancelled with receivable reversal"));
 });
 
 app.get("/api/collections", (req, res) => {
@@ -3071,7 +3180,11 @@ app.post("/api/collections", (req, res) => {
   if (!account) return fail(res, 422, "Select a valid active cash, bank or mobile-banking destination account.");
   const linkedOrder = req.body.orderId ? orders.find((entry) => entry.id === req.body.orderId) : undefined;
   if (req.body.orderId && (!linkedOrder || linkedOrder.customerId !== customer.id)) return fail(res, 422, "The selected order does not belong to this customer.");
+  const linkedInvoice = req.body.invoiceId ? invoices.find((entry) => entry.id === req.body.invoiceId) : undefined;
+  if (req.body.invoiceId && (!linkedInvoice || linkedInvoice.customerId !== customer.id || linkedInvoice.status !== "Approved")) return fail(res, 422, "Select an approved invoice belonging to this customer.");
+  if (linkedInvoice?.orderId && linkedOrder && linkedInvoice.orderId !== linkedOrder.id) return fail(res, 422, "The selected invoice and order do not match.");
   if (user.role === "Sales Executive" && linkedOrder && linkedOrder.ownerId !== user.id) return fail(res, 403, "You cannot collect against another sales executive's order.");
+  if (user.role === "Sales Executive" && linkedInvoice && linkedInvoice.ownerId !== user.id) return fail(res, 403, "You cannot collect against another sales executive's invoice.");
   let amount: Decimal;
   try {
     amount = requiredDecimal(req.body.amount, "Collection amount");
@@ -3082,7 +3195,7 @@ app.post("/api/collections", (req, res) => {
   if (amount.gt(customer.currentDue)) return fail(res, 422, "Collection cannot exceed the customer's current due.");
   if (linkedOrder && amount.gt(linkedOrder.due)) return fail(res, 422, "Collection cannot exceed the selected order's due amount.");
   const postedAt = new Date().toISOString();
-  const collection: Collection = { ...req.body, amount: money(amount), customerName: customer.name, accountId: account.id, id: id("collection"), receiptNumber: nextReference("MR", collections.length), ownerId: user.role === "Sales Executive" ? user.id : linkedOrder?.ownerId ?? customer.assignedSalesUserId ?? req.body.ownerId ?? user.id, postedByUserId: user.id, postedAt, status: "Posted" };
+  const collection: Collection = { ...req.body, amount: money(amount), customerName: customer.name, accountId: account.id, id: id("collection"), receiptNumber: nextReference("MR", collections.length), ownerId: user.role === "Sales Executive" ? user.id : linkedInvoice?.ownerId ?? linkedOrder?.ownerId ?? customer.assignedSalesUserId ?? req.body.ownerId ?? user.id, postedByUserId: user.id, postedAt, status: "Posted" };
   collections.unshift(collection);
   customer.currentDue = money(decimal(customer.currentDue).minus(amount));
   customer.totalCollected = money(decimal(customer.totalCollected).plus(amount));
@@ -3187,6 +3300,29 @@ app.get("/api/account-transactions", (req, res) => {
   if (!requireArea(req, res, "accounts")) return;
   res.json(ok(accountTransactions, "Account transactions loaded"));
 });
+app.post("/api/account-transactions", (req, res) => {
+  const user = requireArea(req, res, "accounts", "post");
+  if (!user) return;
+  const sourceType = String(req.body.sourceType) as AccountTransaction["sourceType"];
+  if (!["Advance", "Company Loan", "Manual Authorized"].includes(sourceType)) return fail(res, 422, "Select Advance, Company Loan or Manual Authorized transaction.");
+  const direction = String(req.body.direction) as AccountTransaction["direction"];
+  if (!["In", "Out"].includes(direction)) return fail(res, 422, "Select cash/bank direction.");
+  const account = accounts.find((entry) => entry.id === req.body.accountId && entry.active);
+  if (!account) return fail(res, 422, "Select a valid active cash or bank account.");
+  let amount: Decimal;
+  try { amount = requiredDecimal(req.body.amount, "Transaction amount"); } catch (error) { return fail(res, 422, error instanceof Error ? error.message : "Transaction amount is invalid."); }
+  if (direction === "Out" && decimal(account.balance).lt(amount)) return fail(res, 422, "Selected account has insufficient balance.");
+  const partyName = String(req.body.partyName ?? "").trim();
+  const description = String(req.body.description ?? "").trim();
+  if (!partyName || !description) return fail(res, 422, "Party and purpose are required.");
+  const voucherPrefix = direction === "Out" ? "DV" : "CV";
+  const voucherCount = accountTransactions.filter((entry) => entry.direction === direction && entry.voucherNumber).length;
+  const transaction: AccountTransaction = { id: id("trx"), date: String(req.body.date || businessDate()), accountId: account.id, accountName: account.name, direction, amount: money(amount), sourceType, sourceId: id(sourceType === "Advance" ? "advance" : sourceType === "Company Loan" ? "loan" : "manual"), description, partyId: req.body.partyId ? String(req.body.partyId) : undefined, partyName, reference: String(req.body.reference ?? "").trim() || undefined, remarks: String(req.body.remarks ?? "").trim() || undefined, voucherNumber: `${voucherPrefix}-2026-${String(voucherCount + 1).padStart(4, "0")}`, createdByUserId: user.id, createdByName: user.name };
+  accountTransactions.unshift(transaction);
+  account.balance = money(direction === "In" ? decimal(account.balance).plus(amount) : decimal(account.balance).minus(amount));
+  audit(req, `${sourceType} posted`, "AccountTransaction", transaction.id, `${transaction.voucherNumber}: Tk ${transaction.amount} ${direction === "In" ? "received from" : "paid to"} ${partyName}.`);
+  res.status(201).json(ok(transaction, `${sourceType} transaction posted`));
+});
 
 app.get("/api/reports/salespeople", (req, res) => {
   const user = requireArea(req, res, "reports");
@@ -3228,15 +3364,21 @@ app.get("/api/reports", (req, res) => {
   } catch (error) {
     return fail(res, 422, error instanceof Error ? error.message : "Report period is invalid.");
   }
-  const ownSalesId = user.role === "Sales Executive" ? user.id : undefined;
-  const reportCustomers = ownSalesId ? customers.filter((customer) => customer.assignedSalesUserId === ownSalesId) : customers;
+  const requestedEmployeeId = String(req.query.employeeId ?? "all");
+  const permittedSalesEmployees = salesEmployeesFor(req);
+  if (user.role === "Sales Executive" && !["all", "self", user.id].includes(requestedEmployeeId)) return fail(res, 403, "Sales Executives can open only their own report scope.");
+  const scopedSalesId = user.role === "Sales Executive" ? user.id : requestedEmployeeId !== "all" && requestedEmployeeId !== "self" ? requestedEmployeeId : undefined;
+  if (scopedSalesId && !permittedSalesEmployees.some((employee) => employee.id === scopedSalesId)) return fail(res, 403, "The selected employee is outside your report scope.");
+  const reportCustomers = scopedSalesId ? customers.filter((customer) => customer.assignedSalesUserId === scopedSalesId) : customers;
   const landed = imports.filter((record) => record.snapshot && inPeriod(record.snapshot.finalizedAt.slice(0, 10), from, to));
   const importCost = landed.reduce((sum, record) => sum.plus(record.snapshot?.totalShipmentCostBdt ?? 0), new Decimal(0));
   const inventoryUnits = stockBatches.reduce((sum, batch) => sum.plus(batch.quantityAvailable), new Decimal(0));
-  const periodDeliveries = deliveries.filter((delivery) => inPeriod(delivery.date, from, to) && (!ownSalesId || salesOwnerForDelivery(delivery) === ownSalesId));
-  const periodCollections = collections.filter((collection) => collection.status === "Posted" && inPeriod(collection.date, from, to) && (!ownSalesId || collection.ownerId === ownSalesId));
+  const periodDeliveries = deliveries.filter((delivery) => inPeriod(delivery.date, from, to) && (!scopedSalesId || salesOwnerForDelivery(delivery) === scopedSalesId));
+  const periodInvoices = invoices.filter((invoice) => invoice.status === "Approved" && inPeriod(invoice.date, from, to) && (!scopedSalesId || invoice.ownerId === scopedSalesId));
+  const periodCollections = collections.filter((collection) => collection.status === "Posted" && inPeriod(collection.date, from, to) && (!scopedSalesId || collection.ownerId === scopedSalesId));
   const periodExpenses = expenses.filter((expense) => expense.status === "Posted" && inPeriod(expense.date, from, to));
-  const salesTotal = periodDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0));
+  const periodAccountTransactions = accountTransactions.filter((transaction) => inPeriod(transaction.date, from, to));
+  const salesTotal = periodInvoices.reduce((sum, invoice) => sum.plus(invoice.total), new Decimal(0));
   const collectionTotal = periodCollections.reduce((sum, collection) => sum.plus(collection.amount), new Decimal(0));
   const expenseTotal = periodExpenses.reduce((sum, expense) => sum.plus(expense.amount), new Decimal(0));
   const realized = periodDeliveries.flatMap((delivery) => delivery.lines).reduce((totals, line) => {
@@ -3258,10 +3400,11 @@ app.get("/api/reports", (req, res) => {
   }
   const salesByCustomer = new Map<string, { customer: string; quantity: Decimal; value: Decimal }>();
   const salesByProduct = new Map<string, { product: string; quantity: Decimal; value: Decimal }>();
-  const salesByMonth = new Map<string, { deliveries: number; value: Decimal }>();
-  for (const delivery of periodDeliveries) {
-    const customerRow = salesByCustomer.get(delivery.customerId) ?? { customer: delivery.customerName, quantity: new Decimal(0), value: new Decimal(0) };
-    for (const line of delivery.lines) {
+  const salesByMonth = new Map<string, { invoices: number; value: Decimal }>();
+  const salesBySalesperson = new Map<string, { salesperson: string; invoiceValue: Decimal; collectionValue: Decimal; customers: Set<string> }>();
+  for (const invoice of periodInvoices) {
+    const customerRow = salesByCustomer.get(invoice.customerId) ?? { customer: invoice.customerName, quantity: new Decimal(0), value: new Decimal(0) };
+    for (const line of invoice.lines) {
       customerRow.quantity = customerRow.quantity.plus(line.quantity);
       customerRow.value = customerRow.value.plus(line.lineTotal);
       const productRow = salesByProduct.get(line.productId) ?? { product: line.productName, quantity: new Decimal(0), value: new Decimal(0) };
@@ -3269,20 +3412,36 @@ app.get("/api/reports", (req, res) => {
       productRow.value = productRow.value.plus(line.lineTotal);
       salesByProduct.set(line.productId, productRow);
     }
-    salesByCustomer.set(delivery.customerId, customerRow);
-    const month = delivery.date.slice(0, 7);
-    const monthRow = salesByMonth.get(month) ?? { deliveries: 0, value: new Decimal(0) };
-    monthRow.deliveries += 1;
-    monthRow.value = monthRow.value.plus(delivery.lines.reduce((sum, line) => sum.plus(line.lineTotal), new Decimal(0)));
+    salesByCustomer.set(invoice.customerId, customerRow);
+    const month = invoice.date.slice(0, 7);
+    const monthRow = salesByMonth.get(month) ?? { invoices: 0, value: new Decimal(0) };
+    monthRow.invoices += 1;
+    monthRow.value = monthRow.value.plus(invoice.total);
     salesByMonth.set(month, monthRow);
+    const employee = demoUsers.find((entry) => entry.id === invoice.ownerId);
+    const ownerRow = salesBySalesperson.get(invoice.ownerId) ?? { salesperson: employee?.name ?? invoice.ownerId, invoiceValue: new Decimal(0), collectionValue: new Decimal(0), customers: new Set<string>() };
+    ownerRow.invoiceValue = ownerRow.invoiceValue.plus(invoice.total);
+    ownerRow.customers.add(invoice.customerId);
+    salesBySalesperson.set(invoice.ownerId, ownerRow);
   }
+  for (const collection of periodCollections) {
+    const employee = demoUsers.find((entry) => entry.id === collection.ownerId);
+    const ownerRow = salesBySalesperson.get(collection.ownerId) ?? { salesperson: employee?.name ?? collection.ownerId, invoiceValue: new Decimal(0), collectionValue: new Decimal(0), customers: new Set<string>() };
+    ownerRow.collectionValue = ownerRow.collectionValue.plus(collection.amount);
+    ownerRow.customers.add(collection.customerId);
+    salesBySalesperson.set(collection.ownerId, ownerRow);
+  }
+  const deliveryInvoiceExceptions = [
+    ...periodDeliveries.filter((delivery) => !invoices.some((invoice) => invoice.status !== "Cancelled" && invoice.deliveryIds.includes(delivery.id))).map((delivery) => ({ date: delivery.date, type: "Delivered not invoiced", reference: delivery.challanNumber, customer: delivery.customerName, detail: "Posted delivery has no active invoice." })),
+    ...invoices.filter((invoice) => invoice.status === "Cancelled" && inPeriod(invoice.date, from, to) && (!scopedSalesId || invoice.ownerId === scopedSalesId) && collections.some((collection) => collection.status === "Posted" && collection.invoiceId === invoice.id)).map((invoice) => ({ date: invoice.date, type: "Cancelled invoice with collection", reference: invoice.invoiceNumber, customer: invoice.customerName, detail: "A posted collection remains linked; management review is required." }))
+  ];
   const sensitive = hasCapability(req, "view_sensitive_cost");
   const profitVisible = hasCapability(req, "view_profit");
   const report = {
     period: { from, to },
     importCosts: [{ label: "Imports created", value: String(imports.filter((record) => inPeriod(record.createdAt.slice(0, 10), from, to)).length) }, { label: "Finalized shipment value", value: sensitive ? money(importCost) : "Restricted" }, { label: "Pending finalization", value: String(imports.filter((item) => item.costingStatus === "In Progress").length) }],
     inventory: [{ label: "Available units", value: inventoryUnits.toFixed(0) }, { label: "Tracked batches", value: String(stockBatches.length) }, { label: "Expiry attention", value: String(stockBatches.filter((batch) => expiryStatus(batch.expiryDate) !== "Normal").length) }],
-    sales: [{ label: ownSalesId ? "My delivered sales" : "Delivered sales", value: money(salesTotal) }, { label: ownSalesId ? "My collections" : "Collections received", value: money(collectionTotal) }, { label: ownSalesId ? "My customer dues" : "Customer dues", value: money(reportCustomers.reduce((sum, customer) => sum.plus(customer.currentDue), new Decimal(0))) }, ...(profitVisible ? [{ label: "Realized gross profit", value: money(realized.revenue.minus(realized.cogs)) }] : [])],
+    sales: [{ label: scopedSalesId ? "Selected invoiced sales" : "Approved invoice sales", value: money(salesTotal) }, { label: scopedSalesId ? "Selected collections" : "Collections received", value: money(collectionTotal) }, { label: scopedSalesId ? "Selected customer dues" : "Customer dues", value: money(reportCustomers.reduce((sum, customer) => sum.plus(customer.currentDue), new Decimal(0))) }, ...(profitVisible ? [{ label: "Delivered gross profit", value: money(realized.revenue.minus(realized.cogs)) }] : [])],
     expenses: [{ label: "Operating expenses", value: money(expenseTotal) }, { label: "Posted entries", value: String(periodExpenses.length) }, { label: "Cash / bank accounts", value: String(accounts.filter((entry) => entry.active).length) }],
     tables: {
       imports: [
@@ -3297,26 +3456,38 @@ app.get("/api/reports", (req, res) => {
         { id: "stock-movement", title: "Stock Movements", columns: [{ key: "date", label: "Date" }, { key: "product", label: "Product" }, { key: "batch", label: "Batch" }, { key: "type", label: "Movement" }, { key: "quantity", label: "Qty", align: "right" as const }, { key: "reference", label: "Reference" }], rows: stockMovements.filter((movement) => inPeriod(movement.date, from, to)).map((movement) => ({ date: movement.date, product: movement.productName, batch: movement.batchNumber, type: movement.type, quantity: movement.quantity, reference: movement.reference })) }
       ],
       sales: [
+        { id: "delivery-challan-register", title: "Delivery Challan Register", columns: [{ key: "date", label: "Date" }, { key: "challan", label: "Challan" }, { key: "order", label: "Order" }, { key: "customer", label: "Customer" }, { key: "status", label: "Status" }, { key: "quantity", label: "Units", align: "right" as const }, { key: "invoice", label: "Invoice" }], rows: periodDeliveries.map((delivery) => ({ date: delivery.date, challan: delivery.challanNumber, order: orders.find((entry) => entry.id === delivery.orderId)?.orderNumber ?? delivery.orderId, customer: delivery.customerName, status: delivery.status, quantity: precise(delivery.lines.reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), invoice: invoices.find((entry) => entry.status !== "Cancelled" && entry.deliveryIds.includes(delivery.id))?.invoiceNumber ?? "Not invoiced" })) },
+        { id: "delivery-invoice-exceptions", title: "Delivery vs Invoice Exceptions", columns: [{ key: "date", label: "Date" }, { key: "type", label: "Exception" }, { key: "reference", label: "Reference" }, { key: "customer", label: "Customer" }, { key: "detail", label: "Control Note" }], rows: deliveryInvoiceExceptions },
+        { id: "invoice-register", title: "Sales Invoice Register", columns: [{ key: "date", label: "Date" }, { key: "invoice", label: "Invoice" }, { key: "customer", label: "Customer" }, { key: "salesperson", label: "Salesperson" }, { key: "challans", label: "Delivery Challan(s)" }, { key: "status", label: "Status" }, { key: "amount", label: "Amount", align: "right" as const }], rows: invoices.filter((invoice) => inPeriod(invoice.date, from, to) && (!scopedSalesId || invoice.ownerId === scopedSalesId)).map((invoice) => ({ date: invoice.date, invoice: invoice.invoiceNumber, customer: invoice.customerName, salesperson: demoUsers.find((entry) => entry.id === invoice.ownerId)?.name ?? invoice.ownerId, challans: invoice.deliveryIds.map((deliveryId) => deliveries.find((entry) => entry.id === deliveryId)?.challanNumber ?? deliveryId).join(", "), status: invoice.status, amount: invoice.total })) },
+        { id: "sales-sheet", title: "Sales Sheet", columns: [{ key: "date", label: "Date" }, { key: "invoice", label: "Invoice" }, { key: "customer", label: "Customer" }, { key: "salesperson", label: "Salesperson" }, { key: "product", label: "Product" }, { key: "quantity", label: "Qty", align: "right" as const }, { key: "rate", label: "Rate", align: "right" as const }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodInvoices.flatMap((invoice) => invoice.lines.map((line) => ({ date: invoice.date, invoice: invoice.invoiceNumber, customer: invoice.customerName, salesperson: demoUsers.find((entry) => entry.id === invoice.ownerId)?.name ?? invoice.ownerId, product: line.productName, quantity: line.quantity, rate: line.unitPrice, amount: line.lineTotal }))) },
         { id: "delivered-sales", title: "Delivered Sales by Product", columns: [{ key: "date", label: "Date" }, { key: "challan", label: "Challan" }, { key: "customer", label: "Customer" }, { key: "product", label: "Product" }, { key: "quantity", label: "Qty", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }, ...(profitVisible ? [{ key: "profit", label: "Gross Profit", align: "right" as const }] : [])], rows: periodDeliveries.flatMap((delivery) => delivery.lines.map((line) => { const batch = stockBatches.find((entry) => entry.id === line.batchId); return { date: delivery.date, challan: delivery.challanNumber, customer: delivery.customerName, product: line.productName, quantity: line.quantity, value: line.lineTotal, ...(profitVisible ? { profit: money(decimal(line.lineTotal).minus(decimal(line.quantity).mul(batch?.landedCostPerUnit ?? 0))) } : {}) }; })) },
-        { id: "sales-by-customer", title: "Sales by Customer", columns: [{ key: "customer", label: "Customer" }, { key: "quantity", label: "Units Delivered", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }], rows: [...salesByCustomer.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ customer: row.customer, quantity: precise(row.quantity, 4), value: money(row.value) })) },
-        { id: "sales-by-product", title: "Sales by Product", columns: [{ key: "product", label: "Product" }, { key: "quantity", label: "Units Delivered", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }], rows: [...salesByProduct.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, quantity: precise(row.quantity, 4), value: money(row.value) })) },
-        { id: "sales-by-month", title: "Sales by Month", columns: [{ key: "month", label: "Month" }, { key: "deliveries", label: "Challans", align: "right" as const }, { key: "value", label: "Delivered Value", align: "right" as const }], rows: [...salesByMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, row]) => ({ month, deliveries: String(row.deliveries), value: money(row.value) })) },
+        { id: "sales-by-customer", title: "Invoiced Sales by Customer", columns: [{ key: "customer", label: "Customer" }, { key: "quantity", label: "Units Invoiced", align: "right" as const }, { key: "value", label: "Invoice Value", align: "right" as const }], rows: [...salesByCustomer.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ customer: row.customer, quantity: precise(row.quantity, 4), value: money(row.value) })) },
+        { id: "sales-by-product", title: "Invoiced Sales by Product", columns: [{ key: "product", label: "Product" }, { key: "quantity", label: "Units Invoiced", align: "right" as const }, { key: "value", label: "Invoice Value", align: "right" as const }], rows: [...salesByProduct.values()].sort((a, b) => b.value.comparedTo(a.value)).map((row) => ({ product: row.product, quantity: precise(row.quantity, 4), value: money(row.value) })) },
+        { id: "sales-by-salesperson", title: "Sales by Salesperson", columns: [{ key: "salesperson", label: "Salesperson" }, { key: "customers", label: "Customers", align: "right" as const }, { key: "sales", label: "Approved Invoices", align: "right" as const }, { key: "collections", label: "Collections", align: "right" as const }], rows: [...salesBySalesperson.values()].sort((a, b) => b.invoiceValue.comparedTo(a.invoiceValue)).map((row) => ({ salesperson: row.salesperson, customers: String(row.customers.size), sales: money(row.invoiceValue), collections: money(row.collectionValue) })) },
+        { id: "sales-by-month", title: "Invoiced Sales by Month", columns: [{ key: "month", label: "Month" }, { key: "invoices", label: "Invoices", align: "right" as const }, { key: "value", label: "Invoice Value", align: "right" as const }], rows: [...salesByMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, row]) => ({ month, invoices: String(row.invoices), value: money(row.value) })) },
+        { id: "salesman-ledger", title: "Salesman Ledger", columns: [{ key: "date", label: "Date" }, { key: "salesperson", label: "Salesperson" }, { key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "reference", label: "Reference" }, { key: "debit", label: "Sale / Debit", align: "right" as const }, { key: "credit", label: "Collection / Credit", align: "right" as const }, { key: "due", label: "Customer Due", align: "right" as const }], rows: [...periodInvoices.map((invoice) => ({ date: invoice.date, salesperson: demoUsers.find((entry) => entry.id === invoice.ownerId)?.name ?? invoice.ownerId, customer: invoice.customerName, type: "Invoice", reference: invoice.invoiceNumber, debit: invoice.total, credit: "0.00", due: customers.find((entry) => entry.id === invoice.customerId)?.currentDue ?? "0.00" })), ...periodCollections.map((collection) => ({ date: collection.date, salesperson: demoUsers.find((entry) => entry.id === collection.ownerId)?.name ?? collection.ownerId, customer: collection.customerName, type: "Collection", reference: collection.receiptNumber, debit: "0.00", credit: collection.amount, due: customers.find((entry) => entry.id === collection.customerId)?.currentDue ?? "0.00" }))].sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference)) },
         { id: "collections", title: "Collections Received", columns: [{ key: "date", label: "Date" }, { key: "receipt", label: "Receipt" }, { key: "customer", label: "Customer" }, { key: "mode", label: "Mode" }, { key: "reference", label: "Payment Ref" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodCollections.map((collection) => ({ date: collection.date, receipt: collection.receiptNumber, customer: collection.customerName, mode: collection.paymentMode, reference: collection.referenceNumber ?? "-", amount: collection.amount })) },
         { id: "customer-dues", title: "Customer Receivables", columns: [{ key: "customer", label: "Customer" }, { key: "terms", label: "Terms" }, { key: "sales", label: "Total Sales", align: "right" as const }, { key: "collected", label: "Collected", align: "right" as const }, { key: "due", label: "Current Due", align: "right" as const }], rows: reportCustomers.map((customer) => ({ customer: customer.name, terms: customer.paymentTerms, sales: customer.totalSales, collected: customer.totalCollected, due: customer.currentDue })) },
         { id: "customer-ledger", title: "Customer Running Ledger", columns: [{ key: "date", label: "Date" }, { key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "reference", label: "Reference" }, { key: "debit", label: "Debit / Sale", align: "right" as const }, { key: "credit", label: "Credit / Collection", align: "right" as const }, { key: "runningDue", label: "Running Due", align: "right" as const }], rows: reportCustomers.flatMap((customer) => (customerLedger(customer.id)?.entries ?? []).filter((entry) => inPeriod(entry.date, from, to)).map((entry) => ({ date: entry.date, customer: customer.name, type: entry.type, reference: entry.reference, debit: entry.debit, credit: entry.credit, runningDue: entry.runningDue }))) }
       ],
       expenses: [
+        { id: "monthly-ac-summary", title: "Monthly A/C Summary", columns: [{ key: "section", label: "Section" }, { key: "category", label: "Category" }, { key: "in", label: "Cash In", align: "right" as const }, { key: "out", label: "Cash Out", align: "right" as const }], rows: [
+          { section: "Operating", category: "Sales Collection", in: money(collectionTotal), out: "0.00" },
+          ...["Administration", "Salary", "TA", "DA", "Business Entertainment", "Donation", "Boarding Expense", "Miscellaneous / Other"].map((category) => ({ section: "Operating", category, in: "0.00", out: money(categoryTotals.get(category) ?? 0) })),
+          ...periodAccountTransactions.filter((transaction) => transaction.sourceType === "Advance").map((transaction) => ({ section: "Non-operating", category: transaction.direction === "Out" ? "Advance Paid" : "Advance Settled / Recovered", in: transaction.direction === "In" ? transaction.amount : "0.00", out: transaction.direction === "Out" ? transaction.amount : "0.00" })),
+          ...periodAccountTransactions.filter((transaction) => transaction.sourceType === "Company Loan").map((transaction) => ({ section: "Financing", category: transaction.direction === "In" ? "Company Loan Received" : "Company Loan Repaid", in: transaction.direction === "In" ? transaction.amount : "0.00", out: transaction.direction === "Out" ? transaction.amount : "0.00" }))
+        ] },
         { id: "daily-expenditure", title: "Daily Expenditure", columns: [{ key: "date", label: "Date" }, { key: "category", label: "Category / Detail" }, { key: "expenseFor", label: "Expense For" }, { key: "enteredBy", label: "Entered By" }, { key: "remarks", label: "Remarks" }, { key: "paidFrom", label: "Paid From" }, { key: "amount", label: "Cost", align: "right" as const }], rows: periodExpenses.map((expense) => ({ date: expense.date, category: expense.categoryName, expenseFor: expense.expenseForName, enteredBy: expense.enteredByName, remarks: expense.remarks, paidFrom: accounts.find((account) => account.id === expense.paidFromAccountId)?.name ?? expense.paidFromAccountId, amount: expense.amount })) },
         { id: "monthly-category", title: "Expense Category Summary", columns: [{ key: "category", label: "Category" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...categoryTotals].sort(([a], [b]) => a.localeCompare(b)).map(([category, amount]) => ({ category, amount: money(amount) })) },
         { id: "expense-by-person", title: "Expense by Person", columns: [{ key: "employee", label: "Employee" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByPerson].sort(([a], [b]) => a.localeCompare(b)).map(([employee, amount]) => ({ employee, amount: money(amount) })) },
         { id: "expense-by-unit", title: "Expense by Office / Warehouse / Company", columns: [{ key: "unit", label: "Operating Unit" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByUnit].sort(([a], [b]) => a.localeCompare(b)).map(([unit, amount]) => ({ unit, amount: money(amount) })) },
         { id: "monthly-expense", title: "Monthly Expense", columns: [{ key: "month", label: "Month" }, { key: "amount", label: "Total Amount", align: "right" as const }], rows: [...expenseByMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, amount]) => ({ month, amount: money(amount) })) },
         { id: "ta-da", title: "TA/DA Approved Sheet Data", columns: [{ key: "date", label: "Date" }, { key: "employee", label: "Employee" }, { key: "designation", label: "Designation" }, { key: "ta", label: "TA", align: "right" as const }, { key: "da", label: "DA", align: "right" as const }, { key: "remarks", label: "Remarks" }], rows: periodExpenses.filter((expense) => expense.subtype === "TA/DA").map((expense) => ({ date: expense.date, employee: expense.employee ?? "-", designation: expense.designation ?? "-", ta: expense.taAmount ?? "0.00", da: expense.daAmount ?? "0.00", remarks: expense.remarks })) },
-        { id: "account-transactions", title: "Cash / Bank Transactions", columns: [{ key: "date", label: "Date" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: accountTransactions.filter((transaction) => inPeriod(transaction.date, from, to)).map((transaction) => ({ date: transaction.date, account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, description: transaction.description, amount: transaction.amount })) }
+        { id: "account-transactions", title: "Cash / Bank Transactions", columns: [{ key: "date", label: "Date" }, { key: "voucher", label: "Voucher" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "party", label: "Party" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodAccountTransactions.map((transaction) => ({ date: transaction.date, voucher: transaction.voucherNumber ?? "-", account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, party: transaction.partyName ?? "-", description: transaction.description, amount: transaction.amount })) }
       ]
     }
   };
-  if (ownSalesId) {
+  if (scopedSalesId) {
     report.importCosts = [];
     report.inventory = [];
     report.expenses = [];
