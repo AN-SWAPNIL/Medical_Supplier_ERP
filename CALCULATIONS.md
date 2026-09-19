@@ -66,6 +66,16 @@ Period collections      = Posted collection totals dated inside the selected per
 
 Financial sales reports use approved invoices. Operational delivery reports use Delivery Challans. They are intentionally separate so one delivery and its invoice are never counted as two financial sales.
 
+## Update 9 Operational Reports
+
+```text
+Order remaining quantity = Ordered quantity - Delivered quantity
+PO receipt outstanding    = Expected quantity - Received quantity - Rejected quantity
+Account net movement      = Period inflow - Period outflow
+```
+
+Product-family reports group canonical products by their master-data category. Stock Summary totals available quantities from batches; it does not infer stock from invoices. Day Book and channel reports use posted account transactions, while Customer Dues uses the customer ledger balance. The same period and catalogue filters are applied to the screen table, CSV export and A4 preview.
+
 ## Print Calibration
 
 The print sheet is fixed at `210 x 297 mm` (A4), with zero CSS page margin. Digital letterhead artwork uses `1.5 mm` bleed on each edge, and the content safe area is shifted left by `1.5 mm` (`24 mm` to `22.5 mm`). Browser printing must use A4, no margins, 100% scale, background graphics enabled, and browser headers/footers disabled.

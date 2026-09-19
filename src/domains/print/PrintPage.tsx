@@ -38,6 +38,7 @@ import {
   buildOperationalLetterheadPages,
   buildPerformancePrintTables
 } from "./ReportPrintContent";
+import { filterReportRows, readReportFilters, reportFilterLabels } from "../reports/reportFilters";
 
 type PrintPayload =
   | { kind: "quotation"; record: Quotation }
@@ -227,7 +228,10 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
   const selectedGroup = groups.find((group) => group.id === view);
   const taDaEmployee = params.get("taDaEmployee") ?? "All employees";
   const selectedTable = selectedGroup?.tables.find((table) => table.id === tableId) ?? selectedGroup?.tables[0];
-  const filteredTable = selectedTable?.id === "ta-da" && taDaEmployee !== "All employees" ? { ...selectedTable, rows: selectedTable.rows.filter((row) => row.employee === taDaEmployee) } : selectedTable;
+  const reportFilters = readReportFilters(params);
+  if (selectedTable?.id === "ta-da" && taDaEmployee !== "All employees" && !reportFilters.employee) reportFilters.employee = taDaEmployee;
+  const filteredTable = selectedTable ? { ...selectedTable, rows: filterReportRows(selectedTable, reportFilters) } : undefined;
+  const filterSummary = Object.entries(reportFilters).map(([key, value]) => `${reportFilterLabels[key as keyof typeof reportFilterLabels]}: ${value}`).join(" | ");
   const auditTable = auditEventsReportTable(payload.audit);
   const tables = view === "overview"
     ? groups.flatMap((group) => group.tables)
@@ -238,7 +242,11 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
         : filteredTable ? [filteredTable] : [];
   const summary = view === "overview"
     ? groups.flatMap((group) => group.rows.slice(0, 2).map((row) => ({ label: `${group.title}: ${row.label}`, value: row.value })))
-    : selectedGroup?.rows ?? (view === "audit" ? [{ label: "Protected events", value: String(auditTable.rows.length) }] : []);
+    : view === "audit"
+      ? [{ label: "Protected events", value: String(auditTable.rows.length) }]
+      : filterSummary && filteredTable
+        ? [{ label: "Filtered rows", value: String(filteredTable.rows.length) }, ...Object.entries(reportFilters).slice(0, 7).map(([key, value]) => ({ label: reportFilterLabels[key as keyof typeof reportFilterLabels], value }))]
+        : selectedGroup?.rows ?? [];
   const title = view === "overview"
     ? "OPERATIONAL REPORT OVERVIEW"
     : view === "audit"
@@ -248,7 +256,7 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
         : (filteredTable?.title ?? selectedGroup?.title ?? "OPERATIONAL REPORT").toUpperCase();
   return {
     title,
-    subtitle: `${role} role-safe report | Main Warehouse${filteredTable?.id === "ta-da" ? ` | Employee: ${taDaEmployee}` : ""}`,
+    subtitle: `${role} role-safe report | Main Warehouse${filterSummary ? ` | ${filterSummary}` : ""}`,
     reference: `RPT-${view.toUpperCase()}-${to.replaceAll("-", "")}`,
     date: `${from} to ${to}`,
     content: null,

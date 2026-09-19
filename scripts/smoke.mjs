@@ -163,9 +163,9 @@ if (preprintedWidth < 500) issues.push("Preprinted quotation content did not ret
 await preprinted.close();
 
 const reportPrint = await preparePage({ name: "report-print-modes", width: 1440, height: 1000, user: people.super });
-await reportPrint.goto(baseUrl + "/app/reports?view=imports", { waitUntil: "networkidle", timeout: 60000 });
+await reportPrint.goto(baseUrl + "/app/reports?view=print&category=imports&report=import-register", { waitUntil: "networkidle", timeout: 60000 });
 if (await reportPrint.getByRole("tab", { name: "Without Background" }).count()) issues.push("Operational report page still exposes stationery choices outside print preview.");
-await reportPrint.getByRole("button", { name: "Print Preview" }).click();
+await reportPrint.getByRole("button", { name: "A4 Preview" }).click();
 await reportPrint.getByRole("button", { name: "Print / Save PDF" }).waitFor();
 if (new URL(reportPrint.url()).pathname !== "/app/print/operational-report/imports") issues.push("Operational report did not navigate to the shared print preview.");
 await reportPrint.getByRole("tab", { name: "Without Background" }).click();
@@ -174,6 +174,22 @@ await reportPrint.getByRole("tab", { name: "With Background" }).click();
 if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
 await reportPrint.screenshot({ path: "artifacts/report-print-modes.png", fullPage: true });
 await reportPrint.close();
+
+const reportCatalogue = await preparePage({ name: "report-catalogue-mobile", width: 390, height: 1100, user: people.super });
+await reportCatalogue.goto(baseUrl + "/app/reports?view=print&category=inventory", { waitUntil: "networkidle", timeout: 60000 });
+await reportCatalogue.getByPlaceholder("Search reports...").fill("stock summary");
+await reportCatalogue.getByRole("button", { name: /Stock Summary/ }).click();
+await reportCatalogue.getByRole("button", { name: "Back to Reports" }).waitFor();
+await reportCatalogue.getByRole("heading", { name: "Stock Summary", exact: true }).waitFor();
+if (await reportCatalogue.evaluate(() => document.body.scrollWidth) > 394) issues.push("Mobile report catalogue has horizontal page overflow.");
+await reportCatalogue.screenshot({ path: "artifacts/report-catalogue-mobile.png", fullPage: true });
+await reportCatalogue.close();
+
+const legacyReportUrl = await preparePage({ name: "report-legacy-url", width: 1280, height: 900, user: people.super });
+await legacyReportUrl.goto(baseUrl + "/app/reports?view=imports&table=import-register", { waitUntil: "networkidle", timeout: 60000 });
+await legacyReportUrl.getByRole("heading", { name: "Import / Shipment Register", exact: true }).waitFor();
+if (new URL(legacyReportUrl.url()).searchParams.get("report") !== "import-register") issues.push("Legacy report URL was not normalized to the Update 9 catalogue URL.");
+await legacyReportUrl.close();
 
 const customerLedger = await preparePage({ name: "customer-ledger-desktop", width: 1440, height: 1000, user: people.super });
 await customerLedger.goto(baseUrl + "/app/sales", { waitUntil: "networkidle", timeout: 60000 });
@@ -201,10 +217,10 @@ await customerActions.screenshot({ path: "artifacts/customer-marketing-history.p
 await customerActions.close();
 
 const employeeReport = await preparePage({ name: "employee-performance-desktop", width: 1440, height: 1100, user: people.salesManager });
-await employeeReport.goto(baseUrl + "/app/reports?view=sales&table=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
+await employeeReport.goto(baseUrl + "/app/reports?view=print&category=employees&report=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
 await employeeReport.getByLabel("From Date").fill("2026-08-01");
 await employeeReport.getByLabel("To Date").fill("2026-08-31");
-await employeeReport.getByRole("heading", { name: "Sales Team Comparison", exact: true }).waitFor({ timeout: 30000 });
+await employeeReport.getByTestId("salesperson-performance-report").getByRole("heading", { name: "Sales Team Comparison", exact: true }).waitFor({ timeout: 30000 });
 await employeeReport.getByPlaceholder("Name / ID / territory").fill("SE-001");
 await employeeReport.getByRole("button", { name: "Rafiq Ahmed", exact: true }).click();
 await employeeReport.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
@@ -410,13 +426,13 @@ try {
 }
 
 const allowedExport = await preparePage({ name: "import-officer-report-export", width: 1280, height: 900, user: people.import });
-await allowedExport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
-if ((await allowedExport.getByRole("button", { name: "Export Current Data" }).count()) !== 1) issues.push("Import Officer Reports export ALLOW is not reflected in the UI.");
+await allowedExport.goto(baseUrl + "/app/reports?view=print&category=imports&report=import-register", { waitUntil: "networkidle", timeout: 60000 });
+if ((await allowedExport.getByRole("button", { name: "Export CSV" }).count()) !== 1) issues.push("Import Officer Reports export ALLOW is not reflected in the UI.");
 await allowedExport.close();
 
 const deniedExport = await preparePage({ name: "sales-manager-report-export", width: 1280, height: 900, user: people.salesManager });
-await deniedExport.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
-if ((await deniedExport.getByRole("button", { name: "Export Current Data" }).count()) !== 0) issues.push("Sales Manager Reports export DENY is not reflected in the UI.");
+await deniedExport.goto(baseUrl + "/app/reports?view=print&category=sales&report=invoice-register", { waitUntil: "networkidle", timeout: 60000 });
+if ((await deniedExport.getByRole("button", { name: "Export CSV" }).count()) !== 0) issues.push("Sales Manager Reports export DENY is not reflected in the UI.");
 await deniedExport.close();
 
 const accountsActions = await preparePage({ name: "accounts-action-access", width: 1280, height: 900, user: people.accounts });

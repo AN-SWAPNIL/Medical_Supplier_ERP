@@ -6,6 +6,7 @@ import {
   Building2,
   CheckCircle2,
   FileText,
+  FileBarChart,
   History,
   Pencil,
   Plus,
@@ -197,6 +198,7 @@ export default function SalesPage() {
         subtitle={view === "marketing" ? "Daily activity, leads, follow-ups, field verification, targets and performance connect directly into the existing sales transaction flow." : "Customer ledger, quotation, order, actual batch delivery and collection remain connected without re-entering line items."}
         actions={
           <>
+            {canViewReports && view !== "marketing" ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=${view === "customers" ? "customers" : "sales"}&report=${view === "customers" ? "customer-ledger" : view === "orders" ? "sales-order-register" : view === "deliveries" ? "delivery-challan-register" : "collections"}`)}>Open Report</Button> : null}
             {view === "customers" && canCreateCustomer ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingCustomer(undefined); setModal("customer"); }}>New Customer</Button> : null}
             {view === "orders" && canCreateQuote ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingQuotation(undefined); setModal("quotation"); }}>New Quotation</Button> : null}
             {view === "deliveries" && canDispatch ? <Button variant="primary" icon={<Truck className="h-4 w-4" />} onClick={() => setModal("delivery")}>New Delivery</Button> : null}

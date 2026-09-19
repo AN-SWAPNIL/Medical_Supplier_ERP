@@ -1,12 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   ArrowUpDown,
+  Boxes,
+  Building2,
+  ChevronRight,
   Download,
   FileDown,
   FileSpreadsheet,
-  PackageSearch,
+  FolderSearch,
+  Landmark,
   Printer,
-  ReceiptText,
+  RefreshCw,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -15,7 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
@@ -28,9 +33,10 @@ import { aiService, reportService, settingsService } from "../services";
 import { useAIContextStore } from "../../lib/ai/context";
 import type { Role } from "../../types";
 import MarketingReportWorkspace from "./MarketingReportWorkspace";
+import { reportCategories, reportSearchText, visibleReportCatalog, type ReportCategoryId, type ReportDefinition } from "./reportCatalog";
+import { appendReportFilters, filterReportRows, readReportFilters, reportFilterLabels, reportFilterOptions, type ReportFilterValues } from "./reportFilters";
 
-type View = "overview" | "marketing" | "imports" | "inventory" | "sales" | "expenses" | "audit";
-type ReportGroupId = Exclude<View, "overview" | "marketing" | "audit">;
+type View = "overview" | "print" | "marketing" | "audit";
 
 const colors = ["#075985", "#0891b2", "#059669", "#d97706"];
 type PeriodPreset = "today" | "yesterday" | "this-week" | "last-week" | "this-month" | "last-month" | "custom";
@@ -65,11 +71,6 @@ function initialPeriodPreset(preset: string): PeriodPreset {
   return "this-month";
 }
 
-function numeric(value: string) {
-  const parsed = Number(value.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function csvCell(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
 }
@@ -80,73 +81,128 @@ function displayValue(value: string, key = "") {
   return isMoney && /^-?\d+(\.\d+)?$/.test(value) ? formatCurrency(value) : value;
 }
 
+const categoryIcons = { sales: ShoppingCart, inventory: Boxes, imports: FileDown, customers: Building2, expenses: Landmark, employees: Users } satisfies Record<ReportCategoryId, typeof FileDown>;
+const legacyViews: Partial<Record<string, ReportCategoryId>> = { sales: "sales", inventory: "inventory", imports: "imports", expenses: "expenses" };
+
 export default function ReportsPage() {
   const today = businessDate();
   const role = useEffectiveRole();
   const user = useAuthStore((state) => state.session?.user);
-  const canExport = hasEffectivePermission(user, "reports", "export");
-  const canPrint = hasEffectivePermission(user, "print", "view");
-  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const rawView = params.get("view") ?? "";
+  const legacyCategory = legacyViews[rawView];
+  const view: View = legacyCategory ? "print" : ["overview", "print", "marketing", "audit"].includes(rawView) ? rawView as View : role === "Sales Executive" ? "print" : "overview";
   const preset = params.get("preset") ?? "";
   const requestedFrom = params.get("from");
   const requestedTo = params.get("to");
   const hasRequestedPeriod = Boolean(requestedFrom && requestedTo && /^\d{4}-\d{2}-\d{2}$/.test(requestedFrom) && /^\d{4}-\d{2}-\d{2}$/.test(requestedTo) && requestedFrom <= requestedTo);
-  const requestedView = params.get("view") as View | null;
-  const [view, setView] = useState<View>(requestedView ?? (role === "Sales Executive" ? "sales" : "overview"));
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => hasRequestedPeriod ? "custom" : initialPeriodPreset(preset));
   const initialPeriod = periodForPreset(initialPeriodPreset(preset), today);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => hasRequestedPeriod ? "custom" : initialPeriodPreset(preset));
   const [from, setFrom] = useState(hasRequestedPeriod ? requestedFrom! : initialPeriod.from);
   const [to, setTo] = useState(hasRequestedPeriod ? requestedTo! : initialPeriod.to);
-  const [tableId, setTableId] = useState(params.get("table") ?? (role === "Sales Executive" ? "salesperson-performance" : ""));
-  const [taDaEmployee, setTaDaEmployee] = useState("All employees");
-  const salesEmployeeId = role === "Sales Executive" ? "self" : params.get("employeeId") ?? "all";
-  const navigate = useNavigate();
-  const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
+  const [search, setSearch] = useState("");
+  const [mobileReportOpen, setMobileReportOpen] = useState(Boolean(params.get("report") || params.get("table")));
+  const [draftFilters, setDraftFilters] = useState<ReportFilterValues>(() => readReportFilters(params));
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilterValues>(() => readReportFilters(params));
+  const canExport = hasEffectivePermission(user, "reports", "export");
+  const canPrint = hasEffectivePermission(user, "print", "view");
   const canAudit = ["Super Admin", "Managing Director", "Accounts"].includes(role);
   const canMarketing = hasEffectivePermission(user, "marketing", "view");
-  const reportQuery = useQuery({
-    queryKey: ["reports", from, to, salesEmployeeId],
-    queryFn: () => reportService.get(from, to, salesEmployeeId),
-    enabled: Boolean(from && to && from <= to)
-  });
-  const performanceQuery = useQuery({
-    queryKey: ["reports", "salespeople", from, to, salesEmployeeId],
-    queryFn: () => reportService.salespeople(from, to, salesEmployeeId),
-    enabled: Boolean(from && to && from <= to)
-  });
-  const insightQuery = useQuery({
-    queryKey: ["ai", "report-insights", from, to, role],
-    queryFn: () => aiService.insights({ route: "/app/reports", entityType: "reports", reportFrom: from, reportTo: to }),
-    enabled: Boolean(from && to && from <= to)
-  });
-  const auditQuery = useQuery({ queryKey: ["reports", "audit"], queryFn: settingsService.audit, enabled: canAudit });
+  const catalog = useMemo(() => visibleReportCatalog(user), [user]);
+  const requestedReportId = params.get("report") ?? params.get("table") ?? "";
+  const requestedReport = catalog.find((entry) => entry.id === requestedReportId || entry.tableId === requestedReportId);
+  const requestedCategory = params.get("category") as ReportCategoryId | null;
+  const availableCategories = reportCategories.filter((category) => catalog.some((entry) => entry.category === category.id));
+  const category = availableCategories.some((entry) => entry.id === requestedCategory)
+    ? requestedCategory!
+    : requestedReport?.category ?? (legacyCategory && availableCategories.some((entry) => entry.id === legacyCategory) ? legacyCategory : availableCategories[0]?.id ?? "sales");
+  const categoryReports = catalog.filter((entry) => entry.category === category);
+  const selectedDefinition = requestedReport?.category === category ? requestedReport : categoryReports[0];
+  const salesEmployeeId = role === "Sales Executive" ? "self" : params.get("employeeId") ?? "all";
+  const setReportPeriod = useAIContextStore((state) => state.setReportPeriod);
+  const reportQuery = useQuery({ queryKey: ["reports", from, to, salesEmployeeId], queryFn: () => reportService.get(from, to, salesEmployeeId), enabled: Boolean(from && to && from <= to) });
+  const performanceQuery = useQuery({ queryKey: ["reports", "salespeople", from, to, salesEmployeeId], queryFn: () => reportService.salespeople(from, to, salesEmployeeId), enabled: selectedDefinition?.source === "performance" && Boolean(from && to && from <= to) });
+  const insightQuery = useQuery({ queryKey: ["ai", "report-insights", from, to, role], queryFn: () => aiService.insights({ route: "/app/reports", entityType: "reports", reportFrom: from, reportTo: to }), enabled: view === "overview" && Boolean(from && to && from <= to) });
+  const auditQuery = useQuery({ queryKey: ["reports", "audit"], queryFn: settingsService.audit, enabled: view === "audit" && canAudit });
 
   useEffect(() => setReportPeriod(from, to), [from, to, setReportPeriod]);
+  useEffect(() => {
+    if (!legacyCategory || !selectedDefinition) return;
+    const next = new URLSearchParams(params);
+    next.set("view", "print");
+    next.set("category", selectedDefinition.category);
+    next.set("report", selectedDefinition.id);
+    next.delete("table");
+    setParams(next, { replace: true });
+  }, [legacyCategory, params, selectedDefinition, setParams]);
+  useEffect(() => {
+    const filters = readReportFilters(params);
+    setDraftFilters(filters);
+    setAppliedFilters(filters);
+  }, [selectedDefinition?.id]);
 
   const report = reportQuery.data;
-  const groups = useMemo(() => report ? [
-    { id: "imports" as const, title: "Import & Cost", icon: FileDown, rows: report.importCosts, tables: report.tables.imports },
-    { id: "inventory" as const, title: "Inventory", icon: PackageSearch, rows: report.inventory, tables: report.tables.inventory },
-    { id: "sales" as const, title: "Sales & Collection", icon: ShoppingCart, rows: report.sales, tables: report.tables.sales },
-    { id: "expenses" as const, title: "Expense & Cash-Bank", icon: ReceiptText, rows: report.expenses, tables: report.tables.expenses }
-  ].filter((group) => role !== "Sales Executive" || group.id === "sales") : [], [report, role]);
-  const selectedGroup = groups.find((group) => group.id === view);
-  const selectedTable = tableId === "salesperson-performance" ? undefined : selectedGroup?.tables.find((table) => table.id === tableId) ?? selectedGroup?.tables[0];
-
-  useEffect(() => {
-    if (selectedGroup && tableId !== "salesperson-performance" && !selectedGroup.tables.some((table) => table.id === tableId)) {
-      setTableId(selectedGroup.id === "sales" ? "salesperson-performance" : selectedGroup.tables[0]?.id ?? "");
-    }
-  }, [selectedGroup, tableId]);
-
-  if (reportQuery.isLoading || performanceQuery.isLoading || (canAudit && auditQuery.isLoading)) return <LoadingBlock label="Preparing period and employee reports" />;
-  if (reportQuery.isError || performanceQuery.isError || (canAudit && auditQuery.isError)) return <ErrorBlock error={reportQuery.error ?? performanceQuery.error ?? auditQuery.error} onRetry={() => { void reportQuery.refetch(); void performanceQuery.refetch(); if (canAudit) void auditQuery.refetch(); }} />;
-  if (!report) return <ErrorBlock error={new Error("Report data is unavailable for the selected period.")} />;
-
-  const performanceTables = buildPerformanceExportTables(performanceQuery.data);
-  const filteredSelectedTable = selectedTable?.id === "ta-da" && taDaEmployee !== "All employees" ? { ...selectedTable, rows: selectedTable.rows.filter((row) => row.employee === taDaEmployee) } : selectedTable;
+  const sourceTables = selectedDefinition?.sourceGroup && report ? report.tables[selectedDefinition.sourceGroup] : [];
+  const selectedTable = selectedDefinition?.source === "table" ? sourceTables.find((table) => table.id === selectedDefinition.tableId) : undefined;
+  const filteredTable = selectedTable ? { ...selectedTable, rows: filterReportRows(selectedTable, appliedFilters) } : undefined;
   const auditTable = auditReportTable(auditQuery.data ?? []);
-  const exportedTables = view === "audit" ? [auditTable] : tableId === "salesperson-performance" ? performanceTables : filteredSelectedTable ? [filteredSelectedTable] : groups.flatMap((group) => group.tables);
+  const performanceTables = buildPerformanceExportTables(performanceQuery.data);
+
+  const setView = (next: View) => {
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("view", next);
+    if (next === "print" && selectedDefinition) {
+      nextParams.set("category", selectedDefinition.category);
+      nextParams.set("report", selectedDefinition.id);
+      nextParams.delete("table");
+    }
+    setParams(nextParams);
+  };
+  const selectCategory = (next: ReportCategoryId) => {
+    const first = catalog.find((entry) => entry.category === next);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("view", "print");
+    nextParams.set("category", next);
+    if (first) nextParams.set("report", first.id);
+    nextParams.delete("table");
+    for (const key of Object.keys(reportFilterLabels)) nextParams.delete(`filter.${key}`);
+    setSearch("");
+    setMobileReportOpen(false);
+    setParams(nextParams);
+  };
+  const selectReport = (definition: ReportDefinition) => {
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("view", "print");
+    nextParams.set("category", definition.category);
+    nextParams.set("report", definition.id);
+    nextParams.delete("table");
+    for (const key of Object.keys(reportFilterLabels)) nextParams.delete(`filter.${key}`);
+    setMobileReportOpen(true);
+    setParams(nextParams);
+  };
+  const applyPeriodPreset = (next: PeriodPreset) => {
+    setPeriodPreset(next);
+    if (next === "custom") return;
+    const period = periodForPreset(next, today);
+    setFrom(period.from);
+    setTo(period.to);
+  };
+  const generate = () => {
+    setAppliedFilters(draftFilters);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("view", "print");
+    nextParams.set("category", category);
+    if (selectedDefinition) nextParams.set("report", selectedDefinition.id);
+    nextParams.set("period", periodPreset);
+    nextParams.set("from", from);
+    nextParams.set("to", to);
+    for (const key of Object.keys(reportFilterLabels)) nextParams.delete(`filter.${key}`);
+    appendReportFilters(nextParams, draftFilters);
+    setParams(nextParams);
+    void reportQuery.refetch();
+  };
+  const exportedTables = view === "audit" ? [auditTable] : selectedDefinition?.source === "performance" ? performanceTables : filteredTable ? [filteredTable] : [];
   const exportCsv = async () => {
     await reportService.authorizeExport();
     const lines: string[] = [];
@@ -159,156 +215,84 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `mipro-${selectedTable?.id ?? "reports"}-${from}-to-${to}.csv`;
+    link.download = `mipro-${selectedDefinition?.id ?? "audit"}-${from}-to-${to}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
-  const applyPeriodPreset = (next: PeriodPreset) => {
-    setPeriodPreset(next);
-    if (next === "custom") return;
-    const period = periodForPreset(next, today);
-    setFrom(period.from);
-    setTo(period.to);
-  };
   const openPrintPreview = () => {
-    const previewParams = new URLSearchParams({
-      from,
-      to,
-      view,
-      table: tableId,
-      taDaEmployee,
-      employeeId: salesEmployeeId
-    });
-    navigate(`/app/print/operational-report/${view}?${previewParams.toString()}`);
+    if (view === "audit") return navigate(`/app/print/operational-report/audit?${new URLSearchParams({ from, to, view: "audit" })}`);
+    if (!selectedDefinition?.sourceGroup || !selectedDefinition.tableId) return;
+    const previewParams = new URLSearchParams({ from, to, view: selectedDefinition.sourceGroup, table: selectedDefinition.tableId, employeeId: salesEmployeeId });
+    appendReportFilters(previewParams, appliedFilters);
+    navigate(`/app/print/operational-report/${selectedDefinition.sourceGroup}?${previewParams.toString()}`);
   };
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Management information"
-        title="Reports"
-        subtitle="Period-specific operating reports built from the same import, stock, delivery, collection and expense records."
-        actions={
-          <>
-            {canExport && view !== "marketing" ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export Current Data</Button> : null}
-            {canPrint && view !== "marketing" ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>Print Preview</Button> : null}
-          </>
-        }
-      />
+  if (reportQuery.isLoading || performanceQuery.isLoading || auditQuery.isLoading) return <LoadingBlock label="Preparing report catalogue" />;
+  if (reportQuery.isError || performanceQuery.isError || auditQuery.isError) return <ErrorBlock error={reportQuery.error ?? performanceQuery.error ?? auditQuery.error} onRetry={() => { void reportQuery.refetch(); void performanceQuery.refetch(); void auditQuery.refetch(); }} />;
+  if (!report) return <ErrorBlock error={new Error("Report data is unavailable for the selected period.")} />;
 
-      <Panel>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[190px_190px_190px_1fr] lg:items-end">
-          <label><span className={labelClass}>Period</span><select className={inputClass} value={periodPreset} onChange={(event) => applyPeriodPreset(event.target.value as PeriodPreset)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This Week</option><option value="last-week">Last Week</option><option value="this-month">This Month</option><option value="last-month">Last Month</option><option value="custom">Custom</option></select></label>
-          <label><span className={labelClass}>From Date</span><input className={inputClass} type="date" max={to} value={from} onChange={(event) => { setFrom(event.target.value); setPeriodPreset("custom"); }} /></label>
-          <label><span className={labelClass}>To Date</span><input className={inputClass} type="date" min={from} value={to} onChange={(event) => { setTo(event.target.value); setPeriodPreset("custom"); }} /></label>
-          <div className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-900">
-            <strong>Applied scope:</strong> {report.period.from} to {report.period.to} | {role} | Main Warehouse
-          </div>
-        </div>
-      </Panel>
+  return <>
+    <PageHeader eyebrow="Management information" title="Reports" subtitle="Find, check, preview and export role-safe reports from one catalogue." />
+    <Segmented value={view} onChange={setView} ariaLabel="Reports navigation" options={[
+      ...(role === "Sales Executive" ? [] : [{ value: "overview" as const, label: "Overview" }]),
+      { value: "print" as const, label: "Print & Preview" },
+      ...(canMarketing ? [{ value: "marketing" as const, label: "Marketing Analysis" }] : []),
+      ...(canAudit ? [{ value: "audit" as const, label: "Audit" }] : [])
+    ]} />
 
+    {view !== "audit" ? <Panel>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[190px_190px_190px_1fr] lg:items-end">
+        <label><span className={labelClass}>Period</span><select className={inputClass} value={periodPreset} onChange={(event) => applyPeriodPreset(event.target.value as PeriodPreset)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This Week</option><option value="last-week">Last Week</option><option value="this-month">This Month</option><option value="last-month">Last Month</option><option value="custom">Custom</option></select></label>
+        <label><span className={labelClass}>From Date</span><input className={inputClass} type="date" max={to} value={from} onChange={(event) => { setFrom(event.target.value); setPeriodPreset("custom"); }} /></label>
+        <label><span className={labelClass}>To Date</span><input className={inputClass} type="date" min={from} value={to} onChange={(event) => { setTo(event.target.value); setPeriodPreset("custom"); }} /></label>
+        <div className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-900"><strong>Applied scope:</strong> {report.period.from} to {report.period.to} | {role} | Main Warehouse</div>
+      </div>
+    </Panel> : null}
+
+    {view === "overview" ? <>
       {insightQuery.data?.[0] ? <div className="flex items-start gap-3 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950" data-testid="report-ai-summary"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-white text-cyan-700"><Sparkles className="h-4 w-4" /></span><div><strong>{insightQuery.data[0].title}</strong><p className="mt-0.5 text-xs leading-5 text-cyan-900">{insightQuery.data[0].summary}</p></div></div> : null}
-
-      <Segmented
-        value={view}
-        onChange={setView}
-        ariaLabel="Report groups"
-        options={[
-          ...(role === "Sales Executive" ? [] : [{ value: "overview" as const, label: "Overview" }]),
-          ...(canMarketing ? [{ value: "marketing" as const, label: "Marketing Analysis" }] : []),
-          ...groups.map((group) => ({ value: group.id, label: group.title })),
-          ...(canAudit ? [{ value: "audit" as const, label: "Audit" }] : [])
-        ]}
-      />
-
-      {view === "overview" ? <ReportOverview groups={groups} onOpen={setView} /> : null}
-      {view === "marketing" && canMarketing ? <MarketingReportWorkspace from={from} to={to} preset={preset} initialEmployeeId={params.get("employee") ?? undefined} initialSubjectId={params.get("subject") ?? undefined} /> : null}
-      {selectedGroup ? (
-        <ReportWorkspace
-          group={selectedGroup}
-          selectedTable={selectedTable}
-          tableId={tableId}
-          onTableChange={setTableId}
-          from={from}
-          to={to}
-          taDaEmployee={taDaEmployee}
-          onTaDaEmployeeChange={setTaDaEmployee}
-          performance={performanceQuery.data}
-          role={role}
-          onOpenEmployeeReport={(employeeId) => navigate(`/app/employees?view=activity&employee=${employeeId}`)}
-        />
-      ) : null}
-      {view === "audit" && canAudit ? <AuditReport events={auditQuery.data ?? []} /> : null}
-    </>
-  );
+      <ReportOverview categories={availableCategories} catalog={catalog} onOpen={selectCategory} />
+    </> : null}
+    {view === "print" ? <PrintPreviewCatalogue category={category} categories={availableCategories} reports={categoryReports} selected={selectedDefinition} sourceTable={selectedTable} selectedTable={filteredTable} performance={performanceQuery.data} role={role} search={search} onSearch={setSearch} mobileReportOpen={mobileReportOpen} onBack={() => setMobileReportOpen(false)} onCategory={selectCategory} onReport={selectReport} filters={draftFilters} onFilter={(key, value) => setDraftFilters((current) => ({ ...current, [key]: value }))} onGenerate={generate} canExport={canExport} canPrint={canPrint} onExport={() => void exportCsv()} onPrint={openPrintPreview} onOpenMarketing={(definition) => navigate(`/app/reports?view=marketing&preset=${definition.marketingPreset ?? "month"}`)} from={from} to={to} onOpenEmployeeReport={(employeeId) => navigate(`/app/employees?view=activity&employee=${employeeId}`)} /> : null}
+    {view === "marketing" && canMarketing ? <MarketingReportWorkspace from={from} to={to} preset={preset} initialEmployeeId={params.get("employee") ?? undefined} initialSubjectId={params.get("subject") ?? undefined} /> : null}
+    {view === "audit" && canAudit ? <><div className="flex justify-end gap-2">{canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export CSV</Button> : null}{canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>A4 Preview</Button> : null}</div><AuditReport events={auditQuery.data ?? []} /></> : null}
+  </>;
 }
 
-function ReportOverview({ groups, onOpen }: { groups: Array<{ id: ReportGroupId; title: string; icon: typeof FileDown; rows: { label: string; value: string }[]; tables: ReportTable[] }>; onOpen: (view: View) => void }) {
-  return (
-    <>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {groups.map((group, index) => {
-          const Icon = group.icon;
-          const first = group.rows[0];
-          return (
-            <button className="rounded-md border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-cyan-300 hover:shadow" type="button" key={group.id} onClick={() => onOpen(group.id)}>
-              <div className="flex items-center justify-between"><span className="grid h-10 w-10 place-items-center rounded bg-slate-100"><Icon className="h-5 w-5" style={{ color: colors[index] }} /></span><span className="text-xs font-bold text-slate-400">{group.tables.length} reports</span></div>
-              <h2 className="mt-3 text-base font-bold">{group.title}</h2>
-              <strong className="mt-2 block truncate text-xl text-slate-950">{first?.value === "Restricted" ? "Restricted" : numeric(first?.value ?? "0") > 9999 ? formatCurrency(first?.value ?? 0, true) : formatNumber(first?.value ?? "0")}</strong>
-              <span className="text-xs text-slate-500">{first?.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <Panel title="Cross-workflow pulse" subtitle="Each bar is a separate operating signal; the values are not combined into an artificial total.">
-        <div className="h-80 p-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={groups.map((group) => ({ name: group.title, value: numeric(group.rows[0]?.value ?? "0") }))} margin={{ top: 10, right: 10, left: 10, bottom: 45 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" angle={-20} textAnchor="end" interval={0} height={70} fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip formatter={(value) => formatNumber(String(value))} />
-              <Bar dataKey="value" radius={[3, 3, 0, 0]}>{groups.map((group, index) => <Cell key={group.id} fill={colors[index]} />)}</Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Panel>
-    </>
-  );
+function ReportOverview({ categories, catalog, onOpen }: { categories: typeof reportCategories; catalog: ReportDefinition[]; onOpen: (category: ReportCategoryId) => void }) {
+  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    {categories.map((category, index) => { const Icon = categoryIcons[category.id]; const count = catalog.filter((report) => report.category === category.id).length; return <button className="group rounded-md border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-cyan-400 hover:shadow" type="button" key={category.id} onClick={() => onOpen(category.id)}><div className="flex items-center justify-between"><span className="grid h-11 w-11 place-items-center rounded bg-slate-100"><Icon className="h-5 w-5" style={{ color: colors[index % colors.length] }} /></span><span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">{count} reports</span></div><h2 className="mt-4 text-base font-bold text-slate-950">{category.title}</h2><p className="mt-1 min-h-10 text-xs leading-5 text-slate-500">{category.description}</p><span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-cyan-800">Open Print & Preview <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" /></span></button>; })}
+  </div>;
 }
 
-function ReportWorkspace({ group, selectedTable, tableId, onTableChange, from, to, taDaEmployee, onTaDaEmployeeChange, performance, role, onOpenEmployeeReport }: {
-  group: { id: ReportGroupId; title: string; rows: { label: string; value: string }[]; tables: ReportTable[] };
-  selectedTable?: ReportTable;
-  tableId: string;
-  onTableChange: (id: string) => void;
-  from: string;
-  to: string;
-  taDaEmployee: string;
-  onTaDaEmployeeChange: (value: string) => void;
-  performance?: SalespersonPerformanceData;
-  role: Role;
-  onOpenEmployeeReport: (employeeId: string) => void;
+function PrintPreviewCatalogue({ category, categories, reports, selected, sourceTable, selectedTable, performance, role, search, onSearch, mobileReportOpen, onBack, onCategory, onReport, filters, onFilter, onGenerate, canExport, canPrint, onExport, onPrint, onOpenMarketing, from, to, onOpenEmployeeReport }: {
+  category: ReportCategoryId; categories: typeof reportCategories; reports: ReportDefinition[]; selected?: ReportDefinition; sourceTable?: ReportTable; selectedTable?: ReportTable; performance?: SalespersonPerformanceData; role: Role; search: string; onSearch: (value: string) => void; mobileReportOpen: boolean; onBack: () => void; onCategory: (value: ReportCategoryId) => void; onReport: (report: ReportDefinition) => void; filters: ReportFilterValues; onFilter: (key: keyof ReportFilterValues, value: string) => void; onGenerate: () => void; canExport: boolean; canPrint: boolean; onExport: () => void; onPrint: () => void; onOpenMarketing: (report: ReportDefinition) => void; from: string; to: string; onOpenEmployeeReport: (employeeId: string) => void;
 }) {
-  const isTaDa = selectedTable?.id === "ta-da";
-  const isSalesPerformance = group.id === "sales" && tableId === "salesperson-performance";
-  const employees = isTaDa ? ["All employees", ...new Set(selectedTable.rows.map((row) => row.employee).filter(Boolean))] : [];
-  const visibleRows = isTaDa && taDaEmployee !== "All employees" ? selectedTable.rows.filter((row) => row.employee === taDaEmployee) : selectedTable?.rows ?? [];
-  const tableOptions = group.id === "sales" ? [{ value: "salesperson-performance", label: "Sales Team Comparison", count: performance?.comparison.length }, ...group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }))] : group.tables.map((table) => ({ value: table.id, label: table.title, count: table.rows.length }));
-  return (
-    <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {group.rows.map((row, index) => <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm" key={row.label}><span className="block text-xs text-slate-500">{row.label}</span><strong className="mt-1 block text-xl" style={{ color: colors[index % colors.length] }}>{displayValue(row.value, row.label)}</strong></div>)}
+  const matchingReports = reports.filter((report) => !search.trim() || reportSearchText(report).includes(search.trim().toLowerCase()));
+  return <section className="grid min-w-0 gap-4">
+    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+      <label className="lg:hidden"><span className={labelClass}>Report Category</span><select className={inputClass} value={category} onChange={(event) => onCategory(event.target.value as ReportCategoryId)}>{categories.map((entry) => <option value={entry.id} key={entry.id}>{entry.title}</option>)}</select></label>
+      <div className="hidden grid-cols-3 gap-2 lg:grid xl:grid-cols-6">{categories.map((entry) => { const Icon = categoryIcons[entry.id]; return <button className={`flex min-h-16 items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-bold transition ${entry.id === category ? "border-blue-950 bg-blue-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300"}`} type="button" key={entry.id} onClick={() => onCategory(entry.id)}><Icon className={`h-4 w-4 shrink-0 ${entry.id === category ? "text-cyan-300" : "text-cyan-700"}`} />{entry.title}</button>; })}</div>
+    </div>
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
+      <aside className={`${mobileReportOpen ? "hidden" : "block"} min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm lg:block`}>
+        <div className="border-b border-slate-200 p-4"><h2 className="text-sm font-bold text-blue-950">Report Library</h2><p className="mt-1 text-xs text-slate-500">{reports.length} available in this category</p><label className="relative mt-3 block"><span className="sr-only">Search reports</span><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={inputClass + " w-full pl-9"} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search reports..." /></label></div>
+        <div className="max-h-[680px] overflow-y-auto p-2">{matchingReports.map((report) => <button className={`flex w-full items-start gap-3 rounded-md px-3 py-3 text-left transition ${selected?.id === report.id ? "bg-cyan-50 text-blue-950" : "hover:bg-slate-50"}`} type="button" onClick={() => onReport(report)} key={report.id}><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded ${selected?.id === report.id ? "bg-blue-950 text-cyan-300" : "bg-slate-100 text-slate-500"}`}><FileSpreadsheet className="h-4 w-4" /></span><span className="min-w-0 flex-1"><strong className="block text-sm">{report.title}</strong><small className="mt-0.5 block text-xs leading-4 text-slate-500">{report.description}</small></span><ChevronRight className="mt-2 h-4 w-4 shrink-0 text-slate-400" /></button>)}{!matchingReports.length ? <div className="p-8 text-center text-sm text-slate-500"><FolderSearch className="mx-auto mb-2 h-6 w-6" />No report matches this search.</div> : null}</div>
+      </aside>
+      <div className={`${mobileReportOpen ? "block" : "hidden"} min-w-0 lg:block`}>
+        {selected ? <Panel title={selected.title} subtitle={selected.description} actions={<span className="flex items-center gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" />{selected.source === "performance" ? performance?.comparison.length ?? 0 : selectedTable?.rows.length ?? 0} rows</span>}>
+          <div className="border-b border-slate-200 p-4 lg:hidden"><Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={onBack}>Back to Reports</Button></div>
+          {selected.source === "marketing" ? <div className="p-5"><div className="rounded-md border border-cyan-200 bg-cyan-50 p-4"><strong className="text-blue-950">Connected marketing analysis</strong><p className="mt-1 text-sm leading-6 text-slate-600">This report uses the interactive marketing workspace so employee, territory, verification and activity filters remain consistent.</p><Button className="mt-4" variant="primary" icon={<ChevronRight className="h-4 w-4" />} onClick={() => onOpenMarketing(selected)}>Open Analysis & Print</Button></div></div> : <>
+            <div className="grid gap-3 border-b border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {selected.source === "table" && sourceTable ? selected.filters.map((filter) => <label key={filter}><span className={labelClass}>{reportFilterLabels[filter]}</span><select className={inputClass} value={filters[filter] ?? ""} onChange={(event) => onFilter(filter, event.target.value)}><option value="">All {reportFilterLabels[filter].toLowerCase()}</option>{reportFilterOptions(sourceTable, filter).map((option) => <option value={option} key={option}>{option}</option>)}</select></label>) : null}
+              <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-3"><Button variant="primary" icon={<RefreshCw className="h-4 w-4" />} onClick={onGenerate}>Generate / Refresh</Button>{canPrint && selected.printable ? <Button icon={<Printer className="h-4 w-4" />} onClick={onPrint}>A4 Preview</Button> : null}{canExport && selected.exportable ? <Button icon={<Download className="h-4 w-4" />} onClick={onExport}>Export CSV</Button> : null}<span className="ml-auto text-xs text-slate-500">{from} to {to}</span></div>
+            </div>
+            {selected.source === "performance" && performance ? <div className="p-4"><SalespersonPerformanceWorkspace data={performance} role={role} onOpenEmployeeReport={onOpenEmployeeReport} from={from} to={to} /></div> : selectedTable ? <ReportDataTable table={selectedTable} rows={selectedTable.rows} /> : <div className="p-10 text-center text-sm text-slate-500">This report has no source data for the signed-in role.</div>}
+          </>}
+        </Panel> : <Panel><div className="p-10 text-center text-sm text-slate-500">No report is available in this category.</div></Panel>}
       </div>
-      <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"><Segmented value={tableId} onChange={onTableChange} ariaLabel={`${group.title} report types`} options={tableOptions} /></div>
-      {isSalesPerformance && performance ? <SalespersonPerformanceWorkspace data={performance} role={role} onOpenEmployeeReport={onOpenEmployeeReport} from={from} to={to} /> : <Panel title={group.title + " reports"} subtitle={`Every table uses the active period ${from} to ${to}.`}>
-        <div className="flex flex-wrap items-end justify-end gap-4 border-b border-slate-200 p-4">
-          {isTaDa ? <label className="w-full sm:w-64"><span className={labelClass}>Employee</span><select className={inputClass} value={taDaEmployee} onChange={(event) => onTaDaEmployeeChange(event.target.value)}>{employees.map((name) => <option key={name}>{name}</option>)}</select></label> : <div className="flex items-center justify-end gap-2 text-xs text-slate-500"><FileSpreadsheet className="h-4 w-4 text-cyan-700" /> {visibleRows.length} filtered rows</div>}
-        </div>
-        {selectedTable ? <ReportDataTable table={selectedTable} rows={visibleRows} /> : <div className="p-8 text-center text-sm text-slate-500">No report is available in this group.</div>}
-      </Panel>}
-    </>
-  );
+    </div>
+  </section>;
 }
 
 const performanceMetricLabels: Array<[keyof SalespersonPerformanceSummary, string, "number" | "money" | "percent"]> = [

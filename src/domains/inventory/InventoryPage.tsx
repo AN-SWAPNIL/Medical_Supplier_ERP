@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, PackageSearch, Search, Settings, Warehouse } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, FileBarChart, PackageSearch, Search, Settings, Warehouse } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
@@ -20,6 +20,7 @@ export default function InventoryPage() {
   const navigate = useNavigate();
   const role = useEffectiveRole();
   const user = useAuthStore((state) => state.session?.user);
+  const canViewReports = hasEffectivePermission(user, "reports", "view");
   const stockQuery = useQuery({ queryKey: ["inventory", "stock"], queryFn: inventoryService.stock });
   const batchQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches });
   const movementQuery = useQuery({ queryKey: ["inventory", "movements"], queryFn: inventoryService.movements });
@@ -48,6 +49,7 @@ export default function InventoryPage() {
         subtitle="One stock position with batch traceability, FIFO issue order and visible expiry awareness."
         actions={
           <>
+            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=inventory&report=${view === "movements" ? "stock-movement" : view === "batches" ? "expiry-report" : "stock-summary"}`)}>Open Report</Button> : null}
             {hasEffectivePermission(user, "inventory", "post") && hasEffectivePermission(user, "import", "view") ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Receive Finalized Import</Button> : null}
             {hasEffectivePermission(user, "products", "view") ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate("/app/settings?view=products")}>Product Master</Button> : null}
           </>

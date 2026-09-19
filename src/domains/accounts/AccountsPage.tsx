@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CreditCard, Eye, Landmark, Plus, Printer, RotateCcw, Save, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CreditCard, Eye, FileBarChart, Landmark, Plus, Printer, RotateCcw, Save, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
@@ -34,6 +34,7 @@ export default function AccountsPage() {
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const canPost = hasEffectivePermission(user, "accounts", "post");
+  const canViewReports = hasEffectivePermission(user, "reports", "view");
   const canCreateCategory = hasEffectivePermission(user, "settings", "create");
   const canPostCollection = hasEffectivePermission(user, "sales", "post");
 
@@ -106,7 +107,12 @@ export default function AccountsPage() {
         eyebrow="Operational finance"
         title="Expenses & Accounts"
         subtitle="Daily expenditure, TA/DA, collections, customer dues and simple cash/bank transactions. This is not a full accounting replacement."
-        actions={view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "transactions" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setTransactionOpen(true)}>Post Voucher</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : undefined}
+        actions={
+          <>
+            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=${view === "dues" ? "customers" : "expenses"}&report=${view === "expenses" ? "daily-expenditure" : view === "dues" ? "customer-dues" : view === "accounts" ? "cash-movement-summary" : "account-transactions"}`)}>Open Report</Button> : null}
+            {view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "transactions" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setTransactionOpen(true)}>Post Voucher</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : null}
+          </>
+        }
       />
 
       <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">

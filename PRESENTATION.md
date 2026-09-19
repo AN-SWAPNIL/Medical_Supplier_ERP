@@ -4,7 +4,7 @@
 
 **Build:** Corporate MiproBD website plus protected workflow-driven ERP, updated through the supplied dialysis literature and handwritten sales/report-system refinement
 
-**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update8.md` and `files/MIPRO_ERP_Marketing_Report_Source_Analysis.md`, supported by the supplied Dialyzer, Blood Line, A.V. Fistula and Product Catalogue sheets; update7 for Employees and activity reporting; update6 for Marketing operations; update5 for access control; update4 for the public/private platform; update3 for validated import, inventory, and sales workflow
+**Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update9.md` and `files/MIPRO_ERP_Report_Navigation_Analysis_update9.md`, extending update8 reporting/print behavior without duplicating calculations; supported by the supplied Dialyzer, Blood Line, A.V. Fistula and Product Catalogue sheets and the earlier validated workflow plans
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
 ---
@@ -596,18 +596,15 @@ New transactions store exact `createdAt`, `submittedAt`, or `postedAt` values. A
 
 ## 13. Reports And Audit
 
-Reports remain one destination grouped into:
+Reports remain one destination with four first-level choices: **Overview**, **Print & Preview**, **Marketing Analysis**, and **Audit**. Overview opens six business categories: Sales & Transactions, Inventory & Stock, Import & Purchase, Customers & Ledger, Expenses & Accounts, and Employees & Marketing. Individual reports are searchable list items, not another wide row of tabs.
 
-- Import and landed cost
-- Inventory
-- Sales and collection
-- Marketing activity and performance
-- Expense and cash/bank
-- Narrow audit
+On desktop, the Report Library stays beside the selected report workspace. On mobile, the user selects a category and report, then receives a focused result screen with **Back to Reports**. The shared filter shell provides period presets, From/To dates, and only the relevant salesperson, customer, product, family, supplier, employee, account, territory, or status filters.
 
-The From/To dates are sent to the API and applied before period totals/tables are built. Reports read the same records used by operations; there is no duplicate reporting dataset. CSV export contains the currently filtered table rows, and print uses the current report group.
+The From/To dates are sent to the API before period totals and tables are built. Applying filters controls the on-screen table, CSV and A4 preview with the same values. Old Update 8 links such as `view=imports&table=import-register` are normalized to the new catalogue route, so existing shortcuts remain valid.
 
-Detailed tables include import register, cost breakdown, landed cost by product/batch, current batch stock, expiry attention, movements, sales by customer/product/month, collections, receivables, running customer ledger, daily expenditure, category summary, TA/DA sheet data, and cash/bank transactions. Realized delivered profit uses the actual dispatched batch landed cost and is owner/capability-only.
+The catalogue includes invoice, sales sheet, order and order-fulfilment registers; stock summary, item, batch, expiry and movement reports; import PO, product, supplier, family, receipt-difference and landed-cost reports; customer dues and ledgers; daily expense, TA/DA, day book and account-channel reports; and employee/marketing shortcuts. Reports appear only when their source exists and the signed-in user has the required permission. Gross Profit by Product requires `view_profit`; sensitive import costs require `view_sensitive_cost`. Balance Sheet, formal P&L, formal Cash Flow and unsupported adjustment reports are intentionally absent.
+
+Inventory, Sales, Accounts and Employees provide contextual **Open Report** or ledger actions that lead to this same canonical catalogue. Report data is never copied into a separate reporting store.
 
 **Reports -> Marketing Analysis** is the management analysis surface. It offers Today, Yesterday, This/Last Week, This/Last Month, and Custom periods with employee, territory, activity, customer/lead, verification, status, target and grouping filters. It answers team questions such as which territory has the most verified visits, where follow-ups are overdue, and how activity converts into opportunities. It exports or prints the currently filtered analysis, but it does not create a second personnel report.
 
