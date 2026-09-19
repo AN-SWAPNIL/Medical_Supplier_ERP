@@ -29,6 +29,21 @@ test("report filter options are unique and sorted", () => {
   assert.deepEqual(reportFilterOptions(table, "customer"), ["Labaid", "Popular"]);
 });
 
+test("expense filters accept the API's visible party and payment-account fields", () => {
+  const expenses: ReportTable = {
+    id: "daily-expenditure",
+    title: "Daily Expenditure",
+    columns: [],
+    rows: [
+      { expenseFor: "Rafiq Ahmed", employee: "Rafiq Ahmed", paidFrom: "Petty Cash", account: "Petty Cash" },
+      { expenseFor: "Head Office", employee: "", paidFrom: "DBBL Current Account", account: "DBBL Current Account" }
+    ]
+  };
+  assert.deepEqual(reportFilterOptions(expenses, "employee"), ["Rafiq Ahmed"]);
+  assert.deepEqual(reportFilterOptions(expenses, "account"), ["DBBL Current Account", "Petty Cash"]);
+  assert.equal(filterReportRows(expenses, { account: "Petty Cash", employee: "Rafiq Ahmed" }).length, 1);
+});
+
 test("report filters round-trip through print and deep-link query parameters", () => {
   const params = new URLSearchParams();
   appendReportFilters(params, { customer: "Labaid", status: "Open" });

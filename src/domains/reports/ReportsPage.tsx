@@ -245,7 +245,7 @@ export default function ReportsPage() {
         <label><span className={labelClass}>Period</span><select className={inputClass} value={periodPreset} onChange={(event) => applyPeriodPreset(event.target.value as PeriodPreset)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This Week</option><option value="last-week">Last Week</option><option value="this-month">This Month</option><option value="last-month">Last Month</option><option value="custom">Custom</option></select></label>
         <label><span className={labelClass}>From Date</span><input className={inputClass} type="date" max={to} value={from} onChange={(event) => { setFrom(event.target.value); setPeriodPreset("custom"); }} /></label>
         <label><span className={labelClass}>To Date</span><input className={inputClass} type="date" min={from} value={to} onChange={(event) => { setTo(event.target.value); setPeriodPreset("custom"); }} /></label>
-        <div className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-900"><strong>Applied scope:</strong> {report.period.from} to {report.period.to} | {role} | Main Warehouse</div>
+        <div className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-900"><strong>Applied scope:</strong> MIPRO HealthCare Corporation | {report.period.from} to {report.period.to} | {role} | Main Warehouse</div>
       </div>
     </Panel> : null}
 
