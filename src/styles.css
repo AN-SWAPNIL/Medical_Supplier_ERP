@@ -46,6 +46,19 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.report-print-header {
+  background: rgba(30, 41, 59, 0.72);
+  color: #ffffff;
+}
+
+.report-print-header > th,
+.report-print-surface,
+.report-print-table > tbody,
+.report-print-table > tbody > tr,
+.report-print-table > tbody > tr > td {
+  background: transparent !important;
+}
+
 @media screen {
   .erp-table-frame > table > thead {
     background: #172554 !important;

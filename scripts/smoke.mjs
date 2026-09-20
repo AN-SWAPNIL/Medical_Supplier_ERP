@@ -173,6 +173,12 @@ if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterh
 await reportPrint.getByRole("tab", { name: "With Background" }).click();
 if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
 if (await reportPrint.locator("[data-report-page-edge='1.5mm-left-0.2mm-right']").count() < 1) issues.push("Operational report print shell does not expose the calibrated 1.5mm/0.2mm page-edge contract.");
+const reportPrintColors = await reportPrint.evaluate(() => ({
+  header: window.getComputedStyle(document.querySelector(".report-print-header")).backgroundColor,
+  body: window.getComputedStyle(document.querySelector(".report-print-table tbody td")).backgroundColor
+}));
+if (!reportPrintColors.header.startsWith("rgba(") || reportPrintColors.header.endsWith(", 1)")) issues.push("Operational report table header is not translucent over the letterhead.");
+if (reportPrintColors.body !== "rgba(0, 0, 0, 0)") issues.push("Operational report body cells are not fully transparent over the letterhead.");
 await reportPrint.screenshot({ path: "artifacts/report-print-modes.png", fullPage: true });
 await reportPrint.close();
 
