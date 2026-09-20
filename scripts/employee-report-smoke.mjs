@@ -53,7 +53,7 @@ try {
   await desktop.getByRole("button", { name: "Clear employee search" }).click();
   assert.ok(await desktop.locator("tbody tr").count() > 1, "Clearing employee search should restore the directory");
 
-  await desktop.goto(`${base}/app/employees?view=activity&employee=sales1`, { waitUntil: "networkidle" });
+  await desktop.goto(`${base}/app/reports/employee-activity?employeeId=sales1`, { waitUntil: "networkidle" });
   await desktop.getByTestId("employee-activity-performance").waitFor();
   await desktop.getByTestId("employee-picker").getByRole("button").first().click();
   await desktop.getByPlaceholder("Search name, ID, designation...").fill("SE-014");
@@ -112,7 +112,8 @@ try {
   await desktop.screenshot({ path: "artifacts/employee-report/marketing-analysis-desktop.png", fullPage: true, animations: "disabled" });
   await namedReportLink.click();
   await desktop.getByTestId("employee-activity-performance").waitFor();
-  assert.equal(new URL(desktop.url()).pathname, "/app/employees", "Named employee reporting must leave team analysis for the canonical Employees workspace");
+  assert.equal(new URL(desktop.url()).pathname, "/app/reports/employee-activity", "Named employee reporting must stay inside the canonical Reports workspace");
+  assert.equal(new URL(desktop.url()).searchParams.get("employeeId"), "sales2", "Named employee reporting must preserve the selected employee");
 
   await desktop.goto(`${base}/app/reports/daily-marketing`, { waitUntil: "networkidle" });
   await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
@@ -126,7 +127,7 @@ try {
   await desktop.close();
 
   const mobile = await pageFor({ width: 390, height: 844 });
-  await mobile.goto(`${base}/app/employees?view=activity&employee=sales1`, { waitUntil: "networkidle" });
+  await mobile.goto(`${base}/app/reports/employee-activity?employeeId=sales1`, { waitUntil: "networkidle" });
   await mobile.getByTestId("employee-activity-performance").waitFor();
   assert.equal(await mobile.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, "Employee reports must not overflow the mobile viewport");
   await mobile.getByTestId("employee-picker").getByRole("button").first().click();
@@ -154,10 +155,10 @@ try {
 
   const publicPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await publicPage.goto(`${base}/`, { waitUntil: "networkidle" });
-  await publicPage.getByRole("heading", { name: "Dialysis products shown with practical model information" }).waitFor();
-  await publicPage.getByRole("tab", { name: "Technical Data" }).click();
-  await publicPage.getByRole("heading", { name: "A technical reference across the HD high-flux series" }).waitFor();
-  assert.match(await publicPage.locator("main").innerText(), /HD-17H highlighted with 1.7 m²/);
+  await publicPage.getByRole("heading", { name: "Core dialysis products shown from supplied literature" }).waitFor();
+  await publicPage.getByRole("tab", { name: "Hemodialyzer" }).click();
+  await publicPage.getByRole("heading", { name: "HD-17H high-flux product information at a glance" }).waitFor();
+  assert.match(await publicPage.locator("main").innerText(), /Effective membrane area listed as 1.7/);
   const literatureResponse = await publicPage.request.get(`${base}/resources/mipro-hd17h-technical.pdf`);
   assert.equal(literatureResponse.ok(), true, "Supplied technical literature PDF must be publicly served");
   await publicPage.screenshot({ path: "artifacts/employee-report/landing-literature-desktop.png", fullPage: true, animations: "disabled" });

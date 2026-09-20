@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Printer, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
+import PrintPreviewButton from "../../components/ui/PrintPreviewButton";
 import { useAuthStore } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
 import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
@@ -173,8 +174,8 @@ export default function ReportDetailPage() {
         {sourceTable ? report.filters.map((filter) => <label key={filter}><span className={labelClass}>{reportFilterLabels[filter]}</span><select className={inputClass} value={draftFilters[filter] ?? ""} onChange={(event) => setDraftFilters((current) => ({ ...current, [filter]: event.target.value }))}><option value="">All {reportFilterLabels[filter].toLowerCase()}</option>{reportFilterOptions(sourceTable, filter).map((option) => <option key={option}>{option}</option>)}</select></label>) : null}
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-4">
           <Button variant="primary" icon={<RefreshCw className="h-4 w-4" />} onClick={() => { setFilters(draftFilters); void reportQuery.refetch(); void performanceQuery.refetch(); }}>Generate / Refresh</Button>
-          {canPrint && filteredTable ? <Button icon={<Printer className="h-4 w-4" />} onClick={openPrint}>Print Preview</Button> : null}
           {canExport && filteredTable ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>Export CSV</Button> : null}
+          {canPrint && filteredTable ? <PrintPreviewButton onClick={openPrint} /> : null}
         </div>
       </div>
     </Panel>

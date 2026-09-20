@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Download,
   MapPinned,
-  Printer,
   RefreshCw,
   Target
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import EmployeePicker from "../../components/employees/EmployeePicker";
 import Avatar from "../../components/ui/Avatar";
 import Button from "../../components/ui/Button";
+import PrintPreviewButton from "../../components/ui/PrintPreviewButton";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { businessDate } from "../../lib/date";
 import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
@@ -202,7 +202,7 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
           <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onFieldMap(selectedId)}>Field Map</Button>
           <Button icon={<BookOpenText className="h-4 w-4" />} onClick={() => navigate(`/app/reports/salesman-ledger?employeeId=${encodeURIComponent(selectedId)}&filter.salesperson=${encodeURIComponent(snapshot.employee.name)}`)}>Sales Ledger</Button>
           {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>CSV</Button> : null}
-          {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>Print Preview</Button> : null}
+          {canPrint ? <PrintPreviewButton onClick={openPrintPreview} /> : null}
         </div>
       </div>
     </section>
