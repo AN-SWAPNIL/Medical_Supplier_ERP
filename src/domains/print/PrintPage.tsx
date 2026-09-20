@@ -113,7 +113,7 @@ export default function PrintPage() {
         const table = searchParams.get("table") ?? "";
         const [report, performance, audit] = await Promise.all([
           reportService.get(from, to, searchParams.get("employeeId") ?? "all"),
-          table === "salesperson-performance" ? reportService.salespeople(from, to, searchParams.get("employeeId") ?? "all") : Promise.resolve(undefined),
+          ["salesperson-performance", "employee-performance"].includes(table) ? reportService.salespeople(from, to, searchParams.get("employeeId") ?? "all") : Promise.resolve(undefined),
           (searchParams.get("view") ?? id) === "audit" ? settingsService.audit() : Promise.resolve([])
         ]);
         return { kind: "operational-report", report, performance, audit };
@@ -150,12 +150,13 @@ export default function PrintPage() {
           reference={presentation.reference}
           date={presentation.date}
           className="print-sheet shadow-xl"
+          reportLayout={["operational-report", "marketing-analysis", "employee-activity"].includes(payload.kind)}
           key={index}
         >
           {page}
         </LetterheadSheet>)}
       </div>
-      <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>A4 print setup:</strong> choose A4, Margins: None, Scale: 100%, Background graphics: On, and Headers and footers: Off. Browser "Save to PDF" preserves edge-to-edge artwork; a physical printer or Microsoft Print to PDF may still impose its own non-printable margin, which the website cannot override. Content safe area: {identity.safeArea.topMm}/{identity.safeArea.rightMm}/{identity.safeArea.bottomMm}/{identity.safeArea.leftMm} mm.</p></div>
+      <div className="no-print flex items-start gap-2 rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900"><Ruler className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>A4 print setup:</strong> choose A4, Margins: None, Scale: 100%, Background graphics: On, and Headers and footers: Off. Browser "Save to PDF" preserves edge-to-edge artwork; a physical printer or Microsoft Print to PDF may still impose its own non-printable margin, which the website cannot override. Reports preserve the requested 1.5 mm left and 0.2 mm right page edges plus a 27 mm internal left safe zone for the vertical letterhead branding.</p></div>
     </>
   );
 }
@@ -223,7 +224,9 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
     { id: "imports", title: "Import & Cost", rows: payload.report.importCosts, tables: payload.report.tables.imports },
     { id: "inventory", title: "Inventory", rows: payload.report.inventory, tables: payload.report.tables.inventory },
     { id: "sales", title: "Sales & Collection", rows: payload.report.sales, tables: payload.report.tables.sales },
-    { id: "expenses", title: "Expense & Cash-Bank", rows: payload.report.expenses, tables: payload.report.tables.expenses }
+    { id: "expenses", title: "Expense & Cash-Bank", rows: payload.report.expenses, tables: payload.report.tables.expenses },
+    { id: "employees", title: "Employee & Marketing", rows: [], tables: payload.report.tables.employees },
+    { id: "controls", title: "Audit & Control", rows: [], tables: payload.report.tables.controls }
   ].filter((group) => role !== "Sales Executive" || group.id === "sales");
   const selectedGroup = groups.find((group) => group.id === view);
   const taDaEmployee = params.get("taDaEmployee") ?? "All employees";
@@ -237,7 +240,7 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
     ? groups.flatMap((group) => group.tables)
     : view === "audit"
       ? [auditTable]
-      : tableId === "salesperson-performance"
+      : ["salesperson-performance", "employee-performance"].includes(tableId)
         ? buildPerformancePrintTables(payload.performance)
         : filteredTable ? [filteredTable] : [];
   const summary = view === "overview"
@@ -251,7 +254,7 @@ function buildPresentation(payload: PrintPayload, params: URLSearchParams, user:
     ? "OPERATIONAL REPORT OVERVIEW"
     : view === "audit"
       ? "NARROW AUDIT REPORT"
-      : tableId === "salesperson-performance"
+      : ["salesperson-performance", "employee-performance"].includes(tableId)
         ? role === "Sales Executive" ? "MY SALES PERFORMANCE" : "SALES TEAM COMPARISON"
         : (filteredTable?.title ?? selectedGroup?.title ?? "OPERATIONAL REPORT").toUpperCase();
   return {

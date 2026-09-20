@@ -52,7 +52,7 @@ export default function EmployeesPage() {
       { value: "directory", label: "Employee Directory" },
       { value: "access", label: "Access & Roles" },
       { value: "field-team", label: "Field Team" },
-      { value: "activity", label: "Activity & Reports" }
+      { value: "activity", label: "Activity Summary" }
     ] as Array<{ value: View; label: string }>).filter((option) => access[option.value])} />
 
     {view === "directory" ? <EmployeeDirectory actor={actor} onOpen={openFromDirectory} /> : null}

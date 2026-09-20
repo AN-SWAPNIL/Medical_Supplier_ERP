@@ -24,6 +24,7 @@ const NewImportPage = lazy(() => import("./domains/imports/NewImportPage"));
 const InventoryPage = lazy(() => import("./domains/inventory/InventoryPage"));
 const PrintPage = lazy(() => import("./domains/print/PrintPage"));
 const ReportsPage = lazy(() => import("./domains/reports/ReportsPage"));
+const ReportDetailPage = lazy(() => import("./domains/reports/ReportDetailPage"));
 const SalesPage = lazy(() => import("./domains/sales/SalesPage"));
 const EmployeesPage = lazy(() => import("./domains/employees/EmployeesPage"));
 const SettingsPage = lazy(() => import("./domains/settings/SettingsPage"));
@@ -78,6 +79,7 @@ function App() {
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
           <Route path="employees" element={<RequireEmployeeHubAccess>{deferred(<EmployeesPage />)}</RequireEmployeeHubAccess>} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />
+          <Route path="reports/:reportId" element={guarded("reports", <ReportDetailPage />)} />
           <Route path="settings" element={<SettingsEntry />} />
           <Route path="insights" element={guarded("dashboard", <SmartInsightsPage />)} />
           <Route path="profile" element={deferred(<ProfilePage />)} />

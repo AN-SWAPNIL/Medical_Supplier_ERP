@@ -45,13 +45,13 @@ export default function DashboardPage() {
         { label: "Report Activity", path: "/app/sales?view=marketing&action=activity", icon: Activity, allowed: hasEffectivePermission(user, "marketing", "create") },
         { label: "New Lead", path: "/app/sales?view=marketing&action=lead", icon: UserPlus, allowed: hasEffectivePermission(user, "marketing", "create") },
         { label: "New Quotation", path: "/app/sales?view=orders&action=quotation", icon: FilePlus2, allowed: hasEffectivePermission(user, "sales", "create") },
-        { label: "My Reports", path: "/app/reports?view=marketing&preset=my-day", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
+        { label: "My Reports", path: "/app/reports/daily-marketing?preset=my-day", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") }
       ]
     : user?.role === "Sales Manager"
       ? [
           { label: "Open Marketing", path: "/app/sales?view=marketing", icon: Activity, allowed: hasEffectivePermission(user, "marketing", "view") },
           { label: "Employees", path: "/app/employees?view=activity", icon: UsersRound, allowed: canAccessEmployeeHub(user) },
-          { label: "Generate Report", path: "/app/reports?view=marketing&preset=month", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") },
+          { label: "Generate Report", path: "/app/reports/daily-marketing?preset=month", icon: BarChart3, allowed: hasEffectivePermission(user, "reports", "view") },
           { label: "New Quotation", path: "/app/sales?view=orders&action=quotation", icon: FilePlus2, allowed: hasEffectivePermission(user, "sales", "create") }
         ]
       : user?.role === "Accounts"

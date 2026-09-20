@@ -78,6 +78,8 @@ import type {
   SalespersonPerformanceDetail,
   SalespersonPerformanceSummary,
   StockBatch,
+  SupplierSettlement,
+  FinancialPositionEntry,
   LocationHistoryPoint,
   LocationUpdateInput,
   TrackingSession,
@@ -130,6 +132,8 @@ import {
   stockBatches as seedStockBatches,
   stockMovements as seedStockMovements,
   suppliers as seedSuppliers,
+  supplierSettlements as seedSupplierSettlements,
+  financialPositionEntries as seedFinancialPositionEntries,
   trackingSessions as seedTrackingSessions,
   warehouseConfig as seedWarehouseConfig
 } from "./data.js";
@@ -160,6 +164,8 @@ const collections = structuredClone(seedCollections);
 const expenses = structuredClone(seedExpenses);
 const accounts = structuredClone(seedAccounts);
 const accountTransactions = structuredClone(seedAccountTransactions);
+const supplierSettlements: SupplierSettlement[] = structuredClone(seedSupplierSettlements);
+const financialPositionEntries: FinancialPositionEntry[] = structuredClone(seedFinancialPositionEntries);
 const expenseCategories = structuredClone(seedExpenseCategories);
 const currentEmployeeLocations: CurrentEmployeeLocation[] = structuredClone(seedCurrentEmployeeLocations);
 const fieldVisits: FieldVisit[] = structuredClone(seedFieldVisits);
@@ -3324,6 +3330,59 @@ app.post("/api/account-transactions", (req, res) => {
   res.status(201).json(ok(transaction, `${sourceType} transaction posted`));
 });
 
+app.get("/api/supplier-settlements", (req, res) => {
+  if (!requireArea(req, res, "accounts")) return;
+  res.json(ok(supplierSettlements, "Supplier settlement ledger loaded"));
+});
+app.get("/api/accounts/suppliers", (req, res) => {
+  if (!requireArea(req, res, "accounts")) return;
+  res.json(ok(suppliers.filter((entry) => entry.active), "Active suppliers loaded for settlement posting"));
+});
+
+app.post("/api/supplier-settlements", (req, res) => {
+  const user = requireArea(req, res, "accounts", "post");
+  if (!user) return;
+  const supplier = suppliers.find((entry) => entry.id === req.body.supplierId && entry.active);
+  if (!supplier) return fail(res, 422, "Select an active supplier.");
+  const entryType = String(req.body.entryType) as SupplierSettlement["entryType"];
+  if (!['Obligation', 'Payment'].includes(entryType)) return fail(res, 422, "Select Obligation or Payment.");
+  let amount: Decimal;
+  try { amount = requiredDecimal(req.body.amount, "Settlement amount"); } catch (error) { return fail(res, 422, error instanceof Error ? error.message : "Settlement amount is invalid."); }
+  const account = entryType === "Payment" ? accounts.find((entry) => entry.id === req.body.accountId && entry.active) : undefined;
+  if (entryType === "Payment" && !account) return fail(res, 422, "Select the payment account.");
+  if (account && decimal(account.balance).lt(amount)) return fail(res, 422, "Selected account has insufficient balance.");
+  const settlement: SupplierSettlement = { id: id("sst"), date: String(req.body.date || businessDate()), supplierId: supplier.id, supplierName: supplier.name, importId: req.body.importId ? String(req.body.importId) : undefined, reference: String(req.body.reference ?? "").trim(), entryType, amount: money(amount), accountId: account?.id, accountName: account?.name, paymentReference: String(req.body.paymentReference ?? "").trim() || undefined, notes: String(req.body.notes ?? "").trim() || undefined, status: "Posted", createdByUserId: user.id, createdByName: user.name, createdAt: new Date().toISOString() };
+  if (!settlement.reference) return fail(res, 422, "Import, PO or settlement reference is required.");
+  supplierSettlements.unshift(settlement);
+  if (account) {
+    account.balance = money(decimal(account.balance).minus(amount));
+    accountTransactions.unshift({ id: id("trx"), date: settlement.date, accountId: account.id, accountName: account.name, direction: "Out", amount: settlement.amount, sourceType: "Import Cost", sourceId: settlement.id, description: `Supplier payment: ${supplier.name}`, partyId: supplier.id, partyName: supplier.name, reference: settlement.paymentReference ?? settlement.reference, createdByUserId: user.id, createdByName: user.name });
+  }
+  audit(req, `Supplier ${entryType.toLowerCase()} posted`, "SupplierSettlement", settlement.id, `${supplier.name}: Tk ${settlement.amount} against ${settlement.reference}.`);
+  res.status(201).json(ok(settlement, `Supplier ${entryType.toLowerCase()} posted`));
+});
+
+app.get("/api/financial-position", (req, res) => {
+  const user = requireArea(req, res, "accounts");
+  if (!user || !userHasCapability(user, "view_financial_position")) return user ? fail(res, 403, "Financial position access is required.") : undefined;
+  res.json(ok(financialPositionEntries, "Controlled financial-position entries loaded"));
+});
+
+app.post("/api/financial-position", (req, res) => {
+  const user = requireArea(req, res, "accounts", "post");
+  if (!user || !userHasCapability(user, "view_financial_position")) return user ? fail(res, 403, "Financial position access is required.") : undefined;
+  const categories: FinancialPositionEntry["category"][] = ["Owner Capital", "Fixed Assets", "Accumulated Depreciation", "Statutory Payables", "Other Receivables", "Other Payables", "Opening Retained Earnings"];
+  const category = String(req.body.category) as FinancialPositionEntry["category"];
+  if (!categories.includes(category)) return fail(res, 422, "Select a supported financial-position category.");
+  let amount: Decimal;
+  try { amount = requiredDecimal(req.body.amount, "Position amount"); } catch (error) { return fail(res, 422, error instanceof Error ? error.message : "Position amount is invalid."); }
+  const entry: FinancialPositionEntry = { id: id("fpe"), asOfDate: String(req.body.asOfDate || businessDate()), category, label: String(req.body.label ?? "").trim(), amount: money(amount), reference: String(req.body.reference ?? "").trim(), notes: String(req.body.notes ?? "").trim() || undefined, status: "Posted", createdByUserId: user.id, createdByName: user.name, createdAt: new Date().toISOString() };
+  if (!entry.label || !entry.reference) return fail(res, 422, "Label and source reference are required.");
+  financialPositionEntries.unshift(entry);
+  audit(req, "Financial position entry posted", "FinancialPosition", entry.id, `${entry.category}: ${entry.label}, Tk ${entry.amount}.`);
+  res.status(201).json(ok(entry, "Financial-position entry posted"));
+});
+
 app.get("/api/reports/salespeople", (req, res) => {
   const user = requireArea(req, res, "reports");
   if (!user) return;
@@ -3509,8 +3568,46 @@ app.get("/api/reports", (req, res) => {
     else row.outflow = row.outflow.plus(transaction.amount);
     accountMovementSummary.set(transaction.accountId, row);
   }
+  const supplierBalances = suppliers.map((supplier) => {
+    const rows = supplierSettlements.filter((entry) => entry.supplierId === supplier.id && entry.status === "Posted" && entry.date <= to);
+    const obligation = rows.filter((entry) => entry.entryType === "Obligation").reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0));
+    const paid = rows.filter((entry) => entry.entryType === "Payment").reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0));
+    return { supplier, obligation, paid, balance: obligation.minus(paid) };
+  });
+  const positionAmount = (category: FinancialPositionEntry["category"]) => financialPositionEntries
+    .filter((entry) => entry.status === "Posted" && entry.category === category && entry.asOfDate <= to)
+    .reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0));
+  const cashAndBank = accounts.filter((entry) => entry.active).reduce((sum, account) => {
+    const future = accountTransactions.filter((entry) => entry.accountId === account.id && entry.date > to);
+    const asOfBalance = future.reduce((balance, entry) => entry.direction === "In" ? balance.minus(entry.amount) : balance.plus(entry.amount), decimal(account.balance));
+    return sum.plus(asOfBalance);
+  }, new Decimal(0));
+  const receivables = customers.reduce((sum, customer) => {
+    const futureInvoices = invoices.filter((entry) => entry.customerId === customer.id && entry.status === "Approved" && entry.date > to).reduce((total, entry) => total.plus(entry.total), new Decimal(0));
+    const futureCollections = collections.filter((entry) => entry.customerId === customer.id && entry.status === "Posted" && entry.date > to).reduce((total, entry) => total.plus(entry.amount), new Decimal(0));
+    return sum.plus(decimal(customer.currentDue).minus(futureInvoices).plus(futureCollections));
+  }, new Decimal(0));
+  const inventoryValue = stockBatches.reduce((sum, batch) => {
+    const asOfQuantity = stockMovements.filter((entry) => entry.batchId === batch.id && entry.date > to).reduce((quantity, entry) => entry.type === "Dispatch" ? quantity.plus(entry.quantity) : quantity.minus(entry.quantity), decimal(batch.quantityAvailable));
+    return sum.plus(asOfQuantity.mul(batch.landedCostPerUnit));
+  }, new Decimal(0));
+  const recoverableAdvances = accountTransactions.filter((entry) => entry.date <= to && entry.sourceType === "Advance").reduce((sum, entry) => entry.direction === "Out" ? sum.plus(entry.amount) : sum.minus(entry.amount), new Decimal(0));
+  const companyLoan = accountTransactions.filter((entry) => entry.date <= to && entry.sourceType === "Company Loan").reduce((sum, entry) => entry.direction === "In" ? sum.plus(entry.amount) : sum.minus(entry.amount), new Decimal(0));
+  const fixedAssets = positionAmount("Fixed Assets");
+  const depreciation = positionAmount("Accumulated Depreciation");
+  const otherReceivables = positionAmount("Other Receivables");
+  const supplierPayable = supplierBalances.reduce((sum, row) => sum.plus(row.balance), new Decimal(0));
+  const statutoryPayables = positionAmount("Statutory Payables");
+  const otherPayables = positionAmount("Other Payables");
+  const ownerCapital = positionAmount("Owner Capital");
+  const retainedEarnings = positionAmount("Opening Retained Earnings");
+  const totalAssets = cashAndBank.plus(receivables).plus(inventoryValue).plus(recoverableAdvances).plus(otherReceivables).plus(fixedAssets).minus(depreciation);
+  const totalLiabilities = supplierPayable.plus(statutoryPayables).plus(otherPayables).plus(companyLoan);
+  const totalEquity = ownerCapital.plus(retainedEarnings);
+  const reconciliationDifference = totalAssets.minus(totalLiabilities).minus(totalEquity);
   const sensitive = hasCapability(req, "view_sensitive_cost");
   const profitVisible = hasCapability(req, "view_profit");
+  const financialPositionVisible = hasCapability(req, "view_financial_position");
   const report = {
     period: { from, to },
     importCosts: [{ label: "Imports created", value: String(imports.filter((record) => inPeriod(record.createdAt.slice(0, 10), from, to)).length) }, { label: "Finalized shipment value", value: sensitive ? money(importCost) : "Restricted" }, { label: "Pending finalization", value: String(imports.filter((item) => item.costingStatus === "In Progress").length) }],
@@ -3519,6 +3616,8 @@ app.get("/api/reports", (req, res) => {
     expenses: [{ label: "Operating expenses", value: money(expenseTotal) }, { label: "Posted entries", value: String(periodExpenses.length) }, { label: "Cash / bank accounts", value: String(accounts.filter((entry) => entry.active).length) }],
     tables: {
       imports: [
+        { id: "supplier-list", title: "Supplier List", columns: [{ key: "supplier", label: "Supplier" }, { key: "country", label: "Country" }, { key: "contact", label: "Contact" }, { key: "phone", label: "Phone" }, { key: "terms", label: "Payment Terms" }, { key: "obligation", label: "Obligation", align: "right" as const }, { key: "paid", label: "Paid", align: "right" as const }, { key: "balance", label: "Payable", align: "right" as const }, { key: "status", label: "Status" }], rows: supplierBalances.map(({ supplier, obligation, paid, balance }) => ({ supplier: supplier.name, country: supplier.country, contact: supplier.contactPerson, phone: supplier.phone, terms: supplier.paymentTerms, obligation: sensitive ? money(obligation) : "Restricted", paid: sensitive ? money(paid) : "Restricted", balance: sensitive ? money(balance) : "Restricted", status: supplier.active ? "Active" : "Inactive" })) },
+        { id: "supplier-statement", title: "Supplier Statement", columns: [{ key: "date", label: "Date" }, { key: "supplier", label: "Supplier" }, { key: "reference", label: "Import / PO / Ref" }, { key: "type", label: "Entry" }, { key: "account", label: "Payment Account" }, { key: "paymentRef", label: "Payment Ref" }, { key: "debit", label: "Obligation", align: "right" as const }, { key: "credit", label: "Payment", align: "right" as const }], rows: supplierSettlements.filter((entry) => entry.status === "Posted" && inPeriod(entry.date, from, to)).map((entry) => ({ date: entry.date, supplier: entry.supplierName, reference: entry.reference, type: entry.entryType, account: entry.accountName ?? "-", paymentRef: entry.paymentReference ?? "-", debit: sensitive && entry.entryType === "Obligation" ? entry.amount : entry.entryType === "Obligation" ? "Restricted" : "0.00", credit: sensitive && entry.entryType === "Payment" ? entry.amount : entry.entryType === "Payment" ? "Restricted" : "0.00" })) },
         { id: "import-register", title: "Import / Shipment Register", columns: [{ key: "date", label: "Created" }, { key: "reference", label: "Reference" }, { key: "supplier", label: "Supplier" }, { key: "po", label: "PO" }, { key: "products", label: "Products", align: "right" as const }, { key: "status", label: "Status" }], rows: imports.filter((record) => inPeriod(record.createdAt.slice(0, 10), from, to)).map((record) => ({ date: record.createdAt.slice(0, 10), reference: record.primaryReference, supplier: record.supplierName, po: record.poNumber, products: String(record.items.length), status: record.status })) },
         { id: "import-po-register", title: "Import Purchase Order Register", columns: [{ key: "date", label: "PO Date" }, { key: "po", label: "PO Number" }, { key: "supplier", label: "Supplier" }, { key: "reference", label: "Import Reference" }, { key: "status", label: "Status" }, { key: "products", label: "Products", align: "right" as const }, { key: "quantity", label: "Quantity", align: "right" as const }, { key: "fob", label: "FOB (BDT)", align: "right" as const }], rows: periodPoImports.map((record) => ({ date: record.poDate, po: record.poNumber, supplier: record.supplierName, reference: record.primaryReference, status: record.status, products: String(record.items.length), quantity: precise(record.items.reduce((sum, item) => sum.plus(item.quantity), new Decimal(0)), 4), fob: sensitive ? money(record.items.reduce((sum, item) => sum.plus(item.fobTotalBdt), new Decimal(0))) : "Restricted" })) },
         { id: "imported-product-summary", title: "Imported Product Summary", columns: [{ key: "product", label: "Product" }, { key: "family", label: "Family" }, { key: "quantity", label: "Imported Qty", align: "right" as const }, { key: "fob", label: "FOB Value", align: "right" as const }, { key: "additional", label: "Additional Cost", align: "right" as const }, { key: "landed", label: "Final Landed Value", align: "right" as const }], rows: [...importedProductSummary.values()].map((row) => ({ product: row.product, family: row.family, quantity: precise(row.quantity, 4), fob: sensitive ? money(row.fob) : "Restricted", additional: sensitive ? money(row.additional) : "Restricted", landed: sensitive ? money(row.landed) : "Restricted" })) },
@@ -3530,6 +3629,7 @@ app.get("/api/reports", (req, res) => {
         { id: "landed-cost-batch-history", title: "Landed Cost History by Batch", columns: [{ key: "received", label: "Received" }, { key: "reference", label: "Import / Source" }, { key: "product", label: "Product" }, { key: "batch", label: "Lot / Batch" }, { key: "quantity", label: "Received Qty", align: "right" as const }, { key: "landed", label: "Landed / Unit", align: "right" as const }], rows: stockBatches.filter((batch) => inPeriod(batch.receivedDate, from, to)).map((batch) => ({ received: batch.receivedDate, reference: batch.sourceReference, product: batch.productName, family: productFamily(batch.productId), batch: `${batch.lotNumber} / ${batch.batchNumber}`, quantity: batch.quantityReceived, landed: sensitive ? batch.landedCostPerUnit : "Restricted" })) }
       ],
       inventory: [
+        { id: "product-list", title: "Product List", columns: [{ key: "code", label: "Code / SKU" }, { key: "product", label: "Product" }, { key: "family", label: "Family" }, { key: "unit", label: "Unit" }, { key: "available", label: "Current Stock", align: "right" as const }, { key: "batches", label: "Active Batches", align: "right" as const }, { key: "earliestExpiry", label: "Nearest Expiry" }, { key: "status", label: "Status" }], rows: stockSummary },
         { id: "current-stock", title: "Current Batch Stock", columns: [{ key: "product", label: "Product" }, { key: "lot", label: "Lot / Batch" }, { key: "received", label: "Received" }, { key: "expiry", label: "Expiry" }, { key: "status", label: "Expiry Status" }, { key: "available", label: "Available", align: "right" as const }], rows: stockBatches.map((batch) => ({ product: batch.productName, family: productFamily(batch.productId), lot: `${batch.lotNumber} / ${batch.batchNumber}`, received: batch.receivedDate, expiry: batch.expiryDate, status: expiryStatus(batch.expiryDate), available: batch.quantityAvailable })) },
         { id: "stock-summary", title: "Stock Summary", columns: [{ key: "code", label: "Code" }, { key: "product", label: "Product" }, { key: "family", label: "Family" }, { key: "batches", label: "Batches", align: "right" as const }, { key: "received", label: "Total Received", align: "right" as const }, { key: "available", label: "Available", align: "right" as const }, { key: "earliestExpiry", label: "Earliest Expiry" }], rows: stockSummary },
         { id: "item-details", title: "Item Details", columns: [{ key: "code", label: "Code" }, { key: "product", label: "Product" }, { key: "family", label: "Family" }, { key: "unit", label: "Unit" }, { key: "batches", label: "Batches", align: "right" as const }, { key: "available", label: "Available", align: "right" as const }, { key: "standardPrice", label: "Standard Sale Price", align: "right" as const }, { key: "status", label: "Status" }], rows: stockSummary },
@@ -3537,6 +3637,8 @@ app.get("/api/reports", (req, res) => {
         { id: "stock-movement", title: "Stock Movements", columns: [{ key: "date", label: "Date" }, { key: "product", label: "Product" }, { key: "batch", label: "Batch" }, { key: "type", label: "Movement" }, { key: "quantity", label: "Qty", align: "right" as const }, { key: "reference", label: "Reference" }], rows: stockMovements.filter((movement) => inPeriod(movement.date, from, to)).map((movement) => ({ date: movement.date, product: movement.productName, batch: movement.batchNumber, type: movement.type, quantity: movement.quantity, reference: movement.reference })) }
       ],
       sales: [
+        { id: "sales-summary", title: "Sales Summary", columns: [{ key: "date", label: "Date" }, { key: "invoices", label: "Invoices", align: "right" as const }, { key: "customers", label: "Customers", align: "right" as const }, { key: "quantity", label: "Units", align: "right" as const }, { key: "sales", label: "Approved Sales", align: "right" as const }, { key: "collections", label: "Collections", align: "right" as const }], rows: [...new Set([...periodInvoices.map((invoice) => invoice.date), ...periodCollections.map((entry) => entry.date)])].sort().map((date) => { const dayInvoices = periodInvoices.filter((invoice) => invoice.date === date); const dayCollections = periodCollections.filter((entry) => entry.date === date); return { date, invoices: String(dayInvoices.length), customers: String(new Set(dayInvoices.map((invoice) => invoice.customerId)).size), quantity: precise(dayInvoices.flatMap((invoice) => invoice.lines).reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), sales: money(dayInvoices.reduce((sum, invoice) => sum.plus(invoice.total), new Decimal(0))), collections: money(dayCollections.reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0))) }; }) },
+        { id: "customer-list", title: "Customer List", columns: [{ key: "customer", label: "Customer" }, { key: "type", label: "Type" }, { key: "contact", label: "Contact" }, { key: "phone", label: "Phone" }, { key: "address", label: "Address" }, { key: "territory", label: "Territory" }, { key: "salesperson", label: "Salesperson" }, { key: "openingDue", label: "Opening Due", align: "right" as const }, { key: "periodInvoiced", label: "Period Invoiced", align: "right" as const }, { key: "periodPaid", label: "Period Paid", align: "right" as const }, { key: "currentDue", label: "Current Due", align: "right" as const }, { key: "status", label: "Status" }], rows: reportCustomers.map((customer) => ({ customer: customer.name, type: customer.type, contact: customer.contactPerson, phone: customer.phone, address: customer.address, territory: customer.territory, salesperson: demoUsers.find((entry) => entry.id === customer.assignedSalesUserId)?.name ?? customer.assignedSalesUserId, openingDue: customerOpeningBalances.find((entry) => entry.customerId === customer.id)?.openingDue ?? "0.00", periodInvoiced: money(periodInvoices.filter((entry) => entry.customerId === customer.id).reduce((sum, entry) => sum.plus(entry.total), new Decimal(0))), periodPaid: money(periodCollections.filter((entry) => entry.customerId === customer.id).reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0))), currentDue: customer.currentDue, status: customer.active ? "Active" : "Inactive" })) },
         { id: "sales-order-register", title: "Sales Order Register", columns: [{ key: "date", label: "Date" }, { key: "order", label: "Order" }, { key: "customer", label: "Customer" }, { key: "salesperson", label: "Salesperson" }, { key: "status", label: "Status" }, { key: "orderValue", label: "Order Value", align: "right" as const }, { key: "delivered", label: "Delivered Qty", align: "right" as const }, { key: "invoice", label: "Invoice Status" }, { key: "due", label: "Due", align: "right" as const }], rows: periodOrders.map((order) => { const orderDeliveries = deliveries.filter((delivery) => delivery.orderId === order.id); const activeInvoices = invoices.filter((invoice) => invoice.orderId === order.id && invoice.status !== "Cancelled"); return { date: order.date, order: order.orderNumber, customer: order.customerName, salesperson: demoUsers.find((entry) => entry.id === order.ownerId)?.name ?? order.ownerId, status: order.status, orderValue: order.total, delivered: precise(orderDeliveries.flatMap((delivery) => delivery.lines).reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), invoice: activeInvoices.length ? [...new Set(activeInvoices.map((invoice) => invoice.status))].join(", ") : "Not invoiced", due: order.due }; }) },
         { id: "order-fulfilment", title: "Order Fulfilment Difference", columns: [{ key: "order", label: "Order" }, { key: "customer", label: "Customer" }, { key: "salesperson", label: "Salesperson" }, { key: "product", label: "Product" }, { key: "ordered", label: "Ordered Qty", align: "right" as const }, { key: "delivered", label: "Delivered Qty", align: "right" as const }, { key: "invoiced", label: "Invoiced Qty", align: "right" as const }, { key: "remaining", label: "Remaining Qty", align: "right" as const }, { key: "status", label: "Status" }], rows: periodOrders.flatMap((order) => order.lines.map((line) => { const delivered = deliveries.filter((delivery) => delivery.orderId === order.id).flatMap((delivery) => delivery.lines).filter((entry) => entry.productId === line.productId).reduce((sum, entry) => sum.plus(entry.quantity), new Decimal(0)); const invoiced = invoices.filter((invoice) => invoice.orderId === order.id && invoice.status !== "Cancelled").flatMap((invoice) => invoice.lines).filter((entry) => entry.productId === line.productId).reduce((sum, entry) => sum.plus(entry.quantity), new Decimal(0)); const remaining = Decimal.max(0, decimal(line.quantity).minus(delivered)); return { order: order.orderNumber, customer: order.customerName, salesperson: demoUsers.find((entry) => entry.id === order.ownerId)?.name ?? order.ownerId, product: line.productName, family: productFamily(line.productId), ordered: precise(line.quantity, 4), delivered: precise(delivered, 4), invoiced: precise(invoiced, 4), remaining: precise(remaining, 4), status: remaining.eq(0) ? "Complete" : delivered.gt(0) ? "Partial" : "Pending" }; })) },
         { id: "delivery-challan-register", title: "Delivery Challan Register", columns: [{ key: "date", label: "Date" }, { key: "challan", label: "Challan" }, { key: "order", label: "Order" }, { key: "customer", label: "Customer" }, { key: "status", label: "Status" }, { key: "quantity", label: "Units", align: "right" as const }, { key: "invoice", label: "Invoice" }], rows: periodDeliveries.map((delivery) => ({ date: delivery.date, challan: delivery.challanNumber, order: orders.find((entry) => entry.id === delivery.orderId)?.orderNumber ?? delivery.orderId, customer: delivery.customerName, status: delivery.status, quantity: precise(delivery.lines.reduce((sum, line) => sum.plus(line.quantity), new Decimal(0)), 4), invoice: invoices.find((entry) => entry.status !== "Cancelled" && entry.deliveryIds.includes(delivery.id))?.invoiceNumber ?? "Not invoiced" })) },
@@ -3571,13 +3673,41 @@ app.get("/api/reports", (req, res) => {
         { id: "account-transactions", title: "Cash / Bank Transactions", columns: [{ key: "date", label: "Date" }, { key: "voucher", label: "Voucher" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "party", label: "Party" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodAccountTransactions.map((transaction) => ({ date: transaction.date, voucher: transaction.voucherNumber ?? "-", account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, party: transaction.partyName ?? "-", description: transaction.description, amount: transaction.amount })) },
         { id: "day-book", title: "Day Book", columns: [{ key: "date", label: "Date" }, { key: "voucher", label: "Voucher" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "reference", label: "Reference" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodAccountTransactions.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map((transaction) => ({ date: transaction.date, voucher: transaction.voucherNumber ?? "-", account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, reference: transaction.reference ?? "-", description: transaction.description, amount: transaction.amount })) },
         ...(["Cash", "Mobile Banking", "Bank"] as const).map((accountType) => ({ id: accountType === "Cash" ? "cash-transactions" : accountType === "Mobile Banking" ? "mobile-banking-transactions" : "bank-transactions", title: `${accountType} Transactions`, columns: [{ key: "date", label: "Date" }, { key: "voucher", label: "Voucher" }, { key: "account", label: "Account" }, { key: "direction", label: "In / Out" }, { key: "source", label: "Source" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", align: "right" as const }], rows: periodAccountTransactions.filter((transaction) => accounts.find((account) => account.id === transaction.accountId)?.type === accountType).map((transaction) => ({ date: transaction.date, voucher: transaction.voucherNumber ?? "-", account: transaction.accountName, direction: transaction.direction, source: transaction.sourceType, description: transaction.description, amount: transaction.amount })) })),
-        { id: "cash-movement-summary", title: "Cash Movement Summary", columns: [{ key: "account", label: "Account" }, { key: "type", label: "Account Type" }, { key: "inflow", label: "Cash In", align: "right" as const }, { key: "outflow", label: "Cash Out", align: "right" as const }, { key: "net", label: "Net Movement", align: "right" as const }], rows: [...accountMovementSummary.values()].map((row) => ({ account: row.account, type: row.type, inflow: money(row.inflow), outflow: money(row.outflow), net: money(row.inflow.minus(row.outflow)) })) }
+        { id: "cash-movement-summary", title: "Cash Movement Summary", columns: [{ key: "account", label: "Account" }, { key: "type", label: "Account Type" }, { key: "inflow", label: "Cash In", align: "right" as const }, { key: "outflow", label: "Cash Out", align: "right" as const }, { key: "net", label: "Net Movement", align: "right" as const }], rows: [...accountMovementSummary.values()].map((row) => ({ account: row.account, type: row.type, inflow: money(row.inflow), outflow: money(row.outflow), net: money(row.inflow.minus(row.outflow)) })) },
+        ...(financialPositionVisible ? [{ id: "balance-sheet", title: "Balance Sheet", columns: [{ key: "section", label: "Section" }, { key: "account", label: "Account" }, { key: "source", label: "Source" }, { key: "amount", label: "Amount", align: "right" as const }], rows: [
+          { section: "Assets", account: "Cash, Bank & Mobile Accounts", source: "Active account balances", amount: money(cashAndBank) },
+          { section: "Assets", account: "Accounts Receivable", source: "Customer ledger closing dues", amount: money(receivables) },
+          { section: "Assets", account: "Inventory", source: "On-hand batch quantity x landed cost", amount: money(inventoryValue) },
+          { section: "Assets", account: "Recoverable Advances", source: "Advance paid less recovered", amount: money(recoverableAdvances) },
+          { section: "Assets", account: "Other Receivables", source: "Controlled position entries", amount: money(otherReceivables) },
+          { section: "Assets", account: "Fixed Assets", source: "Controlled position entries", amount: money(fixedAssets) },
+          { section: "Assets", account: "Less: Accumulated Depreciation", source: "Controlled position entries", amount: money(depreciation.negated()) },
+          { section: "Assets", account: "Total Assets", source: "Calculated", amount: money(totalAssets) },
+          { section: "Liabilities", account: "Supplier Payable", source: "Supplier obligations less payments", amount: money(supplierPayable) },
+          { section: "Liabilities", account: "Statutory Payables", source: "Controlled position entries", amount: money(statutoryPayables) },
+          { section: "Liabilities", account: "Other Payables", source: "Controlled position entries", amount: money(otherPayables) },
+          { section: "Liabilities", account: "Company Loan Outstanding", source: "Loan inflow less repayment", amount: money(companyLoan) },
+          { section: "Liabilities", account: "Total Liabilities", source: "Calculated", amount: money(totalLiabilities) },
+          { section: "Equity", account: "Owner / Opening Capital", source: "Controlled position entries", amount: money(ownerCapital) },
+          { section: "Equity", account: "Opening Retained Earnings", source: "Controlled position entries", amount: money(retainedEarnings) },
+          { section: "Equity", account: "Total Equity", source: "Calculated", amount: money(totalEquity) },
+          { section: "Control", account: "Liabilities + Equity", source: "Calculated", amount: money(totalLiabilities.plus(totalEquity)) },
+          { section: "Control", account: "Reconciliation Difference", source: reconciliationDifference.eq(0) ? "Balanced" : "Review opening balances / omitted accounts", amount: money(reconciliationDifference) }
+        ] }] : [])
+      ],
+      employees: [
+        { id: "employee-list", title: "Employee List", columns: [{ key: "employeeCode", label: "Employee ID" }, { key: "employee", label: "Employee" }, { key: "designation", label: "Designation" }, { key: "department", label: "Department" }, { key: "territory", label: "Territory" }, { key: "phone", label: "Phone" }, { key: "role", label: "System Role" }, { key: "status", label: "Status" }], rows: (user.role === "Sales Executive" ? demoUsers.filter((entry) => entry.id === user.id) : demoUsers).map((record) => { const employee = directoryEntry(record); return { employeeCode: employee.employeeCode, employee: employee.name, designation: employee.title, department: employee.department, territory: employee.territory ?? "-", phone: employee.phone ?? "-", role: record.role, status: employee.status }; }) }
+      ],
+      controls: [
+        { id: "audit-trail", title: "Audit Trail", columns: [{ key: "timestamp", label: "Timestamp" }, { key: "user", label: "User / Role" }, { key: "action", label: "Action" }, { key: "record", label: "Record" }, { key: "summary", label: "Summary / Reason" }], rows: auditEvents.filter((event) => inPeriod(event.timestamp.slice(0, 10), from, to)).map((event) => ({ timestamp: event.timestamp, user: `${event.userName} | ${event.role}`, action: event.action, record: `${event.entityType} | ${event.entityId}`, summary: `${event.summary}${event.reason ? ` | Reason: ${event.reason}` : ""}` })) },
+        { id: "access-change-audit", title: "Access Change Audit", columns: [{ key: "timestamp", label: "Timestamp" }, { key: "user", label: "Changed By" }, { key: "action", label: "Action" }, { key: "record", label: "Employee / User" }, { key: "summary", label: "Change" }], rows: auditEvents.filter((event) => inPeriod(event.timestamp.slice(0, 10), from, to) && /access|permission|role|capabilit/i.test(`${event.action} ${event.entityType} ${event.summary}`)).map((event) => ({ timestamp: event.timestamp, user: `${event.userName} | ${event.role}`, action: event.action, record: event.entityId, summary: `${event.summary}${event.reason ? ` | Reason: ${event.reason}` : ""}` })) },
+        { id: "fifo-override-audit", title: "FIFO Override / Stock Exception Audit", columns: [{ key: "timestamp", label: "Timestamp" }, { key: "user", label: "User / Role" }, { key: "action", label: "Action" }, { key: "record", label: "Delivery / Batch" }, { key: "summary", label: "Reason" }], rows: auditEvents.filter((event) => inPeriod(event.timestamp.slice(0, 10), from, to) && /fifo|stock override|batch override/i.test(`${event.action} ${event.summary} ${event.reason ?? ""}`)).map((event) => ({ timestamp: event.timestamp, user: `${event.userName} | ${event.role}`, action: event.action, record: event.entityId, summary: `${event.summary}${event.reason ? ` | Reason: ${event.reason}` : ""}` })) }
       ]
     }
   };
   if (!hasEffectivePermission(user, "import", "view")) {
     report.importCosts = [];
-    report.tables.imports = [];
+    report.tables.imports = hasEffectivePermission(user, "accounts", "view") ? report.tables.imports.filter((table) => ["supplier-list", "supplier-statement"].includes(table.id)) : [];
   }
   if (!hasEffectivePermission(user, "inventory", "view")) {
     report.inventory = [];
@@ -3591,13 +3721,15 @@ app.get("/api/reports", (req, res) => {
     report.expenses = [];
     report.tables.expenses = [];
   }
+  if (!hasEffectivePermission(user, "marketing", "view")) report.tables.employees = [];
+  if (!["Super Admin", "Managing Director", "Accounts"].includes(user.role)) report.tables.controls = [];
   res.json(ok({
     ...report
   }, `Reports loaded for ${from} to ${to}`));
 });
 
 const validRoles: Role[] = ["Super Admin", "Managing Director", "Accounts", "Import Officer", "Warehouse Manager", "Sales Manager", "Sales Executive"];
-const validCapabilities: Capability[] = ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "manage_users", "manage_user_access", "approve_special_price"];
+const validCapabilities: Capability[] = ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "view_financial_position", "approve_stock_override", "manage_users", "manage_user_access", "approve_special_price"];
 
 function canManageUserAccess(user: User) {
   return user.role === "Super Admin" || userHasCapability(user, "manage_user_access");

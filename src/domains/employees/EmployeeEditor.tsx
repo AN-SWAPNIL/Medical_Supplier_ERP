@@ -21,6 +21,7 @@ const capabilityOptions: ReadonlyArray<readonly [Capability, string]> = [
   ["finalize_landed_cost", "Finalize landed cost"],
   ["reopen_landed_cost", "Reopen landed cost"],
   ["view_profit", "View selling-profit information"],
+  ["view_financial_position", "View balance sheet and financial position"],
   ["approve_stock_override", "Approve FIFO override"],
   ["approve_special_price", "Approve special price"],
   ["manage_users", "Manage employee lifecycle"],

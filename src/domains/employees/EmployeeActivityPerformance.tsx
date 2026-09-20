@@ -98,7 +98,7 @@ function PeriodInput({ frequency, date, weekDate, month, customFrom, customTo, o
   return <div className="grid gap-3 sm:grid-cols-2"><label><span className={labelClass}>From</span><input className={inputClass} type="date" max={customTo} value={customFrom} onChange={(event) => onChange("customFrom", event.target.value)} /></label><label><span className={labelClass}>To</span><input className={inputClass} type="date" min={customFrom} max={today} value={customTo} onChange={(event) => onChange("customTo", event.target.value)} /></label></div>;
 }
 
-export default function EmployeeActivityPerformance({ actor, employeeId, onEmployeeChange, onFieldMap }: { actor: User; employeeId?: string; onEmployeeChange: (employeeId: string) => void; onFieldMap: (employeeId: string) => void }) {
+export default function EmployeeActivityPerformance({ actor, employeeId, onEmployeeChange, onFieldMap, reportMode = false }: { actor: User; employeeId?: string; onEmployeeChange: (employeeId: string) => void; onFieldMap: (employeeId: string) => void; reportMode?: boolean }) {
   const pushToast = useToastStore((state) => state.push);
   const navigate = useNavigate();
   const today = businessDate();
@@ -175,6 +175,20 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
     navigate(`/app/print/employee-activity/${selectedId}?${params.toString()}`);
   };
 
+  if (!reportMode) return <div className="grid gap-4" data-testid="employee-activity-summary">
+    <section className="rounded-md border border-blue-200 bg-blue-50/60 p-4 shadow-sm">
+      <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-end">
+        <EmployeePicker employees={employees} value={selectedId} onChange={onEmployeeChange} allowAll={false} label="Employee Activity Summary" />
+        <div className="flex flex-wrap gap-2"><Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onFieldMap(selectedId)}>Field Map</Button><Button variant="primary" icon={<BookOpenText className="h-4 w-4" />} onClick={() => navigate(`/app/reports/employee-activity?employeeId=${encodeURIComponent(selectedId)}`)}>Open Full Report</Button></div>
+      </div>
+    </section>
+    <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-center gap-3 border-b border-blue-100 bg-blue-50/60 p-4"><Avatar className="h-12 w-12 rounded-md object-cover" src={snapshot.employee.avatarUrl} name={snapshot.employee.name} /><div><h2 className="font-bold text-blue-950">{snapshot.employee.name}</h2><p className="text-xs text-slate-600">{snapshot.employee.employeeCode} | {snapshot.employee.title} | {snapshot.employee.territory ?? "No territory"}</p></div><StatusBadge status={snapshot.employee.status} /></header>
+      <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 xl:grid-cols-6"><Metric label="Activities Today" value={formatNumber(activities.length)} /><Metric label="Verified Visits" value={formatNumber(snapshot.performance.verifiedVisits)} tone="cyan" /><Metric label="New Leads" value={formatNumber(snapshot.performance.newLeads)} tone="green" /><Metric label="Orders" value={formatNumber(snapshot.performance.orders)} tone="amber" /><Metric label="Collections" value={formatCurrency(snapshot.performance.collectionsBdt, true)} tone="green" /><Metric label="Target" value={`${formatNumber(snapshot.performance.progress.overall)}%`} /></div>
+      <div className="p-4"><h3 className="mb-3 text-sm font-bold text-blue-950">Recent activity</h3><div className="grid gap-2">{activities.slice(0, 5).map((activity) => <div className="flex flex-col gap-1 border border-slate-200 p-3 text-xs sm:flex-row sm:items-center sm:justify-between" key={activity.id}><div><strong>{marketingActivityLabel(activity.activityType)}</strong><p className="mt-1 text-slate-500">{activity.subjectName ?? "General activity"} | {dateTimeLabel(activity.occurredAt)}</p></div><StatusBadge status={activity.verification.replaceAll("_", " ")} /></div>)}{!activities.length ? <p className="py-6 text-center text-sm text-slate-500">No activity recorded today.</p> : null}</div></div>
+    </section>
+  </div>;
+
   return <div className="employee-report-workspace grid gap-4" data-testid="employee-activity-performance">
     <section className="no-print overflow-hidden rounded-md border border-blue-200 bg-[#eef6ff] shadow-sm">
       <div className="flex flex-col gap-2 bg-blue-950 px-4 py-3 text-white sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold">Employee Report Builder</h2><p className="text-xs text-blue-100">Select an employee, period and content. The on-screen review and official print use the same filtered data.</p></div><span className="text-xs font-semibold text-cyan-300">Auto-refreshes every 15 seconds</span></div>
@@ -186,7 +200,7 @@ export default function EmployeeActivityPerformance({ actor, employeeId, onEmplo
         <div className="flex flex-wrap items-end gap-2 xl:justify-end">
           <Button icon={<RefreshCw className="h-4 w-4" />} onClick={() => void snapshotQuery.refetch()}>Refresh</Button>
           <Button icon={<MapPinned className="h-4 w-4" />} onClick={() => onFieldMap(selectedId)}>Field Map</Button>
-          <Button icon={<BookOpenText className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=customers&report=salesman-ledger&period=this-month&employeeId=${encodeURIComponent(selectedId)}&filter.salesperson=${encodeURIComponent(snapshot.employee.name)}`)}>Sales Ledger</Button>
+          <Button icon={<BookOpenText className="h-4 w-4" />} onClick={() => navigate(`/app/reports/salesman-ledger?employeeId=${encodeURIComponent(selectedId)}&filter.salesperson=${encodeURIComponent(snapshot.employee.name)}`)}>Sales Ledger</Button>
           {canExport ? <Button icon={<Download className="h-4 w-4" />} onClick={() => void exportCsv()}>CSV</Button> : null}
           {canPrint ? <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={openPrintPreview}>Print Preview</Button> : null}
         </div>

@@ -93,7 +93,7 @@ try {
   await desktop.pdf({ path: "artifacts/employee-report/employee-weekly-print.pdf", format: "A4", printBackground: true });
   await desktop.emulateMedia({ media: "screen" });
 
-  await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await desktop.goto(`${base}/app/reports/daily-marketing`, { waitUntil: "networkidle" });
   await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
   await desktop.getByRole("button", { name: /More Filters/ }).click();
   await desktop.getByTestId("employee-picker").getByRole("button").first().click();
@@ -114,7 +114,7 @@ try {
   await desktop.getByTestId("employee-activity-performance").waitFor();
   assert.equal(new URL(desktop.url()).pathname, "/app/employees", "Named employee reporting must leave team analysis for the canonical Employees workspace");
 
-  await desktop.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await desktop.goto(`${base}/app/reports/daily-marketing`, { waitUntil: "networkidle" });
   await desktop.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
   assert.equal(await desktop.getByRole("tab", { name: "Without Background" }).count(), 0, "Marketing workspace must not contain stationery choices");
   await desktop.getByRole("button", { name: "Print Preview" }).click();
@@ -141,7 +141,7 @@ try {
   assert.equal(await mobile.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 1), true, "Print preview controls must not overflow the mobile viewport");
   await mobile.screenshot({ path: "artifacts/employee-report/employee-print-preview-mobile.png", fullPage: true, animations: "disabled" });
 
-  await mobile.goto(`${base}/app/reports?view=marketing&preset=month`, { waitUntil: "networkidle" });
+  await mobile.goto(`${base}/app/reports/daily-marketing`, { waitUntil: "networkidle" });
   await mobile.getByRole("heading", { name: "Marketing Team Analysis" }).waitFor();
   await mobile.getByRole("button", { name: /More Filters/ }).click();
   await mobile.getByTestId("employee-picker").getByRole("button").first().click();

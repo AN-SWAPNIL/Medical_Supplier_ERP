@@ -23,6 +23,8 @@ import type {
   StockBatch,
   StockMovement,
   Supplier,
+  SupplierSettlement,
+  FinancialPositionEntry,
   WarehouseConfig,
   WarehouseReceipt,
   LocationHistoryPoint,
@@ -47,7 +49,7 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000001",
     avatarUrl: "/mipro-owner.png",
     status: "Active",
-    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "approve_stock_override", "approve_special_price", "manage_users", "manage_user_access"]
+    capabilities: ["view_sensitive_cost", "edit_sensitive_cost", "finalize_landed_cost", "reopen_landed_cost", "view_profit", "view_financial_position", "approve_stock_override", "approve_special_price", "manage_users", "manage_user_access"]
   },
   {
     id: "u-md",
@@ -59,7 +61,7 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000002",
     avatarUrl: "",
     status: "Active",
-    capabilities: []
+    capabilities: ["view_sensitive_cost", "view_profit", "view_financial_position"]
   },
   {
     id: "u-accounts",
@@ -71,7 +73,7 @@ export const demoUsers: User[] = [
     phone: "+880 1711 000003",
     avatarUrl: "",
     status: "Active",
-    capabilities: []
+    capabilities: ["view_sensitive_cost", "view_financial_position"]
   },
   {
     id: "u-import",
@@ -297,6 +299,20 @@ export const suppliers: Supplier[] = [
   { id: "sup-renhe", name: "Guangzhou Renhe Medical Technology", country: "China", contactPerson: "Liu Wen", phone: "+86 20 5550 1840", email: "export@renhe-med.cn", paymentTerms: "LC at sight", active: true },
   { id: "sup-aoxin", name: "Shanghai Aoxin Medical Supply", country: "China", contactPerson: "Chen Yu", phone: "+86 21 8810 2260", email: "sales@aoxin-med.cn", paymentTerms: "30% TT / 70% before shipment", active: true },
   { id: "sup-safe", name: "Qingdao SafeHand Medical", country: "China", contactPerson: "Mei Zhang", phone: "+86 532 4418 0930", email: "trade@safehand.cn", paymentTerms: "LC 60 days", active: true }
+];
+
+export const supplierSettlements: SupplierSettlement[] = [
+  { id: "sst-1", date: "2026-06-02", supplierId: "sup-renhe", supplierName: "Guangzhou Renhe Medical Technology", importId: "imp-77612", reference: "LC-77612", entryType: "Obligation", amount: "5229525.00", notes: "FOB obligation recorded from the approved import commercial value.", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-06-02T10:00:00.000Z" },
+  { id: "sst-2", date: "2026-06-05", supplierId: "sup-renhe", supplierName: "Guangzhou Renhe Medical Technology", importId: "imp-77612", reference: "LC-77612", entryType: "Payment", amount: "4000000.00", accountId: "acc-city", accountName: "City Bank PLC", paymentReference: "LC-MARGIN-77612", notes: "LC settlement posted against bank advice.", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-06-05T11:15:00.000Z" },
+  { id: "sst-3", date: "2026-07-07", supplierId: "sup-safe", supplierName: "Qingdao SafeHand Medical", importId: "imp-tt-8", reference: "TT-26008", entryType: "Obligation", amount: "578550.00", notes: "TT import supplier obligation.", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-07-07T09:20:00.000Z" },
+  { id: "sst-4", date: "2026-07-08", supplierId: "sup-safe", supplierName: "Qingdao SafeHand Medical", importId: "imp-tt-8", reference: "TT-26008", entryType: "Payment", amount: "578550.00", accountId: "acc-ebl", accountName: "Eastern Bank PLC", paymentReference: "EBL-TT-26008", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-07-08T10:05:00.000Z" }
+];
+
+export const financialPositionEntries: FinancialPositionEntry[] = [
+  { id: "fpe-1", asOfDate: "2026-01-01", category: "Owner Capital", label: "Verified opening owner capital", amount: "5500000.00", reference: "OPENING-2026", notes: "Controlled opening balance for prototype reporting.", status: "Posted", createdByUserId: "u-super", createdByName: "Sadia Karim", createdAt: "2026-08-23T09:00:00.000Z" },
+  { id: "fpe-2", asOfDate: "2026-01-01", category: "Fixed Assets", label: "Office and warehouse equipment", amount: "850000.00", reference: "FA-OPENING-2026", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-08-23T09:05:00.000Z" },
+  { id: "fpe-3", asOfDate: "2026-01-01", category: "Accumulated Depreciation", label: "Opening accumulated depreciation", amount: "125000.00", reference: "DEP-OPENING-2026", status: "Posted", createdByUserId: "u-accounts", createdByName: "Nusrat Jahan", createdAt: "2026-08-23T09:10:00.000Z" },
+  { id: "fpe-4", asOfDate: "2026-01-01", category: "Opening Retained Earnings", label: "Verified opening accumulated result", amount: "2140000.00", reference: "RE-OPENING-2026", status: "Posted", createdByUserId: "u-super", createdByName: "Sadia Karim", createdAt: "2026-08-23T09:15:00.000Z" }
 ];
 
 function uploadedDocument(input: {

@@ -49,7 +49,7 @@ export default function InventoryPage() {
         subtitle="One stock position with batch traceability, FIFO issue order and visible expiry awareness."
         actions={
           <>
-            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=inventory&report=${view === "movements" ? "stock-movement" : view === "batches" ? "expiry-report" : "stock-summary"}`)}>Open Report</Button> : null}
+            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports/${view === "movements" ? "stock-movement" : view === "batches" ? "expiry-report" : "stock-summary"}`)}>Open Report</Button> : null}
             {hasEffectivePermission(user, "inventory", "post") && hasEffectivePermission(user, "import", "view") ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Receive Finalized Import</Button> : null}
             {hasEffectivePermission(user, "products", "view") ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate("/app/settings?view=products")}>Product Master</Button> : null}
           </>

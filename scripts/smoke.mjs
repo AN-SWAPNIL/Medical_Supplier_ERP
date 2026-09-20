@@ -87,8 +87,8 @@ const routes = [
   ["accounts-mobile", "/app/accounts", 390, 1100, people.super],
   ["reports-desktop", "/app/reports", 1440, 1000, people.super],
   ["reports-mobile", "/app/reports", 390, 1100, people.super],
-  ["marketing-reports-desktop", "/app/reports?view=marketing&preset=month", 1440, 1200, people.salesManager],
-  ["marketing-reports-mobile", "/app/reports?view=marketing&preset=my-day", 390, 1200, people.sales],
+  ["marketing-reports-desktop", "/app/reports/daily-marketing", 1440, 1200, people.salesManager],
+  ["marketing-reports-mobile", "/app/reports/daily-marketing", 390, 1200, people.sales],
   ["reports-import-override", "/app/reports", 1440, 1000, people.import],
   ["smart-insights-desktop", "/app/insights", 1440, 1000, people.salesManager],
   ["smart-insights-mobile", "/app/insights", 390, 1000, people.sales],
@@ -163,32 +163,33 @@ if (preprintedWidth < 500) issues.push("Preprinted quotation content did not ret
 await preprinted.close();
 
 const reportPrint = await preparePage({ name: "report-print-modes", width: 1440, height: 1000, user: people.super });
-await reportPrint.goto(baseUrl + "/app/reports?view=print&category=imports&report=import-register", { waitUntil: "networkidle", timeout: 60000 });
+await reportPrint.goto(baseUrl + "/app/reports/import-register", { waitUntil: "networkidle", timeout: 60000 });
 if (await reportPrint.getByRole("tab", { name: "Without Background" }).count()) issues.push("Operational report page still exposes stationery choices outside print preview.");
-await reportPrint.getByRole("button", { name: "A4 Preview" }).click();
+await reportPrint.getByRole("button", { name: "Print Preview" }).click();
 await reportPrint.getByRole("button", { name: "Print / Save PDF" }).waitFor();
 if (new URL(reportPrint.url()).pathname !== "/app/print/operational-report/imports") issues.push("Operational report did not navigate to the shared print preview.");
 await reportPrint.getByRole("tab", { name: "Without Background" }).click();
 if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "preprinted") issues.push("Operational report without-background mode was not applied.");
 await reportPrint.getByRole("tab", { name: "With Background" }).click();
 if (await reportPrint.locator(".print-sheet").first().getAttribute("data-letterhead-mode") !== "digital") issues.push("Operational report background mode was not restored.");
+if (await reportPrint.locator("[data-report-page-edge='1.5mm-left-0.2mm-right']").count() < 1) issues.push("Operational report print shell does not expose the calibrated 1.5mm/0.2mm page-edge contract.");
 await reportPrint.screenshot({ path: "artifacts/report-print-modes.png", fullPage: true });
 await reportPrint.close();
 
 const reportCatalogue = await preparePage({ name: "report-catalogue-mobile", width: 390, height: 1100, user: people.super });
-await reportCatalogue.goto(baseUrl + "/app/reports?view=print&category=inventory", { waitUntil: "networkidle", timeout: 60000 });
-await reportCatalogue.getByPlaceholder("Search reports...").fill("stock summary");
+await reportCatalogue.goto(baseUrl + "/app/reports", { waitUntil: "networkidle", timeout: 60000 });
+await reportCatalogue.getByPlaceholder("Search reports by name or business area...").fill("stock summary");
 await reportCatalogue.getByRole("button", { name: /Stock Summary/ }).click();
 await reportCatalogue.getByRole("button", { name: "Back to Reports" }).waitFor();
-await reportCatalogue.getByRole("heading", { name: "Stock Summary", exact: true }).waitFor();
+await reportCatalogue.getByRole("heading", { name: "Stock Summary", exact: true, level: 1 }).waitFor();
 if (await reportCatalogue.evaluate(() => document.body.scrollWidth) > 394) issues.push("Mobile report catalogue has horizontal page overflow.");
 await reportCatalogue.screenshot({ path: "artifacts/report-catalogue-mobile.png", fullPage: true });
 await reportCatalogue.close();
 
 const legacyReportUrl = await preparePage({ name: "report-legacy-url", width: 1280, height: 900, user: people.super });
 await legacyReportUrl.goto(baseUrl + "/app/reports?view=imports&table=import-register", { waitUntil: "networkidle", timeout: 60000 });
-await legacyReportUrl.getByRole("heading", { name: "Import / Shipment Register", exact: true }).waitFor();
-if (new URL(legacyReportUrl.url()).searchParams.get("report") !== "import-register") issues.push("Legacy report URL was not normalized to the Update 9 catalogue URL.");
+await legacyReportUrl.getByRole("heading", { name: "Import / Shipment Register", exact: true, level: 1 }).waitFor();
+if (new URL(legacyReportUrl.url()).pathname !== "/app/reports/import-register") issues.push("Legacy report URL was not normalized to the canonical report detail URL.");
 await legacyReportUrl.close();
 
 const customerLedger = await preparePage({ name: "customer-ledger-desktop", width: 1440, height: 1000, user: people.super });
@@ -217,35 +218,28 @@ await customerActions.screenshot({ path: "artifacts/customer-marketing-history.p
 await customerActions.close();
 
 const employeeReport = await preparePage({ name: "employee-performance-desktop", width: 1440, height: 1100, user: people.salesManager });
-await employeeReport.goto(baseUrl + "/app/reports?view=print&category=employees&report=salesperson-performance&employee=all", { waitUntil: "networkidle", timeout: 60000 });
-await employeeReport.getByLabel("From Date").fill("2026-08-01");
-await employeeReport.getByLabel("To Date").fill("2026-08-31");
-await employeeReport.getByTestId("salesperson-performance-report").getByRole("heading", { name: "Sales Team Comparison", exact: true }).waitFor({ timeout: 30000 });
-await employeeReport.getByPlaceholder("Name / ID / territory").fill("SE-001");
-await employeeReport.getByRole("button", { name: "Rafiq Ahmed", exact: true }).click();
-await employeeReport.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
-if (new URL(employeeReport.url()).pathname !== "/app/employees") issues.push("Sales team comparison did not open the canonical Employee report.");
-await employeeReport.getByRole("tab", { name: "Monthly" }).click();
-await employeeReport.getByLabel("Report Month").fill("2026-08");
+await employeeReport.goto(baseUrl + "/app/reports/salesperson-performance?from=2026-08-01&to=2026-08-31", { waitUntil: "networkidle", timeout: 60000 });
+await employeeReport.getByRole("heading", { name: "Sales Team Comparison", exact: true, level: 1 }).waitFor({ timeout: 30000 });
 await employeeReport.getByRole("button", { name: "Print Preview" }).waitFor();
-const performanceText = await employeeReport.locator(".employee-report-screen").textContent();
-if (!/delivered sales/i.test(performanceText ?? "") || !/collections/i.test(performanceText ?? "")) issues.push("Canonical employee report summary is incomplete.");
+const performanceText = await employeeReport.locator("body").textContent();
+if (!/delivered sales/i.test(performanceText ?? "") || !/collections/i.test(performanceText ?? "")) issues.push("Sales team comparison is missing connected sales or collection values.");
 await employeeReport.screenshot({ path: "artifacts/employee-performance-desktop.png", fullPage: true });
 await employeeReport.close();
 
 const employeeHub = await preparePage({ name: "employee-hub-activity-flow", width: 1440, height: 1100, user: people.salesManager });
 await employeeHub.goto(baseUrl + "/app/employees?view=activity&employee=sales1", { waitUntil: "networkidle", timeout: 60000 });
-await employeeHub.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
-await employeeHub.getByRole("tab", { name: "Monthly" }).click();
-await employeeHub.getByLabel("Report Month").fill("2026-08");
-await employeeHub.getByRole("heading", { name: "Monthly Employee Activity & Performance Report" }).waitFor();
-await employeeHub.getByTestId("employee-report-screen").getByText("Employee Activity Log", { exact: true }).waitFor();
+await employeeHub.getByTestId("employee-activity-summary").waitFor({ timeout: 30000 });
 const employeeHubText = await employeeHub.locator("body").textContent();
-for (const expectedMetric of ["Verified Visits", "New Leads", "Collections", "Overall Target", "Target vs Actual", "Daily & Monthly Plan Review"]) {
-  if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity & Performance is missing " + expectedMetric + ".");
+for (const expectedMetric of ["Verified Visits", "New Leads", "Collections", "Target", "Recent activity"]) {
+  if (!employeeHubText?.includes(expectedMetric)) issues.push("Employee Activity Summary is missing " + expectedMetric + ".");
 }
 await employeeHub.screenshot({ path: "artifacts/employee-hub-activity-flow.png", fullPage: true });
 if (await employeeHub.getByRole("tab", { name: "Without Background" }).count()) issues.push("Employee workspace still exposes stationery choices outside print preview.");
+await employeeHub.getByRole("button", { name: "Open Full Report" }).click();
+await employeeHub.getByTestId("employee-activity-performance").waitFor({ timeout: 30000 });
+if (new URL(employeeHub.url()).pathname !== "/app/reports/employee-activity") issues.push("Employee summary did not open the canonical Reports detail page.");
+await employeeHub.getByRole("tab", { name: "Monthly" }).click();
+await employeeHub.getByLabel("Report Month").fill("2026-08");
 await employeeHub.getByRole("button", { name: "Print Preview" }).click();
 await employeeHub.getByRole("button", { name: "Print / Save PDF" }).waitFor();
 if (!new URL(employeeHub.url()).pathname.startsWith("/app/print/employee-activity/")) issues.push("Employee report did not navigate to the shared print preview.");
@@ -256,7 +250,7 @@ if (await employeeHub.locator(".print-sheet").first().getAttribute("data-letterh
 await employeeHub.getByRole("button", { name: "Back" }).click();
 await employeeHub.getByTestId("employee-activity-performance").waitFor();
 const reportUrl = new URL(employeeHub.url());
-if (reportUrl.pathname !== "/app/employees" || reportUrl.searchParams.get("view") !== "activity" || reportUrl.searchParams.get("employee") !== "sales1") issues.push("Employee report left its canonical Employees workspace.");
+if (reportUrl.pathname !== "/app/reports/employee-activity" || reportUrl.searchParams.get("employeeId") !== "sales1") issues.push("Employee print preview did not return to the canonical report detail page.");
 await employeeHub.close();
 
 const fieldTeam = await preparePage({ name: "field-team-interactions", width: 1440, height: 1050, user: people.salesManager });
@@ -492,7 +486,7 @@ if (marketingDashboardResponses < 2) issues.push("Marketing dashboard did not au
 await liveMarketing.close();
 
 const headers = { "x-user-id": people.super.id, "x-role": people.super.role, "Content-Type": "application/json" };
-for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/reports", "/api/marketing/dashboard", "/api/marketing/employees/sales1/snapshot?from=2026-08-01&to=2026-08-31", "/api/reports/marketing", "/api/settings/users", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
+for (const path of ["/api/health", "/api/dashboard", "/api/imports", "/api/inventory/stock", "/api/customers", "/api/expenses", "/api/supplier-settlements", "/api/financial-position", "/api/reports", "/api/marketing/dashboard", "/api/marketing/employees/sales1/snapshot?from=2026-08-01&to=2026-08-31", "/api/reports/marketing", "/api/settings/users", "/api/settings/decisions", "/api/field-team/current", "/api/ai/recommendations?entityType=insights&route=%2Fapp%2Finsights"]) {
   const response = await fetch(apiBaseUrl + path, { headers });
   console.log("api " + path + ": " + response.status);
   if (!response.ok) issues.push(path + " returned " + response.status);

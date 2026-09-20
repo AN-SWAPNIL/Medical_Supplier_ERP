@@ -23,6 +23,7 @@ export type Capability =
   | "finalize_landed_cost"
   | "reopen_landed_cost"
   | "view_profit"
+  | "view_financial_position"
   | "approve_stock_override"
   | "manage_users"
   | "manage_user_access"
@@ -77,6 +78,39 @@ export type Supplier = {
   email: string;
   paymentTerms: string;
   active: boolean;
+};
+
+export type SupplierSettlement = {
+  id: string;
+  date: string;
+  supplierId: string;
+  supplierName: string;
+  importId?: string;
+  reference: string;
+  entryType: "Obligation" | "Payment";
+  amount: DecimalString;
+  accountId?: string;
+  accountName?: string;
+  paymentReference?: string;
+  notes?: string;
+  status: "Posted" | "Reversed";
+  createdByUserId: string;
+  createdByName: string;
+  createdAt: string;
+};
+
+export type FinancialPositionEntry = {
+  id: string;
+  asOfDate: string;
+  category: "Owner Capital" | "Fixed Assets" | "Accumulated Depreciation" | "Statutory Payables" | "Other Receivables" | "Other Payables" | "Opening Retained Earnings";
+  label: string;
+  amount: DecimalString;
+  reference: string;
+  notes?: string;
+  status: "Posted" | "Reversed";
+  createdByUserId: string;
+  createdByName: string;
+  createdAt: string;
 };
 
 export type ImportItem = {
@@ -906,6 +940,8 @@ export type ReportData = {
     inventory: ReportTable[];
     sales: ReportTable[];
     expenses: ReportTable[];
+    employees: ReportTable[];
+    controls: ReportTable[];
   };
 };
 

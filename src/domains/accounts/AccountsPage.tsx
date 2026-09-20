@@ -8,20 +8,21 @@ import ExpenseEntryForm from "./ExpenseEntryForm";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Modal, Panel, Segmented, TableFrame, inputClass, labelClass, textareaClass } from "../components";
-import type { AccountTransaction, DocumentRecord, Expense } from "../erp.types";
+import type { AccountTransaction, DocumentRecord, Expense, FinancialPositionEntry, Supplier, SupplierSettlement } from "../erp.types";
 import { accountsService, employeeService, salesService } from "../services";
 import { useAuthStore } from "../../lib/auth/session";
-import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import { businessDate } from "../../lib/date";
+import { hasCapability, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { useToastStore } from "../../lib/ui/toast";
 import { formatCurrency } from "../../utils/format";
 
-type View = "expenses" | "accounts" | "transactions" | "dues";
+type View = "expenses" | "accounts" | "transactions" | "dues" | "position";
 type Task = { run: () => Promise<unknown>; success: string };
 
 export default function AccountsPage() {
   const [params, setParams] = useSearchParams();
   const requestedView = params.get("view");
-  const initialView = (["expenses", "accounts", "transactions", "dues"] as View[]).includes(requestedView as View) ? requestedView as View : "expenses";
+  const initialView = (["expenses", "accounts", "transactions", "dues", "position"] as View[]).includes(requestedView as View) ? requestedView as View : "expenses";
   const [view, setViewState] = useState<View>(initialView);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
@@ -29,6 +30,8 @@ export default function AccountsPage() {
   const [reverseReason, setReverseReason] = useState("");
   const [viewingDocument, setViewingDocument] = useState<DocumentRecord | null>(null);
   const [transactionOpen, setTransactionOpen] = useState(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const [positionOpen, setPositionOpen] = useState(false);
   const user = useAuthStore((state) => state.session?.user);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -37,6 +40,7 @@ export default function AccountsPage() {
   const canViewReports = hasEffectivePermission(user, "reports", "view");
   const canCreateCategory = hasEffectivePermission(user, "settings", "create");
   const canPostCollection = hasEffectivePermission(user, "sales", "post");
+  const canViewPosition = hasCapability(user, "view_financial_position");
 
   const setView = (next: View) => {
     setViewState(next);
@@ -44,7 +48,7 @@ export default function AccountsPage() {
   };
 
   useEffect(() => {
-    if ((["expenses", "accounts", "transactions", "dues"] as View[]).includes(requestedView as View) && requestedView !== view) setViewState(requestedView as View);
+    if ((["expenses", "accounts", "transactions", "dues", "position"] as View[]).includes(requestedView as View) && requestedView !== view) setViewState(requestedView as View);
   }, [requestedView, view]);
 
   useEffect(() => {
@@ -66,7 +70,10 @@ export default function AccountsPage() {
   const customersQuery = useQuery({ queryKey: ["sales", "customers"], queryFn: salesService.customers });
   const collectionsQuery = useQuery({ queryKey: ["sales", "collections"], queryFn: salesService.collections });
   const employeesQuery = useQuery({ queryKey: ["employees", "directory", "all", user?.id], queryFn: () => employeeService.directory("all") });
-  const queries = [expenseQuery, categoriesQuery, accountsQuery, transactionsQuery, customersQuery, collectionsQuery, employeesQuery];
+  const suppliersQuery = useQuery({ queryKey: ["accounts", "suppliers"], queryFn: accountsService.suppliers });
+  const settlementsQuery = useQuery({ queryKey: ["accounts", "supplier-settlements"], queryFn: accountsService.supplierSettlements });
+  const positionQuery = useQuery({ queryKey: ["accounts", "financial-position"], queryFn: accountsService.financialPosition, enabled: canViewPosition });
+  const queries = [expenseQuery, categoriesQuery, accountsQuery, transactionsQuery, customersQuery, collectionsQuery, employeesQuery, suppliersQuery, settlementsQuery, ...(canViewPosition ? [positionQuery] : [])];
   const error = queries.find((query) => query.error)?.error;
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -82,6 +89,8 @@ export default function AccountsPage() {
       setReverseExpense(null);
       setReverseReason("");
       setTransactionOpen(false);
+      setSettlementOpen(false);
+      setPositionOpen(false);
       pushToast({ kind: "success", title: task.success });
     },
     onError: (error) => pushToast({ kind: "error", title: "Accounts action failed", message: error instanceof Error ? error.message : undefined })
@@ -95,6 +104,9 @@ export default function AccountsPage() {
   const transactions = transactionsQuery.data ?? [];
   const customers = customersQuery.data ?? [];
   const collections = collectionsQuery.data ?? [];
+  const suppliers = suppliersQuery.data ?? [];
+  const settlements = settlementsQuery.data ?? [];
+  const positionEntries = positionQuery.data ?? [];
   const postedExpenses = expenses.filter((expense) => expense.status === "Posted");
   const totalExpense = postedExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const totalBalance = accounts.reduce((sum, account) => sum + Number(account.balance), 0);
@@ -109,8 +121,8 @@ export default function AccountsPage() {
         subtitle="Daily expenditure, TA/DA, collections, customer dues and simple cash/bank transactions. This is not a full accounting replacement."
         actions={
           <>
-            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports?view=print&category=${view === "dues" ? "customers" : "expenses"}&report=${view === "expenses" ? "daily-expenditure" : view === "dues" ? "customer-dues" : view === "accounts" ? "cash-movement-summary" : "account-transactions"}`)}>Open Report</Button> : null}
-            {view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "transactions" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setTransactionOpen(true)}>Post Voucher</Button> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : null}
+            {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports/${view === "expenses" ? "daily-expenditure" : view === "dues" ? "customer-dues" : view === "accounts" ? "cash-movement-summary" : view === "position" ? "balance-sheet" : "account-transactions"}`)}>Open Report</Button> : null}
+            {view === "expenses" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseOpen(true)}>Post Expense</Button> : view === "transactions" && canPost ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setTransactionOpen(true)}>Post Voucher</Button> : view === "position" && canPost ? <><Button icon={<Plus className="h-4 w-4" />} onClick={() => setSettlementOpen(true)}>Supplier Entry</Button>{canViewPosition ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPositionOpen(true)}>Position Entry</Button> : null}</> : view === "dues" && canPostCollection ? <Button icon={<Banknote className="h-4 w-4" />} onClick={() => navigate("/app/sales?view=collections")}>Post Collection</Button> : null}
           </>
         }
       />
@@ -131,7 +143,8 @@ export default function AccountsPage() {
           { value: "expenses", label: "Daily Expenses", count: expenses.length },
           { value: "accounts", label: "Cash & Bank", count: accounts.length },
           { value: "transactions", label: "Account Ledger", count: transactions.length },
-          { value: "dues", label: "Customer Dues & Collections", count: customers.filter((customer) => Number(customer.currentDue) > 0).length }
+          { value: "dues", label: "Customer Dues & Collections", count: customers.filter((customer) => Number(customer.currentDue) > 0).length },
+          { value: "position", label: "Supplier & Position", count: settlements.length + positionEntries.length }
         ]}
       />
 
@@ -174,10 +187,17 @@ export default function AccountsPage() {
         </div>
       ) : null}
 
+      {view === "position" ? <div className="grid gap-4 xl:grid-cols-2">
+        <Panel title="Supplier settlement ledger" subtitle="Obligations and payments are posted separately; payable is obligation less payment."><TableFrame><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-3">Date</th><th className="px-3 py-3">Supplier / Reference</th><th className="px-3 py-3">Entry</th><th className="px-3 py-3">Account</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{settlements.map((entry) => <tr key={entry.id}><td className="px-3 py-3 text-slate-600">{entry.date}</td><td className="px-3 py-3"><strong>{entry.supplierName}</strong><small className="block text-slate-500">{entry.reference}</small></td><td className="px-3 py-3"><StatusBadge status={entry.entryType} /></td><td className="px-3 py-3 text-slate-600">{entry.accountName ?? "-"}</td><td className="px-3 py-3 text-right font-bold">{formatCurrency(entry.amount)}</td></tr>)}</tbody></table></TableFrame></Panel>
+        <Panel title="Controlled financial-position entries" subtitle="Verified opening and adjustment sources for Balance Sheet reporting.">{canViewPosition ? <TableFrame><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-3">As Of</th><th className="px-3 py-3">Category / Label</th><th className="px-3 py-3">Reference</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{positionEntries.map((entry) => <tr key={entry.id}><td className="px-3 py-3 text-slate-600">{entry.asOfDate}</td><td className="px-3 py-3"><strong>{entry.category}</strong><small className="block text-slate-500">{entry.label}</small></td><td className="px-3 py-3 text-slate-600">{entry.reference}</td><td className="px-3 py-3 text-right font-bold">{formatCurrency(entry.amount)}</td></tr>)}</tbody></table></TableFrame> : <div className="p-8 text-center text-sm text-slate-500">Financial-position details require the assigned capability.</div>}</Panel>
+      </div> : null}
+
       <Modal open={expenseOpen} title="Post daily expense" subtitle="Choose who or which operating unit incurred the expense; Entered By comes from your login." onClose={() => setExpenseOpen(false)} width="max-w-4xl"><ExpenseEntryForm categories={categoriesQuery.data ?? []} accounts={accounts} employees={employeesQuery.data ?? []} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createExpense(payload), success: "Expense posted to operational ledger" })} /></Modal>
       <Modal open={categoryOpen} title="Add expense category" subtitle="Categories remain dynamic; existing expense history keeps its posted name." onClose={() => setCategoryOpen(false)}><CategoryForm busy={action.isPending} onSubmit={(name) => action.mutate({ run: () => accountsService.createCategory(name), success: "Expense category added" })} /></Modal>
       <Modal open={Boolean(reverseExpense)} title="Reverse posted expense" subtitle="Reversal restores the selected account balance and creates an audit trail." onClose={() => { setReverseExpense(null); setReverseReason(""); }}><form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); if (reverseExpense) action.mutate({ run: () => accountsService.reverseExpense(reverseExpense.id, reverseReason), success: "Expense reversed and balance restored" }); }}><div className="rounded-md bg-slate-50 p-3 text-sm"><strong>{reverseExpense?.categoryName}</strong><span className="block text-slate-500">{formatCurrency(reverseExpense?.amount ?? 0)} · {reverseExpense?.remarks}</span></div><label><span className={labelClass}>Reversal Reason</span><textarea className={textareaClass} minLength={5} required value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} /></label><div className="flex justify-end"><Button type="submit" variant="primary" icon={<RotateCcw className="h-4 w-4" />} disabled={action.isPending || reverseReason.trim().length < 5}>Post Reversal</Button></div></form></Modal>
       <Modal open={transactionOpen} title="Post debit or credit voucher" subtitle="Use Advance and Company Loan only for controlled non-expense movements. The selected direction determines the voucher type." onClose={() => setTransactionOpen(false)}><TransactionForm accounts={accounts} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createTransaction(payload), success: "Voucher posted to account ledger" })} /></Modal>
+      <Modal open={settlementOpen} title="Post supplier settlement entry" subtitle="Record an obligation or a real payment against an import, PO or supplier reference." onClose={() => setSettlementOpen(false)}><SupplierSettlementForm suppliers={suppliers} accounts={accounts} busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createSupplierSettlement(payload), success: "Supplier settlement entry posted" })} /></Modal>
+      <Modal open={positionOpen} title="Post financial-position entry" subtitle="Restricted, auditable opening or adjustment source for Balance Sheet reporting." onClose={() => setPositionOpen(false)}><FinancialPositionForm busy={action.isPending} onSubmit={(payload) => action.mutate({ run: () => accountsService.createFinancialPosition(payload), success: "Financial-position entry posted" })} /></Modal>
       <DocumentViewer document={viewingDocument} onClose={() => setViewingDocument(null)} />
     </>
   );
@@ -192,4 +212,17 @@ function TransactionForm({ accounts, busy, onSubmit }: { accounts: Array<{ id: s
 function CategoryForm({ busy, onSubmit }: { busy: boolean; onSubmit: (name: string) => void }) {
   const [name, setName] = useState("");
   return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); onSubmit(name); }}><label><span className={labelClass}>Category Name</span><input className={inputClass} minLength={2} required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Regulatory renewal" /></label><div className="flex justify-end"><Button type="submit" variant="primary" icon={<Plus className="h-4 w-4" />} disabled={busy}>Add Category</Button></div></form>;
+}
+
+function SupplierSettlementForm({ suppliers, accounts, busy, onSubmit }: { suppliers: Supplier[]; accounts: Array<{ id: string; name: string }>; busy: boolean; onSubmit: (payload: Partial<SupplierSettlement>) => void }) {
+  const [form, setForm] = useState({ date: businessDate(), supplierId: "", reference: "", entryType: "Obligation" as SupplierSettlement["entryType"], amount: "", accountId: "", paymentReference: "", notes: "" });
+  const change = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  return <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}><label><span className={labelClass}>Date</span><input className={inputClass} type="date" required value={form.date} onChange={(event) => change("date", event.target.value)} /></label><label><span className={labelClass}>Supplier</span><select className={inputClass} required value={form.supplierId} onChange={(event) => change("supplierId", event.target.value)}><option value="">Select supplier</option>{suppliers.map((supplier) => <option value={supplier.id} key={supplier.id}>{supplier.name}</option>)}</select></label><label><span className={labelClass}>Entry Type</span><select className={inputClass} value={form.entryType} onChange={(event) => change("entryType", event.target.value)}><option>Obligation</option><option>Payment</option></select></label><label><span className={labelClass}>Import / PO / Reference</span><input className={inputClass} required value={form.reference} onChange={(event) => change("reference", event.target.value)} placeholder="LC-77612 or PO-2026-001" /></label><label><span className={labelClass}>Amount (BDT)</span><input className={inputClass} type="number" min="0.01" step="0.01" required value={form.amount} onChange={(event) => change("amount", event.target.value)} /></label>{form.entryType === "Payment" ? <label><span className={labelClass}>Payment Account</span><select className={inputClass} required value={form.accountId} onChange={(event) => change("accountId", event.target.value)}><option value="">Select account</option>{accounts.map((account) => <option value={account.id} key={account.id}>{account.name}</option>)}</select></label> : null}{form.entryType === "Payment" ? <label><span className={labelClass}>Payment Reference</span><input className={inputClass} value={form.paymentReference} onChange={(event) => change("paymentReference", event.target.value)} /></label> : null}<label className="sm:col-span-2"><span className={labelClass}>Notes</span><textarea className={textareaClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} /></label><div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Post Supplier Entry</Button></div></form>;
+}
+
+function FinancialPositionForm({ busy, onSubmit }: { busy: boolean; onSubmit: (payload: Partial<FinancialPositionEntry>) => void }) {
+  const [form, setForm] = useState({ asOfDate: businessDate(), category: "Owner Capital" as FinancialPositionEntry["category"], label: "", amount: "", reference: "", notes: "" });
+  const change = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const categories: FinancialPositionEntry["category"][] = ["Owner Capital", "Fixed Assets", "Accumulated Depreciation", "Statutory Payables", "Other Receivables", "Other Payables", "Opening Retained Earnings"];
+  return <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}><label><span className={labelClass}>As-of Date</span><input className={inputClass} type="date" required value={form.asOfDate} onChange={(event) => change("asOfDate", event.target.value)} /></label><label><span className={labelClass}>Position Category</span><select className={inputClass} value={form.category} onChange={(event) => change("category", event.target.value)}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label><span className={labelClass}>Label</span><input className={inputClass} required value={form.label} onChange={(event) => change("label", event.target.value)} placeholder="Verified opening owner capital" /></label><label><span className={labelClass}>Amount (BDT)</span><input className={inputClass} type="number" min="0.01" step="0.01" required value={form.amount} onChange={(event) => change("amount", event.target.value)} /></label><label><span className={labelClass}>Source Reference</span><input className={inputClass} required value={form.reference} onChange={(event) => change("reference", event.target.value)} placeholder="Board approval or opening schedule" /></label><label><span className={labelClass}>Notes</span><input className={inputClass} value={form.notes} onChange={(event) => change("notes", event.target.value)} /></label><div className="flex justify-end sm:col-span-2"><Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={busy}>Post Position Entry</Button></div></form>;
 }

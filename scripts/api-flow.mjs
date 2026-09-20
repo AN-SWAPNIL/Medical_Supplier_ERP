@@ -531,7 +531,8 @@ async function run() {
   assert.ok(!table(accountsReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
   assert.deepEqual(accountsReport.importCosts, []);
   assert.deepEqual(accountsReport.inventory, []);
-  assert.deepEqual(accountsReport.tables.imports, []);
+  assert.deepEqual(accountsReport.tables.imports.map((entry) => entry.id), ["supplier-list", "supplier-statement"]);
+  assert.ok(!accountsReport.tables.imports.some((entry) => ["import-po-register", "landed-cost-summary", "po-receipt-difference"].includes(entry.id)));
   assert.deepEqual(accountsReport.tables.inventory, []);
   const historyReport = await api("/api/reports?from=2026-07-01&to=" + today);
   assert.ok(table(historyReport, "sales", "delivery-invoice-exceptions").rows.some((row) => row.type === "Delivered not invoiced"));

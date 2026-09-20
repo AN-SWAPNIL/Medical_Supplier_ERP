@@ -55,12 +55,16 @@ import type {
   StockBatch,
   StockMovement,
   Supplier,
+  SupplierSettlement,
+  FinancialPositionEntry,
   WarehouseConfig,
   WarehouseReceipt
 } from "./erp.types";
 import {
   AccountSchema,
   AccountTransactionSchema,
+  SupplierSettlementSchema,
+  FinancialPositionEntrySchema,
   AuditEventSchema,
   BusinessDecisionSchema,
   AIChatResponseSchema,
@@ -257,8 +261,13 @@ export const accountsService = {
   categories: () => get<ExpenseCategory[]>("/api/expense-categories", z.array(ExpenseCategorySchema)),
   createCategory: (name: string) => post<ExpenseCategory>("/api/expense-categories", { name }, ExpenseCategorySchema),
   accounts: () => get<CashBankAccount[]>("/api/accounts", z.array(AccountSchema)),
+  suppliers: () => get<Supplier[]>("/api/accounts/suppliers", z.array(SupplierSchema)),
   transactions: () => get<AccountTransaction[]>("/api/account-transactions", z.array(AccountTransactionSchema)),
-  createTransaction: (payload: Partial<AccountTransaction>) => post<AccountTransaction>("/api/account-transactions", payload, AccountTransactionSchema)
+  createTransaction: (payload: Partial<AccountTransaction>) => post<AccountTransaction>("/api/account-transactions", payload, AccountTransactionSchema),
+  supplierSettlements: () => get<SupplierSettlement[]>("/api/supplier-settlements", z.array(SupplierSettlementSchema)),
+  createSupplierSettlement: (payload: Partial<SupplierSettlement>) => post<SupplierSettlement>("/api/supplier-settlements", payload, SupplierSettlementSchema),
+  financialPosition: () => get<FinancialPositionEntry[]>("/api/financial-position", z.array(FinancialPositionEntrySchema)),
+  createFinancialPosition: (payload: Partial<FinancialPositionEntry>) => post<FinancialPositionEntry>("/api/financial-position", payload, FinancialPositionEntrySchema)
 };
 
 export const reportService = {
