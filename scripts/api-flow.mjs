@@ -95,6 +95,17 @@ async function run() {
   const monthStart = today.slice(0, 7) + "-01";
   const suffix = String(Date.now()).slice(-7);
 
+  console.log("Seed coverage. Every report family has linked representative data");
+  const seededReport = await api("/api/reports?from=2026-09-01&to=2026-09-20");
+  const emptySeedTables = Object.entries(seededReport.tables).flatMap(([group, reportTables]) => reportTables.filter((entry) => entry.rows.length === 0).map((entry) => `${group}/${entry.id}`));
+  assert.deepEqual(emptySeedTables, [], `Seeded report tables must contain representative data: ${emptySeedTables.join(", ")}`);
+  const seededMarketing = await api("/api/reports/marketing?from=2026-09-01&to=2026-09-20&employeeId=all");
+  assert.ok(seededMarketing.tables.every((entry) => entry.rows.length > 0), "Every marketing report strategy needs representative demo rows.");
+  const seededPerformance = await api("/api/reports/salespeople?from=2026-09-01&to=2026-09-20&employeeId=all");
+  assert.ok(seededPerformance.comparison.length > 0);
+  const seededEmployeeActivity = await api("/api/marketing/employees/sales1/snapshot?from=2026-09-01&to=2026-09-20");
+  assert.ok(seededEmployeeActivity.recentActivities.length > 0);
+
   console.log("0. Effective access, delegated employee management and escalation protection");
   const delegatedUsers = await api("/api/settings/users", { as: identities.salesManager });
   assert.ok(delegatedUsers.length > 1);
@@ -526,6 +537,8 @@ async function run() {
   assert.ok(table(currentReport, "expenses", "expense-by-person").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "expenses", "ta-da").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
+  const emptyCurrentReportTables = Object.entries(currentReport.tables).flatMap(([group, reportTables]) => reportTables.filter((entry) => entry.rows.length === 0).map((entry) => `${group}/${entry.id}`));
+  assert.deepEqual(emptyCurrentReportTables, [], `Current-period demo reports must all contain representative data: ${emptyCurrentReportTables.join(", ")}`);
   const accountsReport = await api("/api/reports?from=" + monthStart + "&to=" + today, { as: identities.accounts });
   assert.ok(!accountsReport.sales.some((entry) => entry.label === "Realized gross profit"));
   assert.ok(!table(accountsReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
