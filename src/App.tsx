@@ -26,6 +26,7 @@ const PrintPage = lazy(() => import("./domains/print/PrintPage"));
 const ReportsPage = lazy(() => import("./domains/reports/ReportsPage"));
 const ReportDetailPage = lazy(() => import("./domains/reports/ReportDetailPage"));
 const SalesPage = lazy(() => import("./domains/sales/SalesPage"));
+const SalesOrderWorkspacePage = lazy(() => import("./domains/sales/SalesOrderWorkspacePage"));
 const EmployeesPage = lazy(() => import("./domains/employees/EmployeesPage"));
 const SettingsPage = lazy(() => import("./domains/settings/SettingsPage"));
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage"));
@@ -76,6 +77,7 @@ function App() {
           <Route path="imports/:importId" element={guarded("import", <ImportWorkspacePage />)} />
           <Route path="inventory" element={guarded("inventory", <InventoryPage />)} />
           <Route path="sales" element={<RequireAnyPermission permissions={["sales", "marketing"]}>{deferred(<SalesPage />)}</RequireAnyPermission>} />
+          <Route path="sales/orders/:orderId" element={guarded("sales", <SalesOrderWorkspacePage />)} />
           <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
           <Route path="employees" element={<RequireEmployeeHubAccess>{deferred(<EmployeesPage />)}</RequireEmployeeHubAccess>} />
           <Route path="reports" element={guarded("reports", <ReportsPage />)} />

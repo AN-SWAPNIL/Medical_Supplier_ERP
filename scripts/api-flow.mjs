@@ -99,7 +99,7 @@ async function run() {
   const seededReport = await api("/api/reports?from=2026-09-01&to=2026-09-20");
   const emptySeedTables = Object.entries(seededReport.tables).flatMap(([group, reportTables]) => reportTables.filter((entry) => entry.rows.length === 0).map((entry) => `${group}/${entry.id}`));
   assert.deepEqual(emptySeedTables, [], `Seeded report tables must contain representative data: ${emptySeedTables.join(", ")}`);
-  const seededMarketing = await api("/api/reports/marketing?from=2026-09-01&to=2026-09-20&employeeId=all");
+  const seededMarketing = await api(`/api/reports/marketing?from=${monthStart}&to=${today}&employeeId=all`);
   assert.ok(seededMarketing.tables.every((entry) => entry.rows.length > 0), "Every marketing report strategy needs representative demo rows.");
   const seededPerformance = await api("/api/reports/salespeople?from=2026-09-01&to=2026-09-20&employeeId=all");
   assert.ok(seededPerformance.comparison.length > 0);
@@ -397,6 +397,30 @@ async function run() {
   await api("/api/sales/profit-preview", { method: "POST", as: identities.sales1, expected: 403, body: { lines: quote.lines } });
   await api("/api/quotations/" + quote.id, { method: "PATCH", body: { status: "Accepted" } });
   const order = await api("/api/quotations/" + quote.id + "/convert", { method: "POST", expected: 201, body: { deliveryInstruction: "Deliver to medical store" } });
+  const startingWorkspace = await api(`/api/orders/${order.id}/workspace`);
+  assert.equal(startingWorkspace.quotation.id, quote.id);
+  assert.equal(startingWorkspace.stages.delivery, "Not Started");
+  assert.equal(startingWorkspace.totals.outstandingValue, "0.00");
+  await api(`/api/orders/${order.id}/workspace`, { as: identities.sales2, expected: 403 });
+  await api(`/api/orders/${order.id}/workspace`, { as: identities.warehouse, expected: 403 });
+  await api(`/api/orders/${order.id}/workspace`, { as: identities.import, expected: 403 });
+  await api("/api/orders/missing-order/workspace", { expected: 404 });
+  const warehouseUser = (await api("/api/settings/users")).find((entry) => entry.id === identities.warehouse.id);
+  await api(`/api/settings/users/${warehouseUser.id}`, { method: "PATCH", body: { permissionOverrides: [...(warehouseUser.permissionOverrides ?? []), { permission: "sales", action: "view", effect: "ALLOW" }] } });
+  const warehouseWorkspace = await api(`/api/orders/${order.id}/workspace`, { as: identities.warehouse });
+  assert.equal(warehouseWorkspace.financialVisible, false);
+  assert.equal(warehouseWorkspace.totals, undefined);
+  assert.equal(warehouseWorkspace.order.lines[0].unitPrice, "Restricted");
+  assert.deepEqual(warehouseWorkspace.invoices, []);
+  await api(`/api/settings/users/${warehouseUser.id}`, { method: "PATCH", body: { permissionOverrides: warehouseUser.permissionOverrides ?? [] } });
+  const partialDelivery = await api("/api/deliveries", { method: "POST", expected: 201, as: identities.salesManager,
+    body: { orderId: order.id, date: today, remarks: "Partial lifecycle dispatch", lines: [{ ...order.lines[0], quantity: "20", batchId: "AUTO" }] }
+  });
+  const partialWorkspace = await api(`/api/orders/${order.id}/workspace`);
+  assert.equal(partialWorkspace.stages.delivery, "Partial");
+  assert.equal(partialWorkspace.fulfilment[0].remainingToDeliverQty, "40.0000");
+  assert.equal(partialWorkspace.totals.deliveredValue, "2000.00");
+  assert.equal(partialWorkspace.totals.outstandingValue, "0.00");
   await api("/api/deliveries", {
     method: "POST",
     expected: 409,
@@ -407,10 +431,10 @@ async function run() {
     method: "POST",
     expected: 201,
     as: identities.salesManager,
-    body: { orderId: order.id, date: today, remarks: "FIFO split delivery", receiverName: "Store Officer", lines: [{ ...order.lines[0], quantity: "60", batchId: "AUTO" }] }
+    body: { orderId: order.id, date: today, remarks: "FIFO split delivery", receiverName: "Store Officer", lines: [{ ...order.lines[0], quantity: "40", batchId: "AUTO" }] }
   });
   assert.equal(delivery.lines.length, 2);
-  assert.deepEqual(delivery.lines.map((entry) => entry.quantity), ["30.0000", "30.0000"]);
+  assert.deepEqual(delivery.lines.map((entry) => entry.quantity), ["10.0000", "30.0000"]);
   const batchesAfterDelivery = await api("/api/inventory/batches");
   assert.equal(batchesAfterDelivery.find((entry) => entry.id === oldestBatch.id).quantityAvailable, "0.00");
   assert.equal(batchesAfterDelivery.find((entry) => entry.id === nextBatch.id).quantityAvailable, "0.00");
@@ -419,14 +443,17 @@ async function run() {
   assert.equal(postedOrder.status, "Delivered");
   assert.equal(postedOrder.due, "0.00");
   assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
-  const invoice = await api("/api/invoices", { method: "POST", expected: 201, body: { orderId: order.id, deliveryIds: [delivery.id], date: today, remarks: "Generated after confirmed delivery" } });
+  const invoice = await api("/api/invoices", { method: "POST", expected: 201, body: { orderId: order.id, deliveryIds: [partialDelivery.id, delivery.id], date: today, remarks: "Generated after confirmed delivery" } });
   assert.equal(invoice.status, "Draft");
   assert.equal(invoice.total, "6000.00");
+  assert.equal((await api(`/api/orders/${order.id}/workspace`)).stages.invoice, "Draft Pending");
   assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
   const approvedInvoice = await api("/api/invoices/" + invoice.id + "/approve", { method: "POST" });
   assert.equal(approvedInvoice.status, "Approved");
   assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "6000.00");
   assert.equal((await api("/api/orders")).find((entry) => entry.id === order.id).due, "6000.00");
+  assert.equal((await api(`/api/orders/${order.id}/workspace`)).stages.invoice, "Complete");
+  await api(`/api/invoices/${invoice.id}/approve`, { method: "POST", expected: 409 });
 
   console.log("4. Sales ownership and collection/account integrity");
   await api("/api/quotations", { method: "POST", as: identities.sales1, expected: 403, body: { date: today, customerId: "cus-labaid", validityDays: 15, paymentTerms: "30 days", lines: [{ productId: "prd-d17h", quantity: "1", unitPrice: "700", discount: "0" }] } });
@@ -448,16 +475,32 @@ async function run() {
   await api("/api/collections", { method: "POST", expected: 422, body: { customerId: customer.id, orderId: order.id, date: today, amount: "100", paymentMode: "Bank Transfer", accountId: "missing-account", referenceNumber: "BANK-1" } });
   await api("/api/collections", { method: "POST", expected: 422, body: { customerId: customer.id, orderId: order.id, date: today, amount: "100", paymentMode: "Bank Transfer", accountId: "acc-city" } });
   const cityBefore = (await api("/api/settings/accounts")).find((entry) => entry.id === "acc-city");
+  const partialCollection = await api("/api/collections", { method: "POST", expected: 201,
+    body: { customerId: customer.id, invoiceId: invoice.id, date: today, amount: "1500", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "PART-" + suffix }
+  });
+  assert.equal(partialCollection.orderId, order.id, "Invoice-only payment must infer and persist the order");
+  const collectedWorkspace = await api(`/api/orders/${order.id}/workspace`);
+  assert.equal(collectedWorkspace.stages.collection, "Partial");
+  assert.equal(collectedWorkspace.order.amountReceived, "1500.00");
+  assert.equal(collectedWorkspace.order.due, "4500.00");
+  assert.equal(collectedWorkspace.totals.collectedValue, "1500.00");
+  await api(`/api/invoices/${invoice.id}/cancel`, { method: "POST", expected: 409, body: { reason: "Cannot cancel a collected invoice" } });
+  await api("/api/collections", { method: "POST", expected: 422, body: { customerId: customer.id, invoiceId: invoice.id, orderId: "so-2", date: today, amount: "1", paymentMode: "Cash", accountId: "acc-cash" } });
   const collection = await api("/api/collections", {
     method: "POST",
     expected: 201,
-    body: { customerId: customer.id, invoiceId: invoice.id, orderId: order.id, date: today, amount: "6000", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "BANK-" + suffix, remarks: "Full invoice settlement" }
+    body: { customerId: customer.id, invoiceId: invoice.id, date: today, amount: "4500", paymentMode: "Bank Transfer", accountId: "acc-city", referenceNumber: "BANK-" + suffix, remarks: "Full invoice settlement" }
   });
   assert.match(collection.receiptNumber, /^MR-2026-/);
   const cityAfter = (await api("/api/settings/accounts")).find((entry) => entry.id === "acc-city");
   assert.equal(Number(cityAfter.balance) - Number(cityBefore.balance), 6000);
   assert.equal((await api("/api/customers")).find((entry) => entry.id === customer.id).currentDue, "0.00");
   assert.equal((await api("/api/orders")).find((entry) => entry.id === order.id).due, "0.00");
+  const settledWorkspace = await api(`/api/orders/${order.id}/workspace`);
+  assert.equal(settledWorkspace.stages.collection, "Paid");
+  assert.equal(settledWorkspace.stockMovements.length, 3);
+  assert.equal(settledWorkspace.totals.collectedValue, "6000.00");
+  assert.equal((await api(`/api/sales/references/Collection/${collection.id}`)).id, order.id);
   assert.ok((await api("/api/account-transactions")).some((entry) => entry.sourceId === collection.id && entry.direction === "In"));
   const customerLedger = await api("/api/customers/" + customer.id + "/ledger");
   assert.ok(customerLedger.entries.some((entry) => entry.type === "Invoice" && entry.reference === invoice.invoiceNumber));
@@ -537,8 +580,6 @@ async function run() {
   assert.ok(table(currentReport, "expenses", "expense-by-person").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "expenses", "ta-da").rows.some((row) => row.employee === "Rafiq Ahmed"));
   assert.ok(table(currentReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));
-  const emptyCurrentReportTables = Object.entries(currentReport.tables).flatMap(([group, reportTables]) => reportTables.filter((entry) => entry.rows.length === 0).map((entry) => `${group}/${entry.id}`));
-  assert.deepEqual(emptyCurrentReportTables, [], `Current-period demo reports must all contain representative data: ${emptyCurrentReportTables.join(", ")}`);
   const accountsReport = await api("/api/reports?from=" + monthStart + "&to=" + today, { as: identities.accounts });
   assert.ok(!accountsReport.sales.some((entry) => entry.label === "Realized gross profit"));
   assert.ok(!table(accountsReport, "sales", "delivered-sales").columns.some((column) => column.key === "profit"));

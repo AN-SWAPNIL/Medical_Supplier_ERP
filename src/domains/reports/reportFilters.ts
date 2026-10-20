@@ -2,6 +2,7 @@ import type { ReportTable } from "../erp.types";
 import type { ReportFilterKey } from "./reportCatalog";
 
 export const reportFilterLabels: Record<ReportFilterKey, string> = {
+  order: "Sales Order",
   salesperson: "Salesperson",
   customer: "Customer / Buyer",
   product: "Product",
@@ -14,6 +15,7 @@ export const reportFilterLabels: Record<ReportFilterKey, string> = {
 };
 
 const rowKeys: Record<ReportFilterKey, string[]> = {
+  order: ["order"],
   salesperson: ["salesperson"],
   customer: ["customer"],
   product: ["product"],

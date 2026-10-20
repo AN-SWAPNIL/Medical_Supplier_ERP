@@ -49,3 +49,11 @@ test("report filters round-trip through print and deep-link query parameters", (
   appendReportFilters(params, { customer: "Labaid", status: "Open" });
   assert.deepEqual(readReportFilters(params), { customer: "Labaid", status: "Open" });
 });
+
+test("order filters persist into print links and isolate one order", () => {
+  const params = new URLSearchParams();
+  appendReportFilters(params, { order: "SO-001", customer: "Labaid" });
+  assert.deepEqual(readReportFilters(params), { order: "SO-001", customer: "Labaid" });
+  assert.deepEqual(reportFilterOptions(table, "order"), ["SO-001", "SO-002", "SO-003"]);
+  assert.deepEqual(filterReportRows(table, readReportFilters(params)).map((row) => row.order), ["SO-001"]);
+});

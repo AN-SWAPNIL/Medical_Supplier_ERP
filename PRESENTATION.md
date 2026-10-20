@@ -420,6 +420,22 @@ Sales & Marketing has five internal views:
 4. **Deliveries**
 5. **Collections**
 
+### Follow One Order Through Its Lifecycle
+
+From **Quotations & Orders**, choose **Open Flow** on an order. The same workspace is available from delivery, invoice and collection registers, and linked sales activity references.
+
+- The five milestones show Quotation, Order, Delivery, Invoice and Collection from existing records.
+- Five totals distinguish Order Value, Delivered Value, Approved Invoice, Collected and Outstanding. The customer panel separately labels due across all of that customer's orders.
+- Product fulfilment shows ordered, delivered, approved-invoiced, remaining-to-deliver and delivered-not-invoiced quantities. Draft invoice quantities remain visibly pending approval.
+- **New Delivery** reuses FIFO validation and posts actual batch stock-out. **Create Invoice** accepts posted, uninvoiced challans from this order. Invoice approval posts receivables; a draft does not.
+- **Record Collection** keeps the customer and order selected. Supplying only an invoice to the API also resolves its order, updating customer due, order received/due and the selected account once.
+- Linked quotations, challans, invoices and receipts use the existing official print previews. **Customer Ledger** opens the operating ledger; **Open Report** opens the canonical report with this order selected, preserving the filter in export and print.
+- Sales Executives may open only their own orders. Warehouse users receive no new Sales access; if Sales view is explicitly delegated, the workspace hides financial values. The Settings confirmation queue records the unresolved Delivery Challan Approval question. Posting remains the final stock-out action until confirmed otherwise.
+
+For a ready walkthrough, open **SO-2026-041**: it links QT-2026-047, DC-2026-041, INV-2026-0002 and MR-2026-057, showing BDT 85,200 approved, BDT 60,000 collected and BDT 25,200 outstanding. **SO-2026-042** shows a delivered order awaiting invoice with no posted order receivable.
+
+API: `GET /api/orders/:orderId/workspace` assembles this view; it does not create a second order or ledger.
+
 ### One-click Marketing hub
 
 **Sales & Marketing -> Marketing** opens the daily operating screen itself, not another menu. Management sees team-safe KPIs, activity, follow-up attention, funnel, Field Team status, and target performance. A Sales Executive sees only **My Marketing Day**, own plan, own follow-ups, own leads, own visits, and own performance. The prototype refreshes the Marketing dashboard every 12 seconds, including when management leaves the browser tab in the background.

@@ -4,7 +4,7 @@ import { hasCapability, hasEffectivePermission } from "../../lib/permissions/eff
 
 export type ReportCategoryId = "sales" | "customers" | "suppliers" | "inventory" | "accounts" | "employees" | "controls";
 export type ReportSourceGroup = "sales" | "inventory" | "imports" | "expenses" | "employees" | "controls";
-export type ReportFilterKey = "salesperson" | "customer" | "product" | "family" | "supplier" | "employee" | "account" | "territory" | "status";
+export type ReportFilterKey = "salesperson" | "customer" | "product" | "family" | "supplier" | "employee" | "account" | "territory" | "status" | "order";
 
 export type ReportDefinition = {
   id: string;
@@ -36,11 +36,11 @@ export const reportCategories: Array<{ id: ReportCategoryId; title: string; desc
 
 const reports: ReportDefinition[] = [
   table("sales-summary", "Sales Summary", "sales", "Approved invoice sales and collections by day, week, month or year.", "sales", ["salesperson", "customer"], ["daily", "weekly", "monthly", "yearly"], undefined, true),
-  table("invoice-register", "Sales Invoice Register", "sales", "Approved, draft and cancelled invoices by period.", "sales", ["salesperson", "customer", "status"], ["invoice", "billing"]),
-  table("sales-sheet", "Sales Sheet", "sales", "Invoice-level product quantity, rate and amount detail.", "sales", ["salesperson", "customer", "product"], ["item"]),
-  table("sales-order-register", "Sales Order Register", "sales", "Orders with delivery, invoice and due status.", "sales", ["salesperson", "customer", "status"], ["order"]),
-  table("order-fulfilment", "Order Fulfilment Difference", "sales", "Ordered, delivered, invoiced and remaining quantities.", "sales", ["salesperson", "customer", "product", "status"], ["remaining"]),
-  table("delivery-challan-register", "Delivery Challan Register", "sales", "Posted challans, quantities and invoice linkage.", "sales", ["customer", "status"], ["delivery", "challan"]),
+  table("invoice-register", "Sales Invoice Register", "sales", "Approved, draft and cancelled invoices by period.", "sales", ["order", "salesperson", "customer", "status"], ["invoice", "billing"]),
+  table("sales-sheet", "Sales Sheet", "sales", "Invoice-level product quantity, rate and amount detail.", "sales", ["order", "salesperson", "customer", "product"], ["item"]),
+  table("sales-order-register", "Sales Order Register", "sales", "Orders with delivery, invoice and due status.", "sales", ["order", "salesperson", "customer", "status"], ["order"]),
+  table("order-fulfilment", "Order Fulfilment Difference", "sales", "Ordered, delivered, invoiced and remaining quantities.", "sales", ["order", "salesperson", "customer", "product", "status"], ["remaining"]),
+  table("delivery-challan-register", "Delivery Challan Register", "sales", "Posted challans, quantities and invoice linkage.", "sales", ["order", "customer", "status"], ["delivery", "challan"]),
   table("delivery-invoice-exceptions", "Delivery vs Invoice Exceptions", "sales", "Uninvoiced delivery and invoice control exceptions.", "sales", ["customer"], ["reconciliation"]),
   table("delivered-sales", "Delivered Sales by Product", "sales", "Operational product movement based on delivery challans.", "sales", ["customer", "product"], ["dispatch"]),
   table("sales-by-product", "Sales by Product / Item", "sales", "Approved invoice quantity and value by product.", "sales", ["product"], ["item-wise"]),
@@ -52,7 +52,7 @@ const reports: ReportDefinition[] = [
   table("customer-list", "Customer List", "customers", "Address, phone, assigned salesperson, period activity and current due.", "customers", ["customer", "salesperson", "territory", "status"], ["address", "number"]),
   table("customer-ledger", "Customer Running Ledger", "customers", "Opening due, invoices, collections and running balance.", "customers", ["customer"], ["statement"]),
   table("customer-dues", "Customer Dues / Receivables", "customers", "Current sales, collection and outstanding due by customer.", "customers", ["customer"], ["balance"]),
-  table("collections", "Customer Collection Report", "customers", "Posted customer collections and payment modes.", "sales", ["customer"], ["receipt"]),
+  table("collections", "Customer Collection Report", "customers", "Posted customer collections and payment modes.", "sales", ["order", "customer"], ["receipt"]),
   table("sales-by-customer", "Customer Sales Summary", "customers", "Approved invoice quantity and value by customer.", "customers", ["customer"], ["sales"]),
   table("salesman-ledger", "Salesman Ledger", "customers", "Invoice debits and collection credits by salesperson.", "sales", ["salesperson", "customer"], ["employee"]),
 

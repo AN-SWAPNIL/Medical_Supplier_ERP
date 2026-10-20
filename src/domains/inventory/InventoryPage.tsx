@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import SalesReferenceLink from "../sales/SalesReferenceLink";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, FileBarChart, PackageSearch, Search, Settings, Warehouse } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -107,7 +108,7 @@ export default function InventoryPage() {
           <TableFrame>
             <table className="min-w-[900px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Movement</th><th className="px-4 py-3">Product</th><th className="px-4 py-3">Batch</th><th className="px-4 py-3">Reference</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3">Posted by</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">{movements.map((movement) => <tr key={movement.id}><td className="px-4 py-3 text-slate-600">{movement.date}</td><td className="px-4 py-3"><span className={"inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-bold " + (movement.type === "Receive" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700")}>{movement.type === "Receive" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}{movement.type}</span></td><td className="px-4 py-3 font-semibold">{movement.productName}</td><td className="px-4 py-3 text-slate-600">{movement.batchNumber}</td><td className="px-4 py-3 text-slate-600">{movement.reference}</td><td className="px-4 py-3 text-right font-bold">{formatNumber(movement.quantity)}</td><td className="px-4 py-3 text-slate-500">{movement.createdBy}</td></tr>)}</tbody>
+              <tbody className="divide-y divide-slate-100">{movements.map((movement) => <tr key={movement.id}><td className="px-4 py-3 text-slate-600">{movement.date}</td><td className="px-4 py-3"><span className={"inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-bold " + (movement.type === "Receive" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700")}>{movement.type === "Receive" ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}{movement.type}</span></td><td className="px-4 py-3 font-semibold">{movement.productName}</td><td className="px-4 py-3 text-slate-600">{movement.batchNumber}</td><td className="px-4 py-3 text-slate-600"><SalesReferenceLink type={movement.type === "Dispatch" ? "Challan" : undefined} id={movement.reference} label={movement.reference} /></td><td className="px-4 py-3 text-right font-bold">{formatNumber(movement.quantity)}</td><td className="px-4 py-3 text-slate-500">{movement.createdBy}</td></tr>)}</tbody>
             </table>
           </TableFrame>
         </Panel>

@@ -45,6 +45,24 @@ Customer due  = Opening due + approved invoices - posted collections - approved 
 
 A Delivery Challan reduces stock but does not create customer due. A Draft Invoice changes no balance. Invoice approval posts the receivable once; collection then reduces customer/order due and increases the selected cash, bank or mobile-banking account.
 
+## Order Lifecycle (Update 11)
+
+The server uses Decimal to group quantities by product. Money is returned with two decimal places and quantities with four.
+
+```text
+Delivered = Sum of posted challan quantities for the order/product
+Remaining to deliver = max(0, ordered quantity - delivered quantity)
+Approved invoiced = Sum of approved invoice quantities for the order/product
+Delivered not invoiced = max(0, delivered quantity - approved invoiced quantity)
+Delivered value = Sum of posted challan line totals after discount
+Approved invoice value = Sum of approved invoice totals for the order
+Collected = Sum of posted receipts linked to the order OR its invoices, counted once
+Outstanding = max(0, approved invoice value - collected)
+Invoice payment ceiling = Invoice total - its previously posted linked receipts
+```
+
+Draft invoices reserve challans against duplicate invoicing but create no due; their quantities appear separately as pending approval. Cancelled invoices and reversed receipts do not count. An invoice-only payment resolves its order before updating order due and amount received. Unlinked customer-wide collections do not count toward a particular order.
+
 ## Expenses And Account Reports
 
 ```text

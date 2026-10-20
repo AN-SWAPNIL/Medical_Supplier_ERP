@@ -473,6 +473,34 @@ export type Collection = {
   status: "Posted" | "Reversed";
 };
 
+export type SalesOrderWorkspace = {
+  order: SalesOrder;
+  quotation?: Quotation;
+  customer?: Customer;
+  salesperson?: { id: string; name: string; employeeCode?: string; title?: string; territory?: string };
+  financialVisible: boolean;
+  deliveries: Delivery[];
+  invoices: SalesInvoice[];
+  collections: Collection[];
+  stockMovements: StockMovement[];
+  fulfilment: Array<{
+    productId: string; productCode: string; productName: string;
+    orderedQty: DecimalString; deliveredQty: DecimalString; draftInvoicedQty: DecimalString;
+    approvedInvoicedQty: DecimalString; remainingToDeliverQty: DecimalString; deliveredNotInvoicedQty: DecimalString;
+  }>;
+  totals?: {
+    orderValue: DecimalString; deliveredValue: DecimalString; draftInvoiceValue: DecimalString;
+    approvedInvoiceValue: DecimalString; collectedValue: DecimalString; outstandingValue: DecimalString;
+  };
+  stages: {
+    quotation: "Complete" | "Direct";
+    order: "Active" | "Cancelled";
+    delivery: "Not Started" | "Partial" | "Complete";
+    invoice?: "Not Started" | "Draft Pending" | "Partial" | "Complete";
+    collection?: "Not Due" | "Unpaid" | "Partial" | "Paid";
+  };
+};
+
 export type Expense = {
   id: string;
   date: string;

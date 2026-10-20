@@ -6,7 +6,6 @@ import {
   Banknote,
   Boxes,
   Calculator,
-  Check,
   CircleX,
   FileText,
   Eye,
@@ -27,6 +26,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import LifecycleProgress from "../../components/ui/LifecycleProgress";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import DocumentViewer, { readDocumentUpload } from "../../components/documents/DocumentViewer";
 import PageHeader from "../../components/ui/PageHeader";
@@ -178,23 +178,7 @@ export default function ImportWorkspacePage() {
         }
       />
 
-      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white px-3 py-4 shadow-sm">
-        <div className="flex min-w-[980px] items-start">
-          {milestones.map((step, index) => {
-            const complete = currentMilestone >= index && record.status !== "Cancelled";
-            const current = currentMilestone === index;
-            return (
-              <div className="relative flex min-w-24 flex-1 flex-col items-center text-center" key={step}>
-                {index ? <span className={"absolute right-1/2 top-3 h-0.5 w-full " + (complete ? "bg-cyan-600" : "bg-slate-200")} /> : null}
-                <span className={"relative z-10 grid h-6 w-6 place-items-center rounded-full border-2 text-[10px] font-bold " + (complete ? "border-cyan-600 bg-cyan-600 text-white" : "border-slate-300 bg-white text-slate-400")}>
-                  {complete && !current ? <Check className="h-3.5 w-3.5" /> : index + 1}
-                </span>
-                <span className={"mt-2 text-[10px] font-semibold " + (current ? "text-cyan-800" : "text-slate-500")}>{step}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <LifecycleProgress label="Import milestones" steps={milestones.map((step, index) => ({ id: step, label: step, state: record.status === "Cancelled" ? "cancelled" : currentMilestone === index ? "current" : currentMilestone > index ? "complete" : "pending" }))} />
 
       {locked ? (
         <div className="flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">

@@ -52,6 +52,7 @@ import type {
   SalesInvoice,
   SalespersonPerformanceData,
   SalesOrder,
+  SalesOrderWorkspace,
   StockBatch,
   StockMovement,
   Supplier,
@@ -110,6 +111,7 @@ import {
   SalesInvoiceSchema,
   SalespersonPerformanceSchema,
   SalesOrderSchema,
+  SalesOrderWorkspaceSchema,
   StockBatchSchema,
   StockMovementSchema,
   StockSummarySchema,
@@ -188,6 +190,8 @@ export const inventoryService = {
 };
 
 export const salesService = {
+  referenceOrder: (type: string, id: string) => get(`/api/sales/references/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, IdResponseSchema.nullable()),
+  orderWorkspace: (id: string) => get<SalesOrderWorkspace>(`/api/orders/${encodeURIComponent(id)}/workspace`, SalesOrderWorkspaceSchema),
   customers: () => get<Customer[]>("/api/customers", z.array(CustomerSchema)),
   customerLedger: (id: string) => get<CustomerLedger>("/api/customers/" + id + "/ledger", CustomerLedgerSchema),
   createCustomer: (payload: Partial<Customer>) => post<Customer>("/api/customers", payload, CustomerSchema),
