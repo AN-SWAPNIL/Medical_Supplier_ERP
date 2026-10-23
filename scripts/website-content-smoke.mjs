@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const webBase = process.argv[2] || "http://localhost:5173";
-const apiBase = process.argv[3] || "http://localhost:4174";
+const webBase = process.argv[2] || process.env.SMOKE_BASE_URL || "http://localhost:5173";
+const apiBase = process.argv[3] || process.env.SMOKE_API_BASE_URL || "http://localhost:4174";
 const executablePath = [
   process.env.PLAYWRIGHT_EXECUTABLE_PATH,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",

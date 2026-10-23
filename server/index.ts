@@ -4,6 +4,8 @@ import express, { type Request, type Response } from "express";
 import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { isFoundationMode } from "./config.js";
+import { createFoundationRouter } from "./foundation/router.js";
 import { buildSalesOrderWorkspace, restrictWorkspaceFinancials } from "./salesWorkspace.js";
 import { calculateLandedCost, importDisplayReference } from "../src/domains/imports/costing.js";
 import {
@@ -208,7 +210,7 @@ for (const record of imports) {
 for (const expense of expenses) if (expense.attachment) documentContents.set(expense.attachment.id, expense.attachment.mimeType.startsWith("image/") ? seededExpenseImagePath : seededPdfPath);
 
 app.use(cors());
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: isFoundationMode() ? "256kb" : "8mb" }));
 app.use((req, _res, next) => {
   const [path = "/", query] = req.url.split("?");
   let normalized = path.startsWith("/") ? path : `/${path}`;
@@ -217,6 +219,9 @@ app.use((req, _res, next) => {
   req.url = `${normalized}${query ? `?${query}` : ""}`;
   next();
 });
+
+// Opt-in cutover only: persistent sessions must never fall through to header-trusting demo routes.
+if (isFoundationMode()) app.use("/api", createFoundationRouter());
 
 function ok<T>(data: T, message = "OK", meta?: ApiResponse<T>["meta"]): ApiResponse<T> {
   return { success: true, message, data, meta };

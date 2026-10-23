@@ -1,0 +1,127 @@
+import { loadEnvFile } from "node:process";
+import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import postgres from "postgres";
+import { createClient } from "@supabase/supabase-js";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+const exec = promisify(execFile);
+const results = [];
+const record = (status, check, detail) => {
+  results.push({ status, check, detail });
+  console.log(`${status}: ${check} - ${detail}`);
+};
+
+// Never log provider error messages: they can contain connection strings or user data.
+function safeError(error) {
+  const code = String(error?.code ?? error?.cause?.code ?? "CONNECTION_OR_AUTH_ERROR");
+  return /^[A-Z0-9_]+$/.test(code) ? code : "CONNECTION_OR_AUTH_ERROR";
+}
+
+try {
+  loadEnvFile(new URL("../.env", import.meta.url));
+} catch {
+  record("FAIL", "Local configuration", "Could not load .env");
+  process.exit(1);
+}
+
+const required = ["DATABASE_URL", "DATABASE_MIGRATION_URL", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY", "SUPER_ADMIN_NAME", "SUPER_ADMIN_EMAIL"];
+const missing = required.filter((key) => !process.env[key]?.trim());
+if (missing.length) {
+  record("FAIL", "Required variables", missing.join(", "));
+  process.exit(1);
+}
+record("PASS", "Required variables", "All present; values withheld");
+
+const text = await readFile(new URL("../.env", import.meta.url), "utf8");
+record(/^\s*\*#/m.test(text) ? "WARN" : "PASS", "Comment syntax", "Use plain # comments, not Markdown");
+record(/password\s*:/i.test(text) ? "WARN" : "PASS", "Password comments", "Do not keep plaintext passwords in comments");
+record(process.env.VITE_API_BASE_URL ? "WARN" : "PASS", "API base", "Same-origin deployments use a blank API base");
+record(process.env.VITE_DEMO_MODE === "false" && process.env.DEMO_MODE === "false" ? "PASS" : "WARN", "Demo isolation", "Real-backend environments require both demo flags false");
+record(process.env.SUPABASE_URL === process.env.VITE_SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY === process.env.VITE_SUPABASE_PUBLISHABLE_KEY ? "PASS" : "FAIL", "Browser/server configuration", "Project URLs and publishable keys must match");
+
+let projectUrl;
+try {
+  projectUrl = new URL(process.env.SUPABASE_URL);
+  if (projectUrl.protocol !== "https:") throw new Error();
+} catch {
+  record("FAIL", "Project URL", "Expected a plain HTTPS URL");
+  process.exit(1);
+}
+
+try {
+  const { stdout } = await exec(process.execPath, ["node_modules/supabase/dist/supabase.js", "projects", "list", "--output", "json"], { cwd: root, timeout: 30000, maxBuffer: 1024 * 1024 });
+  const projects = JSON.parse(stdout);
+  const ref = projectUrl.hostname.split(".")[0];
+  const project = Array.isArray(projects) && projects.find((entry) => entry.id === ref);
+  record(project ? "PASS" : "FAIL", "Supabase CLI access", project ? `Configured project accessible; region ${project.region}` : "Configured project not found in accessible projects");
+} catch {
+  record("FAIL", "Supabase CLI access", "Could not list projects; check CLI login and account access");
+}
+
+const fetchWithTimeout = (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
+try {
+  const response = await fetchWithTimeout(new URL("/auth/v1/settings", projectUrl), { headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY } });
+  if (!response.ok) throw new Error();
+  const settings = await response.json();
+  record("PASS", "Auth/publishable key", "Auth settings endpoint reachable");
+  record(settings.disable_signup === true ? "PASS" : "WARN", "Employee registration", settings.disable_signup === true ? "Public signup disabled" : "Public signup appears enabled; disable before production");
+  record(settings.external?.email === true ? "PASS" : "WARN", "Email/password provider", settings.external?.email === true ? "Enabled" : "Check provider configuration");
+} catch {
+  record("FAIL", "Auth/publishable key", "Auth settings request failed");
+}
+
+try {
+  const response = await fetchWithTimeout(new URL("/auth/v1/.well-known/jwks.json", projectUrl));
+  const jwks = response.ok ? await response.json() : null;
+  record(jwks && Array.isArray(jwks.keys) ? jwks.keys.length ? "PASS" : "WARN" : "FAIL", "JWKS endpoint", jwks?.keys?.length ? "Signing keys published" : "No published keys; verify signing configuration during Auth implementation");
+} catch {
+  record("FAIL", "JWKS endpoint", "Request failed");
+}
+
+const client = createClient(projectUrl.href, process.env.SUPABASE_SECRET_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: { fetch: fetchWithTimeout }
+});
+try {
+  const { error } = await client.auth.admin.listUsers({ page: 1, perPage: 1 });
+  if (error) throw error;
+  record("PASS", "Secret key / Auth admin", "Read-only administrator request accepted; no identities printed");
+} catch (error) {
+  record("FAIL", "Secret key / Auth admin", safeError(error));
+}
+try {
+  const { data, error } = await client.storage.listBuckets();
+  if (error) throw error;
+  record("PASS", "Storage API", "Bucket listing accepted");
+  for (const [name, expectedPublic] of [["erp-documents", false], ["website-media", true]]) {
+    const bucket = data.find((entry) => entry.name === name);
+    record(!bucket ? "WARN" : bucket.public === expectedPublic ? "PASS" : "FAIL", `Storage ${name}`, !bucket ? "Not created yet; foundation setup can create it" : bucket.public === expectedPublic ? "Visibility correct; write/read policies still require implementation" : "Incorrect bucket visibility");
+  }
+} catch (error) {
+  record("FAIL", "Storage API", safeError(error));
+}
+
+for (const name of ["DATABASE_URL", "DATABASE_MIGRATION_URL"]) {
+  let sql;
+  try {
+    const url = new URL(process.env[name]);
+    if (!["postgres:", "postgresql:"].includes(url.protocol) || url.hash || !url.password) throw new Error();
+    sql = postgres(url.href, { max: 1, prepare: false, ssl: "require", connect_timeout: 10, idle_timeout: 1, connection: { statement_timeout: 10000 } });
+    await sql.begin("read only", async (tx) => {
+      await tx`select 1 as connected`;
+    });
+    record("PASS", name, `TLS connection and read-only transaction succeeded on port ${url.port || "5432"}`);
+  } catch (error) {
+    record("FAIL", name, safeError(error));
+  } finally {
+    if (sql) await sql.end({ timeout: 2 });
+  }
+}
+
+const failed = results.filter((result) => result.status === "FAIL").length;
+const warnings = results.filter((result) => result.status === "WARN").length;
+console.log(`\nRead-only readiness checks: ${failed} failures, ${warnings} warnings. No remote records, users, buckets or settings changed.`);
+process.exitCode = failed ? 1 : 0;

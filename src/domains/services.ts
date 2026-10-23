@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { ApiResponse, Session, User } from "../types";
+import type { ApiResponse, User } from "../types";
+import { authHeaders } from "../lib/auth/transport";
 import type {
   AccountTransaction,
   AuditEvent,
@@ -122,29 +123,19 @@ import {
 } from "./schemas";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const SESSION_KEY = "mipro-erp-session";
 const IdResponseSchema = z.object({ id: z.string() });
 
 export type StockSummary = z.infer<typeof StockSummarySchema>;
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
 
-function headers() {
+async function headers() {
   const result = new Headers({ "Content-Type": "application/json" });
-  const raw = window.localStorage.getItem(SESSION_KEY);
-  if (!raw) return result;
-  try {
-    const session = JSON.parse(raw) as Session;
-    result.set("Authorization", "Bearer " + session.token);
-    result.set("x-user-id", session.user.id);
-    result.set("x-role", session.user.role);
-  } catch {
-    window.localStorage.removeItem(SESSION_KEY);
-  }
+  Object.entries(await authHeaders()).forEach(([key, value]) => result.set(key, value));
   return result;
 }
 
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const response = await fetch(API_BASE_URL + path, { ...init, headers: headers() });
+  const response = await fetch(API_BASE_URL + path, { ...init, headers: await headers() });
   const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null;
   if (!response.ok || !body?.success) throw new Error(body?.message || "Request failed (" + response.status + ")");
   const parsed = schema.safeParse(body.data);
@@ -342,7 +333,7 @@ export const settingsService = {
 export const fileService = {
   attachImportDocument: importService.addDocument,
   async open(document: DocumentRecord) {
-    const response = await fetch(API_BASE_URL + `/api/documents/${encodeURIComponent(document.id)}/content`, { headers: headers() });
+    const response = await fetch(API_BASE_URL + `/api/documents/${encodeURIComponent(document.id)}/content`, { headers: await headers() });
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null;
       throw new Error(body?.message || `Document could not be opened (${response.status})`);

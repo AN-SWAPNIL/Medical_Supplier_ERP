@@ -7,7 +7,7 @@ import { z } from "zod";
 import Button from "../../components/ui/Button";
 import { apiClient } from "../../lib/api/client";
 import { useAuthStore } from "../../lib/auth/session";
-import { demoMode } from "../../lib/runtime";
+import { demoMode, foundationMode } from "../../lib/runtime";
 import { useToastStore } from "../../lib/ui/toast";
 import AuthShell from "./AuthShell";
 
@@ -48,7 +48,7 @@ export default function LoginPage() {
     try {
       await login(parsed.data.email, parsed.data.password);
       pushToast({ kind: "success", title: "Signed in", message: "Role-based ERP session started." });
-      navigate(state?.from ?? "/app/dashboard", { replace: true });
+      navigate(foundationMode ? "/backend" : state?.from ?? "/app/dashboard", { replace: true });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Login failed.");
     }

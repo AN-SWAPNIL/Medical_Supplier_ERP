@@ -1,0 +1,25 @@
+import { z } from "zod";
+import { CapabilitySchema, PermissionOverrideSchema, RoleSchema } from "../../src/domains/schemas.js";
+
+export const loginSchema = z.object({ email: z.email().max(254), password: z.string().min(1).max(1024) }).strict();
+export const recoverySchema = z.object({ email: z.email().max(254) }).strict();
+export const exchangeSchema = z.object({ accessToken: z.string().min(20).max(8192), refreshToken: z.string().min(10).max(8192) }).strict();
+export const resetSchema = z.object({ password: z.string().min(12).max(128) }).strict();
+export const changePasswordSchema = resetSchema.extend({ currentPassword: z.string().min(1).max(1024) });
+export const profileSchema = z.object({ name: z.string().trim().min(2).max(120), phone: z.string().trim().max(40) }).strict();
+export const inviteSchema = z.object({
+  email: z.email().max(254).transform((v) => v.toLowerCase()), name: z.string().trim().min(2).max(120),
+  role: RoleSchema, employeeCode: z.string().trim().min(1).max(40),
+  title: z.string().trim().max(100).default(""), department: z.string().trim().max(100).default(""), territory: z.string().trim().max(100).default("")
+}).strict();
+export const accessSchema = z.object({
+  role: RoleSchema, status: z.enum(["Active", "Inactive"]),
+  capabilities: z.array(CapabilitySchema).max(20), permissionOverrides: z.array(PermissionOverrideSchema).max(100),
+  version: z.number().int().positive(), reason: z.string().trim().min(5).max(500)
+}).strict();
+export const uploadSchema = z.object({
+  employeeId: z.string().min(1).max(100), purpose: z.enum(["employee-avatar", "employee-evidence"]),
+  fileName: z.string().trim().min(1).max(180).refine((v) => !v.includes("/") && !v.includes("\\") && [...v].every((char) => char.charCodeAt(0) >= 32), "Invalid file name"),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+  sizeBytes: z.number().int().min(1).max(10 * 1024 * 1024)
+}).strict().refine((v) => v.purpose !== "employee-avatar" || (v.mimeType.startsWith("image/") && v.sizeBytes <= 2 * 1024 * 1024), "Avatar must be an image no larger than 2 MB");

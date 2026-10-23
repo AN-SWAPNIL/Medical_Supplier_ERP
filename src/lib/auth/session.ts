@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { SESSION_KEY, apiClient } from "../api/client";
+import { apiClient } from "../api/client";
+import { API_BASE_URL, SESSION_EVENT, SESSION_KEY, readSession, saveSession } from "./transport";
+import { foundationMode } from "../runtime";
 import type { Session, User } from "../../types";
 
 type AuthState = {
@@ -12,30 +14,12 @@ type AuthState = {
   updateUser: (user: User) => void;
 };
 
-function loadSession(): Session | null {
-  const raw = window.localStorage.getItem(SESSION_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw) as Session;
-  } catch {
-    window.localStorage.removeItem(SESSION_KEY);
-    return null;
-  }
-}
-
 function persistSession(session: Session | null) {
-  if (session) {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } else {
-    window.localStorage.removeItem(SESSION_KEY);
-  }
+  saveSession(session);
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  session: loadSession(),
+  session: readSession(),
   async login(email, password) {
     const response = await apiClient.login(email, password);
     persistSession(response.data);
@@ -56,6 +40,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await apiClient.resetPassword(email, password);
   },
   logout() {
+    const current = get().session;
+    if (foundationMode && current) void fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", Authorization: `Bearer ${current.token}` }, body: "{}" }).catch(() => {});
     persistSession(null);
     set({ session: null });
   },
@@ -69,6 +55,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ session: updatedSession });
   }
 }));
+
+window.addEventListener(SESSION_EVENT, () => useAuthStore.setState({ session: readSession() }));
+window.addEventListener("storage", (event) => {
+  if (event.key === SESSION_KEY) useAuthStore.setState({ session: readSession() });
+});
 
 export function useEffectiveRole() {
   return useAuthStore((state) => state.session?.user.role ?? "Sales Executive");

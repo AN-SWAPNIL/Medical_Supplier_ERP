@@ -7,6 +7,8 @@ import LoginPage from "./features/auth/LoginPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
 import PublicLayout from "./features/public/PublicLayout";
 import type { PermissionKey } from "./types";
+import BackendWorkspace from "./features/auth/BackendWorkspace";
+import { foundationMode } from "./lib/runtime";
 
 const HomePage = lazy(() => import("./features/public/HomePage"));
 const AboutPage = lazy(() => import("./features/public/AboutPage"));
@@ -69,7 +71,10 @@ function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
-        <Route path="/app" element={<AppLayout />}>
+        {foundationMode ? <Route path="/backend" element={<BackendWorkspace />}>
+          <Route path="profile" element={deferred(<ProfilePage />)} />
+        </Route> : null}
+        <Route path="/app" element={foundationMode ? <Navigate to="/backend" replace /> : <AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={guarded("dashboard", <DashboardPage />)} />
           <Route path="imports" element={guarded("import", <ImportsPage />)} />
