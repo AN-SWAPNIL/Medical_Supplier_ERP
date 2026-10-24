@@ -21,7 +21,7 @@ export function backendConfig() {
   const appUrl = new URL(value.APP_URL);
   if (process.env.VERCEL && (!process.env.APP_URL || appUrl.protocol !== "https:")) throw new Error("Vercel foundation deployments require an explicit HTTPS APP_URL");
   if (appUrl.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(appUrl.hostname)) throw new Error("APP_URL must use HTTPS outside localhost");
-  return { ...value, origin: appUrl.origin, secureCookies: appUrl.protocol === "https:" };
+  return { ...value, origin: appUrl.origin, secureCookies: appUrl.protocol === "https:", requirePrivilegedMfa: process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL) || process.env.ERP_REQUIRE_MFA === "true" };
 }
 
 export function isFoundationMode() {

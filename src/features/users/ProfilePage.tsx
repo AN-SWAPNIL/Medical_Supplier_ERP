@@ -4,11 +4,12 @@ import { useForm } from "react-hook-form";
 import Button from "../../components/ui/Button";
 import Avatar from "../../components/ui/Avatar";
 import PageHeader from "../../components/ui/PageHeader";
-import { Modal, inputClass, labelClass } from "../../domains/components";
+import { Modal, Panel, inputClass, labelClass } from "../../domains/components";
 import { useAuthStore } from "../../lib/auth/session";
 import { useToastStore } from "../../lib/ui/toast";
 import { foundationMode } from "../../lib/runtime";
 import { apiClient } from "../../lib/api/client";
+import { MfaControl } from "../auth/MfaSecurity";
 
 type ProfileValues = {
   name: string;
@@ -148,6 +149,7 @@ export default function ProfilePage() {
         </form>
       </div>
 
+      {foundationMode ? <Panel title="Authenticator Security"><div className="p-5"><MfaControl /></div></Panel> : null}
       <Modal open={passwordOpen} title="Change password" subtitle={foundationMode ? "Confirm your current password. Changing it signs out existing sessions." : "The updated password remains active until the temporary API state resets."} onClose={() => setPasswordOpen(false)}>
         <form className="grid gap-4" onSubmit={async (event) => {
           event.preventDefault();

@@ -6,11 +6,14 @@ import { createContext } from "../server/foundation/context.js";
 async function main() {
   const ctx = createContext();
   const apply = process.argv.includes("--apply");
+  const suite=process.argv.find((arg)=>arg.startsWith("--suite="))?.slice(8);
+  if(suite&&!['visit','dashboard','security'].includes(suite))throw new Error("Use an explicitly supported test suite selector.");
   try {
     const { data, error } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (error) throw new Error("Cannot inspect test identities");
     // Reserved exclusively for hosted test suites; never match employee/company addresses.
-    const temporary = data.users.filter((user) => /^backend-(admin|sales|super-admin|import-officer|warehouse-manager|sales-executive|accounts|managing-director|sales-manager)-[a-f0-9-]{36}@example\.invalid$/.test(user.email ?? ""));
+    const pattern=suite ? new RegExp(`^backend-${suite}-\\d+-[a-f0-9-]{36}@example\\.invalid$`) : /^backend-(admin|sales|super-admin|import-officer|warehouse-manager|sales-executive|accounts|managing-director|sales-manager)-[a-f0-9-]{36}@example\.invalid$/;
+    const temporary = data.users.filter((user) => pattern.test(user.email ?? ""));
     console.log("Temporary hosted integration identities found:", temporary.length);
     if (!apply || !temporary.length) return;
     try {
@@ -20,7 +23,7 @@ async function main() {
         await tx.update(employees).set({ status: "Inactive", authUserId: null }).where(eq(employees.id, row.id));
       });
       console.log("Matching test employees deactivated; audit preserved.");
-    } catch { console.warn("Database cleanup deferred due to connectivity. Test Auth identities will still be removed to prevent access."); }
+    } catch { throw new Error("Database revocation must succeed before Auth deletion; retry test cleanup when connected."); }
     for (const user of temporary) {
       const { error } = await ctx.admin.auth.admin.deleteUser(user.id);
       if (error) throw new Error("Temporary test identity deletion failed");

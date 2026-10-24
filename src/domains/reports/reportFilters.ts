@@ -11,7 +11,10 @@ export const reportFilterLabels: Record<ReportFilterKey, string> = {
   employee: "Employee",
   account: "Account",
   territory: "Territory",
-  status: "Status"
+  status: "Status",
+  lead: "Lead / Prospect",
+  captureQuality: "Location Quality",
+  reviewStatus: "Review Decision"
 };
 
 const rowKeys: Record<ReportFilterKey, string[]> = {
@@ -24,7 +27,10 @@ const rowKeys: Record<ReportFilterKey, string[]> = {
   employee: ["employee"],
   account: ["account", "paidFrom"],
   territory: ["territory"],
-  status: ["status", "type"]
+  status: ["status", "type"],
+  lead: ["lead"],
+  captureQuality: ["captureQuality"],
+  reviewStatus: ["reviewStatus"]
 };
 
 export type ReportFilterValues = Partial<Record<ReportFilterKey, string>>;

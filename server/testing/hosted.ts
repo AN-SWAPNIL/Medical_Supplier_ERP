@@ -9,10 +9,12 @@ import type { Role } from "../../src/types/index.js";
 import type { Capability } from "../../src/domains/erp.types.js";
 import { createContext } from "../foundation/context.js";
 import { createFoundationRouter } from "../foundation/router.js";
+import { isolatedPeer, localApiRequest } from "./http.js";
 
 export async function hostedHarness(label: string) {
   const contexts = [createContext(), createContext()];
   const suffix = randomUUID(); const password = `T!${randomBytes(24).toString("hex")}`;
+  const peer = isolatedPeer(suffix);
   const identities: { id: string; authId: string; email: string; token: string; role: Role }[] = [];
   const servers: ReturnType<ReturnType<typeof express>["listen"]>[] = [];
   const bases: string[] = [];
@@ -22,8 +24,8 @@ export async function hostedHarness(label: string) {
     await new Promise<void>((resolve) => server.once("listening", resolve)); bases.push(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api`);
   }
   async function call(path: string, token: string, body?: unknown, options: { method?: string; key?: string; instance?: number } = {}) {
-    const response = await fetch(bases[options.instance ?? 0] + path, { method: options.method ?? (body === undefined ? "GET" : "POST"), headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.key ? { "Idempotency-Key": options.key } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000) });
-    const data = z.object({ success: z.boolean(), message: z.string(), data: z.any() }).parse(await response.json()); return { status: response.status, ...data };
+    const response = await localApiRequest(bases[options.instance ?? 0] + path, peer, options.method ?? (body === undefined ? "GET" : "POST"), { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.key ? { "Idempotency-Key": options.key } : {}) }, body === undefined ? undefined : JSON.stringify(body));
+    const data = z.object({ success: z.boolean(), message: z.string(), data: z.any() }).parse(response.json); return { status: response.status, ...data };
   }
   async function expect(path: string, token: string, body?: unknown, status = 200, options: Parameters<typeof call>[3] = {}) {
     const response = await call(path, token, body, options); assert.equal(response.status, status, `${options.method ?? (body === undefined ? "GET" : "POST")} ${path}: ${response.message}`); return response.data;
@@ -50,5 +52,5 @@ export async function hostedHarness(label: string) {
     for (const ctx of contexts) await ctx.client.end();
     assert.deepEqual(failures, [], "Hosted test identity cleanup must complete");
   }
-  return { ctx: contexts[0], other: contexts[1], suffix, password, identities, bases, employee, call, expect, close, key: (name: string) => ({ key: `${label}-${name}-${suffix}` }) };
+  return { ctx: contexts[0], other: contexts[1], suffix, peer, password, identities, bases, employee, call, expect, close, key: (name: string) => ({ key: `${label}-${name}-${suffix}` }) };
 }

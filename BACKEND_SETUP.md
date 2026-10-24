@@ -1,8 +1,8 @@
 # MIPRO ERP Production Backend Setup
 
-Updated: 24 October 2026.
+Updated: 25 October 2026.
 
-Authentication, imports/receiving, sales/money, operating finance, employees/marketing, transaction printing and supported operational reports are installed in the hosted development project. The full ERP business-data migration is not complete. This guide refines `files/MIPRO_ERP_Production_Backend_Architecture_Analysis_and_Roadmap.md`.
+Authentication, imports/receiving, sales/money, operating finance, employees/marketing/field visits, transaction printing, supported operational reports, the dashboard and operational settings are installed in the hosted development project. The public website is deliberately static in foundation mode; AI is deferred. The full ERP business-data migration is not complete. This guide refines `files/MIPRO_ERP_Production_Backend_Architecture_Analysis_and_Roadmap.md`.
 
 ## Current Production Gap Check
 
@@ -12,7 +12,7 @@ The Sales screen and Update 11 order workspace now use persistent customers, quo
 
 Security fixes include per-identity/per-permission React Query caches, independent cost-display guards, same-browser logout/sign-in sequencing, replacement invitation links and database-enforced case-insensitive LC uniqueness. Unconfirmed Pending users receive a replacement invitation; confirmed Pending users receive a password-setup recovery link. The employee remains Pending until verified acceptance. Actual SMTP delivery still needs acceptance testing.
 
-There are now 45 private ERP tables, protected by RLS and private-schema grants. Migrations through 0018 were applied to development only after backups; existing business history and fixtures were not reset or imported. Migration 0016 adds report indexes; 0017-0018 add reporting hierarchy, marketing records, evidence links, immutable-history guards and seven score-rule references. Database guards reconcile stock/money journals and block edits to posted history. Twelve initial expense-category reference records are installed; they are configurable masters, not seeded expenses. Test financial records and their attached evidence are labelled `DEV TEST` and retained; reserved test Auth identities are removed afterward.
+There are now 53 private ERP tables, protected by RLS and private-schema grants. Migrations through 0023 were applied to development only after backups; existing business history and fixtures were not reset or imported. Migration 0016 adds report indexes; 0017-0018 add reporting hierarchy and marketing; 0019-0022 add visit attempts, evidence/events, policy snapshots and approved customer locations with consistency guards; 0023 adds warehouse/cost-preset/client-decision settings. Database guards reconcile stock/money journals and block edits to posted history. Initial category, warehouse and pending-decision records are configuration references, not invented expenses, stock or opening balances. Test business records and attached evidence are labelled `DEV TEST` and retained; reserved test Auth identities are removed afterward.
 
 Production now fails closed if `ERP_BACKEND_MODE` is absent, browser/API modes disagree, or foundation mode enables demo identities. An intentionally public **mock-only** deployment must explicitly use `ERP_BACKEND_MODE=mock`, `VITE_BACKEND_MODE=mock`, `DEMO_DEPLOYMENT=true`, `DEMO_MODE=true` and `VITE_DEMO_MODE=true`, and contain no real company data. A real deployment uses both backend modes `foundation`, both demo flags `false`, and `DEMO_DEPLOYMENT=false`. No deployed environment settings were changed automatically; review these before any deployment of this increment.
 
@@ -25,15 +25,66 @@ Run `npm run test:sales-backend` for local pricing/scope tests. Set `RUN_HOSTED_
 - Transactional partial receipts create linked receipt lines, stock batches and movements together. Parent-record locks prevent excessive concurrent receipts; required idempotency keys prevent replayed creation/finalization/receiving from posting twice. The browser retains the same key after an ambiguous network failure.
 - Precise batch valuation reconciles to finalized item totals without multiplying a two-decimal display rate. Rejected units create no inventory; a production loss/claim treatment remains pending.
 - Private import-document uploads use direct Storage upload and protected completion/read. Financial document types cannot be made public by clearing a checkbox. Attach supporting cost invoices in the import Documents section; cost-row-specific attachment linking remains pending.
-- Role-filtered screens at `/backend/imports`, `/backend/inventory`, `/backend/sales`, `/backend/accounts`, `/backend/employees`, `/backend/reports` and `/backend/settings`; profile/security remains at `/backend/profile`. Settings includes cash/bank administration and Company Stationery. FIFO preview and actual dispatch both exclude expired and future receipts. Supported operational reports and transaction printing are connected; executive dashboard, approved financial-position reporting, GPS verification and public-site migration are still outstanding.
+- Role-filtered screens at `/backend/imports`, `/backend/inventory`, `/backend/sales`, `/backend/accounts`, `/backend/employees`, `/backend/reports` and `/backend/settings`; profile/security remains at `/backend/profile`. Settings includes cash/bank administration, Company Stationery and Operational Settings. FIFO preview and actual dispatch both exclude expired and future receipts. Supported operational reports, field check-ins, dashboard and transaction printing are connected; approved Balance Sheet/opening reconciliation remains outstanding.
 
 These additive migrations were applied only after a destination backup. No Supabase Auth settings, Vercel settings or deployment environment values were changed during this increment. No source fixtures or existing records were migrated/deleted. Preserving the old prototype's runtime-only records still requires locating/exporting that source before cutover.
 
 `npm run test:imports-backend` is unit-only by default. Opt into hosted development checks with `RUN_HOSTED_IMPORT_TESTS=true`. These create clearly labelled `DEV TEST` business records and temporary reserved Auth accounts; the accounts are removed and employee/audit records retained as Inactive. Posted business history is retained, not deleted. `RUN_BACKEND_BROWSER_TESTS=true` also enables desktop/390px screenshots. Use an unused `APP_URL` localhost port for this isolated test. The tests do not edit hosted redirect settings.
 
-Verified local regression count: 75 passed, nine hosted suites skipped by default. Hosted tests additionally verify actual stock/money posting, multi-instance races, precise partial valuation, receipt allocation, operating expense/supplier journals and forbidden financial edits. Sales, Accounts and import/master/inventory browser checks pass at desktop and 390px. Finance acceptance includes private receipt upload/preview, MD read-only controls, Sales Executive route denial and unchanged finalized landed cost. Screenshots are under ignored `artifacts/backend/`. See the progress checklist for current acceptance status. The last read-only readiness check had zero failures; its remaining warning concerns a plaintext password comment in the ignored local `.env`.
+The regression and acceptance counts are recorded in `PRODUCTION_BACKEND_PROGRESS.md`. Hosted tests additionally verify actual stock/money posting, multi-instance races, precise partial valuation, receipt allocation, operating expense/supplier journals and forbidden financial edits. Sales, Accounts, import/master/inventory and field-visit browser checks run at desktop and 390px. Finance acceptance includes private receipt upload/preview, MD read-only controls, Sales Executive route denial and unchanged finalized landed cost. Screenshots are under ignored `artifacts/backend/`. The last read-only readiness check had zero failures; its remaining warning concerns a plaintext password comment in the ignored local `.env`.
 
-Next: GPS field verification, dashboard/site persistence, approved Balance Sheet/opening reconciliation, warehouse/cost-preset/decision settings, stock returns/adjustments and controlled old-data migration. Do not switch the public website to foundation mode until required workflows and deployment acceptance checks are complete. Public content still needs a dedicated published-content implementation; protected routes must never fall through to mock data. Transaction and supported report print actions use saved stationery with source-specific backend authorization.
+Next: field-device/privacy/retention acceptance, approved Balance Sheet/opening reconciliation, stock returns/adjustments and controlled old-data migration, followed by the remaining operational security/release work. Do not switch the live ERP to foundation mode until required workflows and deployment acceptance checks are complete. The static public brochure does not depend on ERP endpoints. Transaction and supported report print actions use saved stationery with source-specific backend authorization.
+
+## Static Public Website And Deferred AI
+
+- Foundation `/`, About, Products/details, Certificates, News/articles and Contact use bundled, schema-validated published brochure content. They need neither an employee session nor a working ERP API. This is a Vite static SPA, not a new server-rendered CMS.
+- Update `src/features/public/public.content.ts` and approved assets under `public/`, then rebuild/deploy to change published content. Private stock, costs, customer records, employee evidence and Auth configuration never become public catalogue data.
+- Contact prepares an email/WhatsApp draft. The visitor must send it through the external app; the site explicitly does not claim it was submitted, stored or converted to a lead. A server inbox/editorial workflow is deferred, not a current release blocker.
+- AI chat, provider integration, extraction and automatic recommendations are deferred in foundation mode. There is no active floating assistant, no AI credential requirement and no ERP record transmission to a model. Historical mock AI remains separate from the real backend.
+- Old supported `/app/*` links redirect to their matching `/backend/*` workspace while preserving record IDs, report query filters and print destinations.
+
+## Authenticator And Release Security
+
+- Profile & Security contains real Supabase TOTP enrollment, challenge, verification and explained removal. Setup requires the current password; the private QR/key appears only to its owner during setup. Never share it or place it in logs.
+- In production/Vercel, Super Admin, Managing Director, Accounts and anyone with `manage_user_access` must verify an authenticator before business API access. Local development is optional unless `ERP_REQUIRE_MFA=true`; anyone who enrolls a verified factor must still verify it locally.
+- An authenticated but unverified privileged session receives HTTP 428, including direct API requests. Only own security/bootstrap and restricted recovery flows remain accessible. Verification replaces the current ERP token and revokes other ERP sessions. Password changes preserve the second-factor requirement and revoke existing ERP sessions.
+- Verify a replacement factor before removing the last mandatory one. Lost authenticators require a separately authorized provider recovery procedure; there is intentionally no password-only bypass or invented recovery code.
+- Same-origin Vercel security headers include CSP, frame blocking, MIME protection, camera/location permission restrictions and no-store rules for ERP/API paths. Private PDF blob previews are permitted. Only Vercel's managed proxy boundary is trusted for client IPs; a different reverse proxy or split API needs reviewed CORS, cookie and CSP settings.
+- `npm run check:release` validates routing, headers, mode isolation, tracked credential/artifact hygiene, migration order and dependency lock agreement without hosted credentials. GitHub Actions runs lint, local tests, release checks and a foundation build. It never migrates/deploys or receives hosted secrets automatically.
+
+```powershell
+npm run test:security-backend
+# Optional real development-project test using reserved disposable Auth identities:
+$env:RUN_HOSTED_SECURITY_TESTS="true"
+npm run test:security-backend
+# Production-bundle browser checks at 1440px and 390px, reserved port 5200:
+$env:VITE_BACKEND_MODE="foundation"
+$env:VITE_DEMO_MODE="false"
+npm run build
+$env:RUN_SECURITY_BROWSER_TESTS="true"
+npm run test:security-backend
+```
+
+No provider configuration, personal account enrollment, hosted environment change or additional service is required for these development checks. Follow the [Supabase MFA guide](https://supabase.com/docs/guides/auth/auth-mfa) for authenticator concepts and account recovery planning. Production still needs verified SMTP, recovery ownership, least-privilege runtime credentials, approved retention and deployed/restore acceptance.
+
+## Dashboard And Operational Settings
+
+- `/backend` opens the SQL-backed Dashboard. Its six-or-fewer KPIs and bounded work queues require Dashboard access plus each source permission/capability. Warehouse payloads omit financial sales fields; Sales Executives retain own/assigned scope. Financial periods are limited to 93 days, ending no later than today.
+- Settings > Operational Settings (`/backend/settings/operations`) contains Warehouse, Cost Presets and the Super Admin Client Confirmation Queue. Edits require current versions/reasons and retain audits. Recording a client agreement never automatically enables financial/approval features.
+- Main Warehouse is the canonical single-warehouse identity. Contact/BIN suggestions are editable, historical receipts are unchanged, and receiving inherits the fixed name. BIN suggestions do not forbid historical/custom rack names. Receiving retains four-decimal quantities.
+- Active cost presets appear when adding an import cost. They suggest name/category/basis, not money, exchange rate or an automatic allocation choice. Existing cost rows and finalized snapshots are unaffected by preset edits/deactivation.
+- Dashboard money reuses report facts/journals with decimal strings and a repeatable-read snapshot. Stock/pipeline/follow-up queues are current, not reconstructed at a historical financial end date. See `CALCULATIONS.md`.
+
+```powershell
+npm run test:dashboard-backend
+$env:RUN_HOSTED_DASHBOARD_TESTS="true"
+npm run test:dashboard-backend
+# Optional isolated Edge desktop/390px checks, reserved port 5198:
+$env:RUN_DASHBOARD_BROWSER_TESTS="true"
+npm run test:dashboard-backend
+```
+
+No new platform/env setup is required for this increment. Migration 0023 is already applied to hosted development after backup. Tests keep labelled history, restore warehouse values, deactivate test presets and remove reserved Auth identities. Local HTTP tests use independent loopback peers to exercise unchanged login limits without affecting ordinary developer sign-ins. No remote provider settings or deployment values were changed.
 
 ## Operating Finance Increment
 
@@ -64,12 +115,12 @@ With `RUN_BACKEND_BROWSER_TESTS=true`, `npm run check:print-layout` can repeat t
 ## Persistent Operational Reports
 
 - Open Reports at `/backend/reports`. The familiar category catalogue links to one settings/results page per report. Sales, Inventory, order workspaces and Accounts link into the same report area; printing stays on a separate preview page.
-- 60 implemented SQL read models cover sales/orders/deliveries, customers/collections, imports/suppliers/cost, stock/expiry/movements, expenses/TA-DA/cash-bank, scoped employee activity/performance/targets, the roster and narrow audits. The catalogue is filtered by Reports access plus the source module/capability. Sales Executives see only authorized own/assigned records; warehouse overrides never expose financial sales fields.
+- 61 implemented SQL read models cover sales/orders/deliveries, customers/collections, imports/suppliers/cost, stock/expiry/movements, expenses/TA-DA/cash-bank, scoped employee activity/performance/targets, field visits, the roster and narrow audits. The catalogue is filtered by Reports access plus the source module/capability. Sales Executives see only authorized own/assigned records; warehouse overrides never expose financial sales fields.
 - `GET /api/reports/catalogue` describes authorized availability. `GET /api/reports/:id` accepts `from`, `to`, optional stable-ID filters, grouping where supported, page and pageSize. Results include typed columns, decimal-string cells, all-filtered-row totals, bounded filter choices and an explicit accounting/date basis.
 - `/api/reports/:id/print` requires Print access and returns all matching rows up to 1,000. `/api/reports/:id/export` requires Reports export, returns CSV up to 10,000 rows and records an audit event. Larger requests fail with a narrowing message; they never silently export only the first page. Screens paginate at 50 rows (API maximum 100); periods are limited to ten years ending no later than today.
 - Screen, CSV and print use the same server query/filter rules. Repeatable-read transactions keep each generation consistent, but a later regeneration can reflect newly posted business events. CSV quotes fields and guards formula-like text, following [OWASP CSV Injection guidance](https://community.owasp.org/attacks/CSV_Injection); spreadsheet applications and downstream reimports still need appropriate handling.
 - Reports reconstruct historical balances from dated journals. Cancellations/reversals do not erase the original reporting period. Master names/status remain current; import registers explicitly identify their current-commercial basis. See `CALCULATIONS.md` for formulas.
-- Balance Sheet is unavailable until opening balances and position reconciliation are approved. Employee activity, lead funnel, follow-up, performance and targets use persisted sources; GPS visit verification remains unavailable. They never fall back to prototype fixtures or synthetic balancing values.
+- Balance Sheet is unavailable until opening balances and position reconciliation are approved. Employee activity, lead funnel, follow-up, performance, targets and field check-ins use persisted sources. Recorded location is evidence-assisted, not proof of attendance. They never fall back to prototype fixtures or synthetic balancing values.
 
 Run `npm run test:reports-backend` for local contracts. Set `RUN_HOSTED_REPORT_TESTS=true` for hosted development catalogue/filter/reconciliation tests. Add `RUN_BACKEND_BROWSER_TESTS=true` to exercise real-login desktop/390px report settings, CSV and both letterhead modes on the reserved test port 5195. Tests retain labelled business history, deactivate their masters and remove only temporary reserved Auth identities. The historical fixture dates only its own newly created, unposted TEST order; it does not relax the normal API conversion-date policy. No additional environment variables, Docker, provider settings or deployment are needed for this increment.
 
@@ -80,9 +131,34 @@ Run `npm run test:reports-backend` for local contracts. Set `RUN_HOSTED_REPORT_T
 - Sales & Marketing contains daily activities, canonical product-linked leads, follow-ups, daily/monthly plans and monthly targets. Activity identity comes from the login. Submitted content is immutable; explained voids retain the original. Evidence bytes upload directly to private Storage and only document IDs enter the business request.
 - A lead converts once into an assigned customer, which enters the existing quotation/order workflow. Follow-up completion can schedule its successor atomically. Submitted plans require independent approval; approved plans cannot be rewritten. Target/rule revisions retain optimistic versions and before/after audits.
 - Reports contains activity timelines, funnel, follow-ups, performance and target comparisons, using the same scoped records. Only actual ERP commercial events score; manual notes never create quotations, orders, payments or GPS verification. All printing remains in the dedicated Reports preview with both letterhead modes. See `CALCULATIONS.md` for attribution and date rules.
-- GPS/field verification remains pending and explicitly unavailable. No verified-visit actuals or points are fabricated. Full HR/payroll is outside this increment.
+- Field check-ins now persist separately from manual notes; no verified-visit points are awarded. Full HR/payroll is outside this increment.
 
 Run `npm run test:workforce-backend` for local contracts; set `RUN_HOSTED_WORKFORCE_TESTS=true` for development persistence/ownership/evidence/approval checks. Add `RUN_BACKEND_BROWSER_TESTS=true` for isolated real-login desktop/390px checks on port 5196. These retain labelled DEV TEST business history, deactivate their test employees/masters and remove only reserved temporary Auth identities. No Docker, new provider settings, environment changes or deployment are required to develop this increment.
+
+## Field Visit Check-in (Update 12)
+
+- Sales & Marketing > Marketing > **My Field Day / Visits**: own assigned customer/lead, purpose, optional compressed camera/file photo, fresh browser location, explicit exceptions, save and complete with an optional follow-up. Employees > Team Activity contains the same scoped history/review UI, not a second store.
+- Attempts expire after ten minutes. Upload bytes go directly to private Storage before requesting fresh location. Server receipt time, logged-in employee, policy snapshot, original site version and independent review remain authoritative. Failed-response retries retain the exact capture and idempotency key.
+- Only the author creates/completes their visit. Existing Marketing TEAM/ALL scopes control history/photos; Marketing approval permits independent review, including MD without edit access. Authors cannot self-review. Original evidence and timeline events cannot be edited/deleted; void requires a reason.
+- An authorized reviewer can confirm a customer site from an independent source in the visit detail. New site versions never alter old comparisons. **Show Map** loads OSM tiles only on demand, disclosing the approximate area/viewer IP to that provider; no employee names/photos are sent. There is no live tracking, travel path, attendance conclusion or automatic visit scoring.
+- Reports > Employee & Marketing > **Field Visit Report** reuses `visit-verification`. Period, employee/team, customer, lead, location quality, review and lifecycle filters use one scoped SQL read model for screen/CSV/print. Six readable screen/A4 columns preserve nine detailed CSV fields; private photo URLs and exact coordinates are excluded.
+- Super Admin opens **Visit policy** (gear in Field Day) to record approved thresholds/privacy reference. Production submission stays blocked while `privacyApproved=false`. Approval must cover employee notice, hospital restrictions, correction rights, retention/backup procedures and actual device tests; no provider setting was changed automatically. Retention days are snapshotted policy, not an installed scheduler.
+
+Development checks (no Docker or extra host):
+
+```powershell
+npm run check:visits
+npm run test:visits-backend
+$env:RUN_HOSTED_VISIT_TESTS="true"
+npm run test:visits-backend
+# Optional isolated Edge desktop/390px walkthrough, port 5197:
+$env:RUN_VISIT_BROWSER_TESTS="true"
+npm run test:visits-backend
+```
+
+Tests retain labelled DEV TEST records/evidence and deactivate temporary employees; only their reserved Auth identities are removed. Actual Android Chrome/iPhone Safari under HTTPS, deployed acceptance and file/database restore remain required before production. Optional second GPS/photo checkout and stable daily-plan contact links remain P1.
+
+`npm run backend:visit-cleanup` previews at most 50 abandoned, unlinked visit uploads per run; `npm run backend:visit-cleanup -- --apply` removes only those expired beyond the Storage-token safety window, retains metadata and audits the change. It never removes linked evidence or other document purposes. Review/schedule it in an approved worker; linked-photo retention, legal holds and backup expiry still need an agreed operational policy. Supabase signed upload tokens last two hours independently of the app's shorter attempt window ([official reference](https://supabase.com/docs/reference/javascript/storage-from-createsigneduploadurl)).
 
 ### Database Driver
 
@@ -135,11 +211,11 @@ To issue a fresh administrator link, run bootstrap with `--apply --issue-link` a
 
 ### First Milestone Versus Remaining Work
 
-The original 32 unit tests and mock API integration scenarios remain regression checks. The expanded hosted foundation suite passed all five tests, including verified recovery/password reset, login/refresh, restart persistence, access revocation, private signed upload/read and audit tamper rejection. Real-backend desktop/390px browser login/profile-save/reload/logout checks also passed, with screenshots under `artifacts/backend/`. That final hosted run used a process-only public-DNS resolver because the system resolver was intermittently failing; no runtime workaround or OS change was installed. Active-session password change is implemented but still needs its own end-to-end acceptance check, as do invitation email delivery and privileged MFA enforcement.
+The original 32 unit tests and mock API integration scenarios remain regression checks. The expanded hosted foundation suite passed all five tests, including verified recovery/password reset, login/refresh, restart persistence, access revocation, private signed upload/read and audit tamper rejection. Real-backend desktop/390px browser login/profile-save/reload/logout checks also passed, with screenshots under `artifacts/backend/`. That final hosted run used a process-only public-DNS resolver because the system resolver was intermittently failing; no runtime workaround or OS change was installed. Authenticator enforcement has its own real-provider suite; actual invitation email delivery still needs acceptance.
 
 During later testing the Windows DNS resolver intermittently timed out resolving the Supabase pooler, while a direct public-DNS query resolved it. No database URL was pinned to an IP, OS DNS was not changed, and no runtime DNS workaround was installed. Treat these connection failures separately from application assertions; do not retry financial writes blindly. Provider calls now have bounded request timeouts.
 
-Remaining waves: approved openings/historical finance, stock returns/adjustments, controlled legacy-data preservation, field verification, dashboard/site persistence and remaining settings, robust invitation delivery, privileged MFA enforcement, deployment/backup restore and client acceptance. This is a staged backend implementation, not a production-ready replacement for the entire ERP.
+Remaining waves: approved openings/historical finance, stock returns/adjustments, controlled legacy-data preservation, field-device/privacy/retention acceptance, robust invitation delivery, least-privilege credentials/operational monitoring, deployment/backup restore and client acceptance. This is a staged backend implementation, not a production-ready replacement for the entire ERP. Dynamic website management and AI are deferred by scope.
 
 ## What To Set Up Now
 
@@ -234,7 +310,7 @@ Initial warnings and their current status:
 - `erp-documents` (private) and `website-media` (public) were created with restricted types/sizes by foundation bootstrap.
 - `.env` contains a plaintext password comment. Remove it. Credential rotation remains pending; the account holder explicitly authorized development work with the current development credentials. Rotation is still required before production use.
 - Account holder confirmed existing records must be preserved. No current fixture was copied into Supabase.
-- Actual login/reset, private upload authorization, private schema/RLS and initial migrations are implemented and tested. SMTP/invitation delivery, MFA enforcement, business-domain migrations and production deployment remain outstanding.
+- Login/reset/MFA, private upload authorization, private schema/RLS and core business migrations are implemented and tested. SMTP acceptance, approved openings/stock corrections, operational hardening and production deployment remain outstanding; see the progress checklist.
 
 No Docker, additional backend host or further account installation is needed to start foundation work. CLI access does not remove account-holder responsibilities for billing, recovery links, SMTP/DNS and client data approval.
 
@@ -335,7 +411,7 @@ A privileged SQL connection or Supabase secret key can bypass RLS. Every busines
 
 ## Authentication And Registration Scope
 
-The implemented backend includes login, logout, session refresh, invitation acceptance/account activation, password recovery/reset, profile updates and persisted role/access management. Privileged MFA enrollment/challenge/enforcement is still required; it is not implemented yet.
+The implemented backend includes login, logout, session refresh, invitation acceptance/account activation, password recovery/reset, profile updates, persisted role/access management and real TOTP MFA enrollment/challenge/enforcement. See Authenticator And Release Security above for mandatory production roles and recovery limitations.
 
 Registration for this internal ERP is controlled:
 

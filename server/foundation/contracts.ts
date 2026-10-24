@@ -18,10 +18,12 @@ export const accessSchema = z.object({
   version: z.number().int().positive(), reason: z.string().trim().min(5).max(500)
 }).strict();
 export const uploadSchema = z.object({
-  employeeId: z.string().min(1).max(100).optional(), purpose: z.enum(["employee-avatar", "employee-evidence", "import-document", "expense-receipt", "marketing-evidence"]),
+  employeeId: z.string().min(1).max(100).optional(), purpose: z.enum(["employee-avatar", "employee-evidence", "import-document", "expense-receipt", "marketing-evidence", "field-visit-evidence"]),
+  visitAttemptId: z.string().min(1).max(200).optional(),
   importId: z.string().min(1).max(100).optional(), documentType: z.string().trim().min(1).max(100).optional(), sensitive: z.boolean().optional(),
   fileName: z.string().trim().min(1).max(180).refine((v) => !v.includes("/") && !v.includes("\\") && [...v].every((char) => char.charCodeAt(0) >= 32), "Invalid file name"),
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
   sizeBytes: z.number().int().min(1).max(10 * 1024 * 1024)
 }).strict().refine((v) => v.purpose !== "employee-avatar" || (v.mimeType.startsWith("image/") && v.sizeBytes <= 2 * 1024 * 1024), "Avatar must be an image no larger than 2 MB")
-  .refine((v) => ["expense-receipt", "marketing-evidence"].includes(v.purpose) ? !v.importId && !v.employeeId && !v.documentType : v.purpose === "import-document" ? Boolean(v.importId && v.documentType && !v.employeeId) : Boolean(v.employeeId && !v.importId && !v.documentType), "Select exactly one valid document parent");
+  .refine(v=>v.purpose==="field-visit-evidence"?Boolean(v.visitAttemptId&&v.mimeType.startsWith("image/")&&v.sizeBytes<=307200&&!v.employeeId&&!v.importId&&!v.documentType):!v.visitAttemptId,"Visit evidence requires its own attempt and bounded image.")
+  .refine((v) => ["expense-receipt", "marketing-evidence", "field-visit-evidence"].includes(v.purpose) ? !v.importId && !v.employeeId && !v.documentType : v.purpose === "import-document" ? Boolean(v.importId && v.documentType && !v.employeeId) : Boolean(v.employeeId && !v.importId && !v.documentType), "Select exactly one valid document parent");

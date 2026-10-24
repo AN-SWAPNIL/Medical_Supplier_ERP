@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { documents, employees, importCases, marketingActivities } from "../../database/schema.js";
+import { documents, employees, importCases, marketingActivities, fieldVisitAttempts, fieldVisits } from "../../database/schema.js";
+import { validateVisitImage } from "../workforce/visit-images.js";
 import { assertEmployeeScope } from "../workforce/scope.js";
 import { canManageTargetUser, hasCapability, hasEffectivePermission } from "../../src/lib/permissions/effectiveAccess.js";
 import { uploadSchema } from "./contracts.js";
@@ -24,7 +25,14 @@ export function createDocumentRouter(ctx: Context) {
     if (!employee) throw new HttpError(404, "Employee not found.");
     assertAllowed(actor.id === employee.id || canManageTargetUser(actor, toUser(employee)));
   }
-  async function requireDocumentAccess(actor: ReturnType<typeof identity>["user"], row: Pick<typeof documents.$inferSelect, "employeeId" | "importId" | "sensitive" | "purpose" | "expenseId" | "uploadedBy"> & { activityId?: string|null }, write = false) {
+  async function requireDocumentAccess(actor: ReturnType<typeof identity>["user"], row: Pick<typeof documents.$inferSelect, "employeeId" | "importId" | "sensitive" | "purpose" | "expenseId" | "uploadedBy"> & { activityId?: string|null;visitId?:string|null;visitAttemptId?:string|null }, write = false) {
+    if(row.purpose==="field-visit-evidence"){
+      assertAllowed(hasEffectivePermission(actor,"marketing")&&(!write||hasEffectivePermission(actor,"marketing","create")));
+      if(row.visitId){const [v]=await ctx.db.select().from(fieldVisits).where(eq(fieldVisits.id,row.visitId));if(!v)throw new HttpError(404,"Visit not found.");await assertEmployeeScope(ctx.db,actor,v.employeeId);if(write)throw new HttpError(423,"Saved visit photos cannot be replaced.");return;}
+      assertAllowed(row.uploadedBy===actor.id&&row.employeeId===actor.id);const [a]=await ctx.db.select().from(fieldVisitAttempts).where(eq(fieldVisitAttempts.id,row.visitAttemptId??""));
+      if(!a||a.employeeId!==actor.id)throw new HttpError(404,"Own capture attempt not found.");
+      if(a.consumedAt||a.expiresAt<new Date())throw new HttpError(409,"Own capture attempt is used or expired.");return;
+    }
     if (row.purpose === "marketing-evidence") {
       assertAllowed(hasEffectivePermission(actor,"marketing")&&hasEffectivePermission(actor,"marketing",write?"create":"view"));
       if (!row.activityId) { assertAllowed(actor.id===row.uploadedBy); return; }
@@ -50,13 +58,17 @@ export function createDocumentRouter(ctx: Context) {
   router.post("/uploads", async (req, res) => {
     const input = uploadSchema.parse(req.body);
     const actor = identity(res).user;
-    const employeeId = ["import-document", "expense-receipt", "marketing-evidence"].includes(input.purpose) ? actor.id : input.employeeId!;
+    const employeeId = ["import-document", "expense-receipt", "marketing-evidence", "field-visit-evidence"].includes(input.purpose) ? actor.id : input.employeeId!;
     const sensitive = input.purpose === "import-document" ? !["Packing List", "Bill of Lading", "COA", "CE Certificate", "ISO Certificate"].includes(input.documentType!) || input.sensitive === true : true;
-    await requireDocumentAccess(actor, { employeeId, importId: input.importId ?? null, sensitive, purpose: input.purpose, expenseId: null, uploadedBy: actor.id }, true);
+    await requireDocumentAccess(actor, { employeeId, importId: input.importId ?? null, sensitive, purpose: input.purpose, expenseId: null, uploadedBy: actor.id,visitAttemptId:input.visitAttemptId }, true);
     const id = randomUUID();
-    const objectPath = input.purpose === "marketing-evidence" ? `marketing/pending/${actor.id}/${id}` : input.purpose === "expense-receipt" ? `expenses/pending/${actor.id}/${id}` : input.importId ? `imports/${input.importId}/${id}` : `employees/${employeeId}/${id}`;
+    const objectPath = input.purpose === "field-visit-evidence" ? `visits/pending/${actor.id}/${id}` : input.purpose === "marketing-evidence" ? `marketing/pending/${actor.id}/${id}` : input.purpose === "expense-receipt" ? `expenses/pending/${actor.id}/${id}` : input.importId ? `imports/${input.importId}/${id}` : `employees/${employeeId}/${id}`;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     await ctx.db.transaction(async (tx) => {
+      if(input.purpose==="field-visit-evidence"){
+        const [a]=await tx.select().from(fieldVisitAttempts).where(eq(fieldVisitAttempts.id,input.visitAttemptId!)).for("update");if(!a||a.employeeId!==actor.id||a.consumedAt||a.expiresAt<new Date())throw new HttpError(409,"Capture attempt is no longer available.");
+        const [{count}]=(await tx.execute<{count:number}>(sql`select count(*)::int count from erp_private.documents where visit_attempt_id=${a.id}`)).rows;if(count>=3)throw new HttpError(429,"At most three photo upload attempts are allowed; restart check-in.");
+      }
       await tx.insert(documents).values({ ...input, employeeId, sensitive, documentType: input.documentType ?? "Other", id, uploadedBy: actor.id, objectPath, expiresAt });
       await audit(tx, actor.id, "Upload authorized", "Document", id, { employeeId: input.employeeId, purpose: input.purpose });
     });
@@ -72,6 +84,7 @@ export function createDocumentRouter(ctx: Context) {
     await requireDocumentAccess(actor, row, true);
     assertAllowed(actor.id === row.uploadedBy, "Only the authorized uploader can complete this upload.");
     if (row.status === "Attached") return res.json({ success: true, data: { id: row.id }, message: "Upload already attached" });
+    if(row.status==="Expired")throw new HttpError(410,"Evidence expired.");
     if (row.expiresAt < new Date()) throw new HttpError(409, "Upload authorization expired. Create a new upload request.");
     const bucket = ctx.admin.storage.from(row.bucket);
     const { data: file, error } = await bucket.download(row.objectPath);
@@ -79,8 +92,10 @@ export function createDocumentRouter(ctx: Context) {
     if (file.size !== row.sizeBytes || file.type.split(";")[0] !== row.mimeType || !matchesFileSignature(row.mimeType, new Uint8Array(await file.slice(0, 16).arrayBuffer()))) {
       throw new HttpError(422, "Uploaded file size, type or signature does not match the authorization.");
     }
+    const imageInfo=row.purpose==="field-visit-evidence"?await validateVisitImage(Buffer.from(await file.arrayBuffer()),row.mimeType):undefined;
     await ctx.db.transaction(async (tx) => {
-      const [attached] = await tx.update(documents).set({ status: "Attached", attachedAt: new Date() })
+      if(row.purpose==="field-visit-evidence"){const [a]=await tx.select().from(fieldVisitAttempts).where(eq(fieldVisitAttempts.id,row.visitAttemptId!)).for("update");if(!a||a.consumedAt||a.expiresAt<new Date())throw new HttpError(409,"Capture attempt expired during upload.");}
+      const [attached] = await tx.update(documents).set({ status: "Attached", attachedAt: new Date(),...(imageInfo?{imageInfo}:{}) })
         .where(and(eq(documents.id, row.id), eq(documents.status, "Pending"))).returning();
       if (attached) await audit(tx, actor.id, "Document attached", "Document", row.id);
     });

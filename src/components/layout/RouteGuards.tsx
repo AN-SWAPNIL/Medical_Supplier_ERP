@@ -7,6 +7,7 @@ import { ApiRequestError } from "../../lib/api/client";
 import { canAccessEmployeeHub, canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import type { PermissionAction, PermissionKey } from "../../types";
 import { foundationMode } from "../../lib/runtime";
+import MfaSecurityGate from "../../features/auth/MfaSecurity";
 
 export function ProtectedRoute() {
   const session = useAuthStore((state) => state.session);
@@ -69,6 +70,7 @@ export function ProtectedRoute() {
     return <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-semibold text-slate-600"><span className="flex items-center gap-2"><LoaderCircle className="h-5 w-5 animate-spin text-cyan-700" />Checking current access...</span></div>;
   }
 
+  if (foundationMode && session.security?.required && session.security.assurance !== "aal2") return <MfaSecurityGate />;
   return <Outlet />;
 }
 

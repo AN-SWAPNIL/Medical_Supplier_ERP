@@ -7,7 +7,7 @@ import { manualActivityKinds, type PersistentActivity, type PersistentFollowUp, 
 import { WorkforceField as Field, WorkforceSelect as Select } from "./WorkforceUi";
 
 type Props={references:WorkforceReferences;actorId:string;busy:boolean;onSave:(payload:unknown)=>void};
-export const titleCase=(value:string)=>value.toLowerCase().replaceAll("_"," ").replace(/\b\w/g,(v)=>v.toUpperCase());
+export const titleCase=(value:string)=>value.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase().replaceAll("_"," ").replace(/\b\w/g,(v)=>v.toUpperCase());
 const localStamp=(value=new Date().toISOString())=>{const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
 const toStamp=(value:string)=>value?new Date(value).toISOString():undefined;
 const subjectValue=(row?:{customerId:string|null;leadId:string|null})=>row?.customerId?`customer:${row.customerId}`:row?.leadId?`lead:${row.leadId}`:"";

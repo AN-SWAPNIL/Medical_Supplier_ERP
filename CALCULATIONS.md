@@ -124,7 +124,7 @@ Product-family reports group canonical products by their master-data category. S
 - Sales Summary groups by calendar day, Monday-start week, month or year. Distinct customers are counted within the whole group, not added from daily counts. Gross Profit by Product uses invoiced saved delivery cost and reverses that margin on cancellation.
 - Master names/assignments/status are current. Import registers use current commercial records filtered by PO date; finalized-cost reports use the current immutable snapshot's finalization date. These are not reconstructed historical master/commercial records.
 - Screen totals cover every filtered row, not just the current page. Running balances, unit rates and document-register values are not summed as revenue. Print/CSV regenerate using the same authorized period, grouping and stable record IDs; later postings can change a later regeneration.
-- Reports never manufacture opening balances or a balancing equity figure. Balance Sheet remains pending approved opening/reconciliation data; GPS visit verification remains unavailable.
+- Reports never manufacture opening balances or a balancing equity figure. Balance Sheet remains pending approved opening/reconciliation data. Saved field check-ins are evidence-assisted records, not GPS proof.
 
 ## Employee Performance
 
@@ -134,6 +134,26 @@ Product-family reports group canonical products by their master-data category. S
 - Score: `sum(eligible event count * current active rule points)`. Defaults: qualified lead 10, actual lead-to-customer conversion 5, submitted quotation 15, order 30, posted receipt 20, completed follow-up 5. Receipt reversal subtracts its 20-point credit on its reversal date. Receipt score belongs once to its saved owner, independently of financial allocation. Unverified visits score zero.
 - Targets: sum configured monthly targets for months intersecting the period, without prorating. Progress is `actual / target * 100`, rounded to two decimals; absent/zero targets display `Not set`.
 - Plans are commitments, not actual performance. Lead funnel shows current derived commercial stages for leads created through To, not a reconstructed historical funnel. Weights and master assignments are current; manual activity name/ID snapshots remain unchanged after profile edits.
+
+## Field Check-ins (Update 12)
+
+- **Location age:** server receipt time minus the browser's claimed capture time. More than the saved policy limit (default 30 seconds), or over five seconds in the future, is `STALE`. Accuracy above the saved limit (default 100 m) is `POOR_ACCURACY`. Missing location requires a reason. Browser values can be spoofed; none proves attendance.
+- **Site distance:** Haversine great-circle distance, using mean Earth radius `6,371,008.8 m`, rounded to two decimals. Compare only with an independently approved, versioned customer site.
+- **Advisory match:** with fresh/acceptable accuracy, `distance + accuracy <= radius` means approximate match; `distance - accuracy > radius` means outside; overlapping uncertainty means uncertain. Default radius is 150 m. Without a reference, display `NO_REFERENCE`; poor/stale evidence with a reference remains uncertain.
+- **Counts:** recorded check-ins exclude currently voided visits in the server-receipt period. Manager-accepted count is their current accepted subset. Visit-record total = check-ins + submitted same-period visit notes not explicitly linked to a non-void check-in. A link must identify the same author/contact/business date. Unlinked records are not assumed to be duplicates. These counts are not attendance totals or historical review snapshots.
+- **Points and money:** every check-in awards **zero visit points**, regardless of score-rule settings or manager acceptance. Imports, stock, invoices, collections and accounts remain unchanged. Completing a visit may create one follow-up atomically; completing that follow-up later remains its own existing scored event.
+- **Photo size:** Canvas scales the longest edge to at most 960 px (smaller if needed), adaptively encodes to at most `300 * 1024` bytes, and strips original metadata. The server decodes actual pixels, enforces 16-1920 px per side/no animation and stores a SHA-256 of the accepted bytes. Photos stay in private Storage, not database/base64 payloads.
+
+## Persistent Dashboard
+
+- Net sales/collections and invoiced gross profit reuse the report SQL facts above, including reversals on their own dates. Gross profit excludes operating expenses; the same stock dispatch is not counted again as an invoice cost.
+- Receivables = sum of positive per-customer `debit - credit` balances through To. Customer credit balances are not netted against another customer's due; Reports retains those credits separately.
+- Cash/bank = sum of posted `In - Out` through To, including compensating entries. Missing openings are not estimated.
+- Current stock KPI counts distinct products with positive batch stock, not a sum of mixed units. Expiry attention counts remaining batches expiring within 92 days, including already expired ones. Active imports exclude Received, Closed and Cancelled.
+- Follow-up queues show current pending items due today or earlier. Check-ins use the selected server-receipt dates and current non-void status. Employee/team scope and financial permissions are applied before data leaves the server.
+- Values remain PostgreSQL numeric/decimal strings. Only chart coordinates use JavaScript numbers; displayed totals/tooltips retain the original exact strings. Work lists show at most eight rows alongside the full matching count.
+
+Warehouse settings and cost presets calculate no balances or prices. A preset never chooses an allocation method automatically. Client-decision confirmation records an agreement, not an automatic financial posting or permission grant.
 
 ## Print Calibration
 

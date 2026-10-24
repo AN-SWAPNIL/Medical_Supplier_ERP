@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ApiResponse, User } from "../types";
 import { authHeaders, readSession } from "../lib/auth/transport";
 import { foundationMode } from "../lib/runtime";
-import { apiRequest } from "../lib/api/client";
+import { apiRequest, ApiRequestError } from "../lib/api/client";
 import { PersistentReportSchema, ReportCatalogueEntrySchema, type PersistentReportQuery } from "./reports/persistentContracts";
 import type {
   AccountTransaction,
@@ -144,7 +144,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   const requestHeaders = await headers();
   new Headers(init?.headers).forEach((value, key) => requestHeaders.set(key, value));
   let pendingKey: string | undefined;
-  if (foundationMode && init?.method === "POST" && (path.startsWith("/api/workforce/") || /^\/api\/imports(?:$|\/[^/]+\/(finalize|receive)$)/.test(path) || /^\/api\/(customers|quotations|deliveries|invoices|collections|account-transactions|expenses|expense-categories|supplier-settlements|financial-position|settings\/accounts|settings\/expense-categories)$/.test(path) || /^\/api\/quotations\/[^/]+\/convert$/.test(path) || /^\/api\/invoices\/[^/]+\/(approve|cancel)$/.test(path) || /^\/api\/(collections|expenses|supplier-settlements|financial-position|account-transactions)\/[^/]+\/reverse$/.test(path)) && !requestHeaders.has("Idempotency-Key")) {
+  if (foundationMode && init?.method === "POST" && (path.startsWith("/api/workforce/") || path === "/api/settings/cost-presets" || /^\/api\/imports(?:$|\/[^/]+\/(finalize|receive)$)/.test(path) || /^\/api\/(customers|quotations|deliveries|invoices|collections|account-transactions|expenses|expense-categories|supplier-settlements|financial-position|settings\/accounts|settings\/expense-categories)$/.test(path) || /^\/api\/quotations\/[^/]+\/convert$/.test(path) || /^\/api\/invoices\/[^/]+\/(approve|cancel)$/.test(path) || /^\/api\/(collections|expenses|supplier-settlements|financial-position|account-transactions)\/[^/]+\/reverse$/.test(path)) && !requestHeaders.has("Idempotency-Key")) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${readSession()?.user.id}:${path}:${init.body}`));
     pendingKey = "mipro-pending-post:" + Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
     const key = sessionStorage.getItem(pendingKey) ?? crypto.randomUUID();
@@ -155,7 +155,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null;
   if (!response.ok || !body?.success) {
     if (pendingKey && response.status >= 400 && response.status < 500 && response.status !== 408) sessionStorage.removeItem(pendingKey);
-    throw new Error(body?.message || "Request failed (" + response.status + ")");
+    throw new ApiRequestError(body?.message || "Request failed (" + response.status + ")", response.status);
   }
   const parsed = schema.safeParse(body.data);
   if (!parsed.success) throw new Error("API contract validation failed for " + path + ": " + parsed.error.issues[0]?.message);

@@ -4,7 +4,7 @@ import { hasCapability, hasEffectivePermission } from "../../lib/permissions/eff
 
 export type ReportCategoryId = "sales" | "customers" | "suppliers" | "inventory" | "accounts" | "employees" | "controls";
 export type ReportSourceGroup = "sales" | "inventory" | "imports" | "expenses" | "employees" | "controls";
-export type ReportFilterKey = "salesperson" | "customer" | "product" | "family" | "supplier" | "employee" | "account" | "territory" | "status" | "order";
+export type ReportFilterKey = "salesperson" | "customer" | "product" | "family" | "supplier" | "employee" | "account" | "territory" | "status" | "order" | "lead" | "captureQuality" | "reviewStatus";
 
 export type ReportDefinition = {
   id: string;
@@ -98,7 +98,7 @@ const reports: ReportDefinition[] = [
   marketing("lead-funnel", "Lead Funnel", "Lead volume and progression by pipeline stage.", "funnel"),
   marketing("follow-up-status", "Follow-up Status", "Pending, completed and overdue follow-up work.", "week"),
   marketing("target-actual", "Target vs Actual", "Activity, sales, visit and collection progress.", "target"),
-  marketing("visit-verification", "Visit Verification", "Field visit evidence and verification status.", "verification"),
+  { ...marketing("visit-verification", "Field Visit Report", "Recorded check-ins, capture quality, independent review and outcomes. Not attendance proof.", "verification"), filters: ["employee", "territory", "customer", "lead", "status", "captureQuality", "reviewStatus"] },
 
   table("audit-trail", "Audit Trail", "controls", "Protected actions, actors and recorded reasons.", "accounts", [], ["audit"]),
   table("access-change-audit", "Access Change Audit", "controls", "Role, permission and capability changes.", "accounts", [], ["security"]),

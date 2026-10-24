@@ -13,7 +13,7 @@ export function createEmployeeRouter(ctx: Context) {
   const router = Router();
   router.get("/me", (req, res) => {
     const actor = identity(res);
-    res.json({ success: true, data: { token: actor.token, user: actor.user }, message: "Current access loaded" });
+    res.json({ success: true, data: { token: actor.token, user: actor.user, security: actor.security }, message: "Current access loaded" });
   });
   router.patch("/profile", async (req, res) => {
     const body = profileSchema.parse(req.body);

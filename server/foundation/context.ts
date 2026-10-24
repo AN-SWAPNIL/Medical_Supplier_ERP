@@ -7,6 +7,8 @@ import { auditEvents, employees, rateLimits, sessions } from "../../database/sch
 import { backendConfig } from "../config.js";
 import type { User } from "../../src/types/index.js";
 import { HttpError } from "./errors.js";
+import { sessionSecurity } from "./assurance.js";
+import type { Session } from "../../src/types/index.js";
 
 export const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 export function toUser(row: typeof employees.$inferSelect): User {
@@ -25,7 +27,7 @@ export function createContext() {
   return { ...connection, config, admin, publicClient };
 }
 export type Context = ReturnType<typeof createContext>;
-export type Identity = { user: User; sessionId: string; token: string; purpose: "login" | "recovery" };
+export type Identity = { user: User; sessionId: string; token: string; purpose: "login" | "recovery"; security: NonNullable<Session["security"]> };
 
 export function bearer(req: Request) {
   const match = /^Bearer ([A-Za-z0-9._-]+)$/.exec(req.get("authorization") ?? "");
@@ -33,7 +35,7 @@ export function bearer(req: Request) {
   return match[1];
 }
 
-export async function authenticate(ctx: Context, req: Request, allowRecovery = false): Promise<Identity> {
+export async function authenticate(ctx: Context, req: Request, allowRecovery = false, allowMfaSetup = false): Promise<Identity> {
   const token = bearer(req);
   const { data, error } = await ctx.admin.auth.getUser(token);
   if (error || !data.user?.email_confirmed_at) throw new HttpError(401, "Your session has expired. Please sign in again.");
@@ -41,7 +43,9 @@ export async function authenticate(ctx: Context, req: Request, allowRecovery = f
     .innerJoin(employees, eq(sessions.employeeId, employees.id))
     .where(and(eq(sessions.tokenHash, digest(token)), eq(employees.authUserId, data.user.id), eq(employees.status, "Active"), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())));
   if (!row || (row.session.purpose === "recovery" && !allowRecovery)) throw new HttpError(401, "This ERP session is no longer active.");
-  return { user: toUser(row.employee), sessionId: row.session.id, token, purpose: row.session.purpose };
+  const user = toUser(row.employee); const security = sessionSecurity(user, data.user, token, ctx.config.requirePrivilegedMfa);
+  if (!allowMfaSetup && security.required && security.assurance !== "aal2") throw new HttpError(428, "Authenticator verification is required before accessing ERP records.");
+  return { user, sessionId: row.session.id, token, purpose: row.session.purpose, security };
 }
 
 export const identity = (res: Response) => res.locals.identity as Identity;

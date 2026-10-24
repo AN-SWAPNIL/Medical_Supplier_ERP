@@ -4,8 +4,9 @@ import express, { type Request, type Response } from "express";
 import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { isFoundationMode } from "./config.js";
+import { backendConfig, isFoundationMode } from "./config.js";
 import { createFoundationRouter } from "./foundation/router.js";
+import { jsonBodyError } from "./http-security.js";
 import { buildSalesOrderWorkspace, restrictWorkspaceFinancials } from "./salesWorkspace.js";
 import { calculateLandedCost, importDisplayReference } from "../src/domains/imports/costing.js";
 import {
@@ -209,8 +210,11 @@ for (const record of imports) {
 }
 for (const expense of expenses) if (expense.attachment) documentContents.set(expense.attachment.id, expense.attachment.mimeType.startsWith("image/") ? seededExpenseImagePath : seededPdfPath);
 
-app.use(cors());
+app.disable("x-powered-by");
+if (isFoundationMode() && process.env.VERCEL) app.set("trust proxy", 1);
+app.use(cors(isFoundationMode() ? { origin: backendConfig().origin, credentials: true } : {}));
 app.use(express.json({ limit: isFoundationMode() ? "256kb" : "8mb" }));
+app.use(jsonBodyError);
 app.use((req, _res, next) => {
   const [path = "/", query] = req.url.split("?");
   let normalized = path.startsWith("/") ? path : `/${path}`;

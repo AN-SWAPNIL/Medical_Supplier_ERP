@@ -7,6 +7,28 @@
 **Primary requirements:** `files/MIPRO_ERP_Simplified_Plan_update10.md` and `files/MIPRO_ERP_Reports_Deep_Analysis_Update10.md`, consolidating every printable report under one HishabPati-inspired catalogue while retaining MIPRO workflows, RBAC and stationery; supported by the supplied product literature and earlier validated plans
 **Purpose:** Explain what the system does, how information moves, who performs each action, and what the prototype proves.
 
+### Hosted Backend Update 12 (25 October 2026)
+
+The walkthrough below describes the historical `/app` prototype unless explicitly stated otherwise. For the real hosted development backend, open `/backend`; its current acceptance and remaining production gaps are in `PRODUCTION_BACKEND_PROGRESS.md`.
+
+**Current public website:** Public pages are a static brochure/catalogue/news bundle, not ERP data screens. Visitors can browse without an account or ERP API. The Contact form prepares an unsent email/WhatsApp draft; the visitor sends it from that app. Content changes currently require a rebuild/deployment.
+
+**AI is later:** The persistent ERP has no active AI assistant, extraction or model integration. Historical AI demonstrations elsewhere in this guide are prototype-only and are not part of the current backend presentation.
+
+**Current account security:** Profile & Security contains authenticator setup. Production privileged accounts must verify a current code before opening ERP data. Other sessions are revoked after verification; no role switching or public employee registration is provided.
+
+**Current dashboard:** `/backend` shows saved business totals with no more than six role-safe KPIs. Choose dates for net invoiced sales, allocated collections and period profit; stock, pipeline, expiry and pending follow-ups remain current. Open the relevant workspace from each section. Dashboard figures reconcile to Reports and the stock/customer/cash journals, not separately maintained demo totals.
+
+**Current settings:** Settings > Operational Settings contains the single Main Warehouse contact/BIN suggestions, import cost presets and Super Admin Client Confirmation Queue. Presets appear while entering an import cost but the user still explicitly chooses its allocation basis. Existing finalized costs and receipts are never rewritten. Recording a client decision retains approval evidence without silently enabling an unfinished feature.
+
+**Real field workflow:** Sales & Marketing > Marketing > My Field Day / Visits > Check In. Select an assigned customer/lead and purpose, take a permitted photo or explain its absence, capture location and save. The server records employee, receipt time, accuracy, policy/site version and private evidence. Complete Visit saves an outcome and optional follow-up. New prospects must first be saved as Leads.
+
+**Management:** Employees > Team Activity > My Field Day / Visits. Authorized managers review their reporting team; MD can review company-wide without edit permission. Open a visit for the immutable timeline, photo and optional **Show Map**. A map pin means a past reported check-in, not current employee location. The map loads only on request and discloses its approximate area/viewer IP to OSM. Reviews require a reason and cannot be self-approved.
+
+**Reports:** Reports > Employee & Marketing > Field Visit Report. Choose period/employee/customer/lead/location quality/review/status, then use the same **Print Preview** workflow and two letterhead modes. Screen/A4 groups the detailed export fields into six readable columns. No signed photo URL or exact coordinate enters CSV/PDF. Employee performance separates check-ins, accepted reviews and manual notes; check-ins award no visit points or financial postings.
+
+**Limits:** The old foreground tracking, route trails, check-out GPS/photos, automatic plan completion and demo location-feed descriptions elsewhere in this historical guide are **not** features of the hosted foundation implementation. Production field submission remains gated until privacy/retention approval is recorded. Native-device HTTPS UAT, deployed acceptance and operational retention/restore remain pending; this increment is not a declaration that the whole ERP is production-ready.
+
 ---
 
 ## 1. The One-Minute Explanation
@@ -673,6 +695,8 @@ Import documents, freight/cost evidence, and expense receipts use this flow. Sen
 
 ### Contextual MIPRO AI
 
+Historical prototype only. AI is deferred and inactive in the current hosted foundation workspace; do not present the following examples as production features.
+
 The assistant is fixed at the bottom-right on desktop and becomes a near-full-screen panel on mobile. It receives only route/entity context, optional selected employee, and the selected report period, then the API builds an answer from records already permitted for the signed-in role.
 
 - Imports: stage, missing documents, and authorized allocation explanation.
@@ -1155,8 +1179,8 @@ It is contextual inside Sales rather than a new main navigation tab. The confirm
 
 **Where are AI, GPS, HR, and fleet?**
 
-Contextual MIPRO AI and the web field workflow are active. Employees -> Field Team is the shared management view and displays a clearly labelled demo feed with real coordinates, clustering, current/stale/offline rules, visit history, and strict team access. Sales Executives retain the self-only foreground tracking and GPS visit check-in/check-out experience inside Sales & Marketing. The future native mobile app, reliable tracking after browser closure, Supabase realtime persistence, HR/payroll, and fleet remain later phases. A production AI model and persistent document intelligence also belong to the backend phase.
+In the current persistent backend, AI is deferred. Sales & Marketing > My Field Day contains employee-initiated customer/lead check-ins, optional private photos with explained absence, reported location and visit completion. Authorized managers review saved events under Employees > Team Activity; the map loads only when requested. There is no continuous employee tracking, inferred attendance or automatic visit score. Native mobile, second GPS/photo checkout, HR/payroll and fleet remain later phases. Older mock map/AI examples in this guide are historical only.
 
 **Will demo changes remain forever?**
 
-No. They remain during the running mock session and reset with the serverless process. Persistence is the next backend phase.
+Historical mock edits last only for that running mock process. Foundation business records persist in hosted PostgreSQL/private Storage and survive API restarts; they never fall back to mock arrays. Approved source-data migration and full production acceptance are still pending.

@@ -15,6 +15,7 @@ import { inventorySpec } from "./inventory.js";
 import { importSpec } from "./imports.js";
 import { controlSpec } from "./controls.js";
 import { workforceReportSpec } from "../workforce/reporting.js";
+import { fieldVisitReport } from "../workforce/visit-reports.js";
 
 export function canReadReport(user: User, report: ReportDefinition) {
   const sourceAllowed=report.id==="employee-list"?canAccessEmployeeHub(user):hasEffectivePermission(user, report.permission.key, report.permission.action);
@@ -25,7 +26,7 @@ export function canReadReport(user: User, report: ReportDefinition) {
   return true;
 }
 export function reportSpec(report: ReportDefinition, user: User, q: Query) {
-  const spec = salesSpec(report.id,user,q) ?? partySpec(report.id,user,q) ?? inventorySpec(report.id,user,q) ?? importSpec(report.id,q) ?? financeSpec(report.id,q) ?? workforceReportSpec(report.id,user,q) ?? controlSpec(report.id,q,user);
+  const spec = salesSpec(report.id,user,q) ?? partySpec(report.id,user,q) ?? inventorySpec(report.id,user,q) ?? importSpec(report.id,q) ?? financeSpec(report.id,q) ?? fieldVisitReport(report.id,user,q) ?? workforceReportSpec(report.id,user,q) ?? controlSpec(report.id,q,user);
   if (!spec) return undefined;
   if ((report.category === "suppliers" && !hasCapability(user,"view_sensitive_cost")) || user.role === "Warehouse Manager" && ["sales","employees"].includes(report.category)) {
     spec.columns = spec.columns.filter((column) => column.format !== "money");

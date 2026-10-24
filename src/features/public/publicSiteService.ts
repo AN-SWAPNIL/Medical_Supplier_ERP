@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { ApiResponse, Session } from "../../types";
+import { foundationMode } from "../../lib/runtime";
+import { staticPublicContent } from "./staticContent";
 import {
   PublicCertificateSchema,
   PublicContentAdminSnapshotSchema,
@@ -59,10 +61,11 @@ const patch = <T>(path: string, payload: unknown, schema: z.ZodType<T>, authenti
 const remove = (path: string) => request(path, IdResponseSchema, { method: "DELETE" }, true);
 
 export const publicSiteService = {
-  settings: () => get<PublicSiteSettings>("/api/public/site", PublicSiteSettingsSchema),
-  heroSlides: () => get<PublicHeroSlide[]>("/api/public/hero-slides", z.array(PublicHeroSlideSchema)),
-  categories: () => get<PublicProductCategoryRecord[]>("/api/public/categories", z.array(PublicProductCategoryRecordSchema)),
+  settings: () => foundationMode ? staticPublicContent.settings() : get<PublicSiteSettings>("/api/public/site", PublicSiteSettingsSchema),
+  heroSlides: () => foundationMode ? staticPublicContent.heroSlides() : get<PublicHeroSlide[]>("/api/public/hero-slides", z.array(PublicHeroSlideSchema)),
+  categories: () => foundationMode ? staticPublicContent.categories() : get<PublicProductCategoryRecord[]>("/api/public/categories", z.array(PublicProductCategoryRecordSchema)),
   products(filters?: { category?: PublicProductCategory; search?: string; featured?: boolean }) {
+    if (foundationMode) return staticPublicContent.products(filters);
     const params = new URLSearchParams();
     if (filters?.category) params.set("category", filters.category);
     if (filters?.search) params.set("search", filters.search);
@@ -70,12 +73,12 @@ export const publicSiteService = {
     const query = params.toString();
     return get<PublicProduct[]>(`/api/public/products${query ? `?${query}` : ""}`, z.array(PublicProductSchema));
   },
-  product: (slug: string) => get<PublicProduct | null>(`/api/public/products/${encodeURIComponent(slug)}`, PublicProductSchema.nullable()),
-  legacyProduct: (legacySlug: string) => get<PublicProduct | null>(`/api/public/legacy-products/${encodeURIComponent(legacySlug)}`, PublicProductSchema.nullable()),
-  certificates: () => get<PublicCertificate[]>("/api/public/certificates", z.array(PublicCertificateSchema)),
-  resources: () => get<PublicResource[]>("/api/public/resources", z.array(PublicResourceSchema)),
-  resource: (slug: string) => get<PublicResource | null>(`/api/public/resources/${encodeURIComponent(slug)}`, PublicResourceSchema.nullable()),
-  submitInquiry: (payload: PublicInquiryInput) => post<PublicInquiryReceipt>("/api/public/contact", payload, PublicInquiryReceiptSchema)
+  product: (slug: string) => foundationMode ? staticPublicContent.product(slug) : get<PublicProduct | null>(`/api/public/products/${encodeURIComponent(slug)}`, PublicProductSchema.nullable()),
+  legacyProduct: (legacySlug: string) => foundationMode ? staticPublicContent.legacyProduct(legacySlug) : get<PublicProduct | null>(`/api/public/legacy-products/${encodeURIComponent(legacySlug)}`, PublicProductSchema.nullable()),
+  certificates: () => foundationMode ? staticPublicContent.certificates() : get<PublicCertificate[]>("/api/public/certificates", z.array(PublicCertificateSchema)),
+  resources: () => foundationMode ? staticPublicContent.resources() : get<PublicResource[]>("/api/public/resources", z.array(PublicResourceSchema)),
+  resource: (slug: string) => foundationMode ? staticPublicContent.resource(slug) : get<PublicResource | null>(`/api/public/resources/${encodeURIComponent(slug)}`, PublicResourceSchema.nullable()),
+  submitInquiry: (payload: PublicInquiryInput): Promise<PublicInquiryReceipt> => foundationMode ? Promise.reject(new Error("Use the published email or WhatsApp contact. Website inquiry storage is not enabled.")) : post<PublicInquiryReceipt>("/api/public/contact", payload, PublicInquiryReceiptSchema)
 };
 
 export const websiteContentService = {

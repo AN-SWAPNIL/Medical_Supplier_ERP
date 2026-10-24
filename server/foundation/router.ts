@@ -20,6 +20,9 @@ import { createSettlementRouter } from "../finance/settlements.js";
 import { createPrintRouter } from "../printing/router.js";
 import { createReportRouter } from "../reports/router.js";
 import { createWorkforceRouter } from "../workforce/router.js";
+import { createOperationalSettingsRouter } from "../settings/router.js";
+import { createDashboardRouter } from "../dashboard/router.js";
+import { createMfaRouter } from "./mfa.js";
 
 export function createFoundationRouter(providedContext?: Context) {
   const ctx = providedContext ?? createContext();
@@ -43,11 +46,15 @@ export function createFoundationRouter(providedContext?: Context) {
     } catch { throw new HttpError(503, "Database dependency unavailable."); }
   });
   router.use("/auth", createAuthRouter(ctx));
+  router.use("/auth", createMfaRouter(ctx));
   router.use(async (req, res, next) => {
-    res.locals.identity = await authenticate(ctx, req);
+    res.locals.identity = await authenticate(ctx, req, false, req.method === "GET" && req.path === "/me");
     next();
   });
-  router.get("/system/status", (_req, res) => res.json({ success: true, data: { phase: "Operations, Finance, Workforce & Reports", authentication: "Connected", database: "Connected", privateStorage: "Configured", businessMigration: "Imports, sales, operating finance, employees/marketing and SQL reports connected; dashboard, opening reconciliation, field verification and public-site migration pending" }, message: "Backend migration status" }));
+  router.get("/system/status", (_req, res) => res.json({ success: true, data: { phase: "Persistent ERP", authentication: "Connected", database: "Connected", privateStorage: "Configured", businessMigration: "Core operations connected; public content is static, AI deferred, opening reconciliation and approved stock-correction policies pending" }, message: "Backend status" }));
+  router.use("/ai", () => { throw new HttpError(503, "AI is deferred for this release. ERP records are not sent to an AI provider."); });
+  router.use(createDashboardRouter(ctx));
+  router.use(createOperationalSettingsRouter(ctx));
   router.use(createEmployeeRouter(ctx));
   router.use(createDocumentRouter(ctx));
   router.use(createMasterRouter(ctx));

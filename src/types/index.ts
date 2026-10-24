@@ -69,4 +69,5 @@ export type User = {
 export type Session = {
   token: string;
   user: User;
+  security?: { assurance: "aal1" | "aal2"; enrolled: boolean; required: boolean };
 };

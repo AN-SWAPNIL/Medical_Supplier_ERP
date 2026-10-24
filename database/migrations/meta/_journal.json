@@ -134,6 +134,41 @@
       "when": 1792828091317,
       "tag": "0018_workforce_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792842555968,
+      "tag": "0019_field_visit_checkins",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792842644985,
+      "tag": "0020_field_visit_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792845403634,
+      "tag": "0021_field_visit_consistency",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792846283835,
+      "tag": "0022_field_position_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792858072531,
+      "tag": "0023_operational_settings",
+      "breakpoints": true
     }
   ]
 }

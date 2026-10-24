@@ -27,6 +27,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Decimal } from "decimal.js";
 import { useNavigate, useParams } from "react-router-dom";
 import { foundationMode, workspacePath } from "../../lib/runtime";
+import { operationalService } from "../settings/operationalService";
+import type { PresetData } from "../settings/operationalContracts";
 import Button from "../../components/ui/Button";
 import LifecycleProgress from "../../components/ui/LifecycleProgress";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
@@ -437,7 +439,12 @@ function ItemEditor({ record, products, item, busy, onSubmit }: { record: Import
 }
 
 function CostEditor({ record, cost, busy, onSubmit }: { record: ImportCase; cost?: ImportCostLine; busy: boolean; onSubmit: (payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt"> & { attachmentUpload?: DocumentUpload }) => void }) {
-  const [form, setForm] = useState({ name: cost?.name ?? "", category: cost?.category ?? "Freight", amountForeign: cost?.amountForeign ?? "", currency: cost?.currency ?? "BDT", exchangeRate: cost?.exchangeRate ?? "1", allocationMethod: (cost?.allocationMethod ?? "") as AllocationMethod | "", scope: cost?.appliesToItemIds.length ? "SELECTED" : "ALL", selected: cost?.appliesToItemIds ?? [], vendor: cost?.vendor ?? "", paymentDate: cost?.paymentDate ?? "", accountId: cost?.accountId ?? "", notes: cost?.notes ?? "", attachmentName: cost?.attachmentName ?? "" });
+  const presets = useQuery({ queryKey: ["operational-settings", "presets"], queryFn: operationalService.presets, enabled: foundationMode && !cost });
+  const [presetId, setPresetId] = useState(""); const selected = presets.data?.find((p) => p.id === presetId && p.active);
+  return <div className="grid gap-4">{foundationMode && !cost ? <div className="grid gap-2 border-b border-blue-100 pb-4"><label><span className={labelClass}>Start from Saved Cost Preset</span><select aria-label="Cost preset" className={inputClass} value={presetId} onChange={(e) => setPresetId(e.target.value)}><option value="">Custom cost row</option>{presets.data?.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{selected?.suggestedAllocationMethod ? <p className="text-xs text-cyan-800">Suggested basis: {selected.suggestedAllocationMethod}. Confirm the allocation method below.</p> : null}{presets.isError ? <ErrorBlock error={presets.error} /> : null}</div> : null}<CostFields key={presetId} record={record} cost={cost} busy={busy} onSubmit={onSubmit} preset={selected} /></div>;
+}
+function CostFields({ record, cost, preset, busy, onSubmit }: { record: ImportCase; cost?: ImportCostLine; preset?: PresetData; busy: boolean; onSubmit: (payload: Omit<ImportCostLine, "id" | "enteredBy" | "createdAt"> & { attachmentUpload?: DocumentUpload }) => void }) {
+  const [form, setForm] = useState({ name: cost?.name ?? preset?.name ?? "", category: cost?.category ?? preset?.category ?? "Freight", amountForeign: cost?.amountForeign ?? "", currency: cost?.currency ?? "BDT", exchangeRate: cost?.exchangeRate ?? "1", allocationMethod: (cost?.allocationMethod ?? "") as AllocationMethod | "", scope: cost?.appliesToItemIds.length ? "SELECTED" : "ALL", selected: cost?.appliesToItemIds ?? [], vendor: cost?.vendor ?? "", paymentDate: cost?.paymentDate ?? "", accountId: cost?.accountId ?? "", notes: cost?.notes ?? "", attachmentName: cost?.attachmentName ?? "" });
   const initialManual = Object.fromEntries(record.items.map((item) => [item.id, cost?.manualSplits?.find((split) => split.importItemId === item.id)?.amountBdt ?? ""]));
   const [manual, setManual] = useState<Record<string, string>>(initialManual);
   const [error, setError] = useState("");
@@ -508,10 +515,16 @@ function AIDocumentExtractReview({ extraction, busy, onApply }: { extraction: AI
 }
 
 function ReceiptEditor({ record, receipts, busy, onSubmit }: { record: ImportCase; receipts: WarehouseReceipt[]; busy: boolean; onSubmit: (payload: Omit<WarehouseReceipt, "id" | "importId" | "reference" | "status" | "receivedBy">) => void }) {
-  const processed = useMemo(() => Object.fromEntries(record.items.map((item) => [item.id, receipts.flatMap((receipt) => receipt.lines).filter((line) => line.importItemId === item.id).reduce((sum, line) => sum + Number(line.quantityReceived) + Number(line.quantityRejected), 0)])), [record.items, receipts]);
+  const warehouse = useQuery({ queryKey: ["operational-settings", "warehouse"], queryFn: operationalService.warehouse, enabled: foundationMode });
+  if (foundationMode && warehouse.isPending) return <LoadingBlock label="Loading warehouse configuration" />;
+  if (foundationMode && warehouse.isError) return <ErrorBlock error={warehouse.error} />;
+  return <ReceiptFields record={record} receipts={receipts} busy={busy} onSubmit={onSubmit} locations={warehouse.data?.locations ?? []} />;
+}
+function ReceiptFields({ record, receipts, busy, onSubmit, locations }: { record: ImportCase; receipts: WarehouseReceipt[]; busy: boolean; onSubmit: (payload: Omit<WarehouseReceipt, "id" | "importId" | "reference" | "status" | "receivedBy">) => void; locations: string[] }) {
+  const processed = useMemo(() => Object.fromEntries(record.items.map((item) => [item.id, receipts.flatMap((receipt) => receipt.lines).filter((line) => line.importItemId === item.id).reduce((sum, line) => sum.plus(line.quantityReceived).plus(line.quantityRejected), new Decimal(0)).toFixed(4)])), [record.items, receipts]);
   const [date, setDate] = useState(businessDate());
-  const [rows, setRows] = useState(() => Object.fromEntries(record.items.map((item) => [item.id, { received: "", rejected: "0", lot: "", batch: "", manufacturing: "", expiry: "", warehouse: "MIPRO Main Warehouse", location: "" }])));
-  const update = (id: string, key: string, value: string) => setRows((current) => ({ ...current, [id]: { ...current[id], [key]: value } }));
+  const [rows, setRows] = useState(() => Object.fromEntries(record.items.map((item) => [item.id, { received: "", rejected: "0", lot: "", batch: "", manufacturing: "", expiry: "", warehouse: foundationMode ? "Main Warehouse" : "MIPRO Main Warehouse", location: "" }])));
+  const update = (id: string, key: string, value: string) => { if (foundationMode && key === "warehouse") return; setRows((current) => ({ ...current, [id]: { ...current[id], [key]: value } })); };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const lines = record.items.flatMap((item) => {
@@ -522,7 +535,24 @@ function ReceiptEditor({ record, receipts, busy, onSubmit }: { record: ImportCas
     if (!lines.length) return;
     onSubmit({ receivedDate: date, lines });
   };
-  return <form className="grid gap-4" onSubmit={submit}><label className="max-w-xs"><span className={labelClass}>Receiving Date</span><input className={inputClass} type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label><div className="grid gap-3">{record.items.map((item) => { const row = rows[item.id]; const remaining = Math.max(0, Number(item.quantity) - Number(processed[item.id] ?? 0)); return <fieldset className="rounded-md border border-slate-200 p-3" key={item.id} disabled={remaining <= 0}><legend className="px-1 text-sm font-bold text-slate-900">{item.productCode} · {item.productName} <span className="font-normal text-slate-500">({formatNumber(remaining)} remaining)</span></legend><div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label><span className={labelClass}>Received Qty</span><input className={inputClass} type="number" min="0" max={remaining} step="1" value={row.received} onChange={(event) => update(item.id, "received", event.target.value)} /></label><label><span className={labelClass}>Rejected Qty</span><input className={inputClass} type="number" min="0" max={remaining} step="1" value={row.rejected} onChange={(event) => update(item.id, "rejected", event.target.value)} /></label><label><span className={labelClass}>Lot Number</span><input className={inputClass} value={row.lot} onChange={(event) => update(item.id, "lot", event.target.value)} required={Number(row.received) > 0} /></label><label><span className={labelClass}>Batch Number</span><input className={inputClass} value={row.batch} onChange={(event) => update(item.id, "batch", event.target.value)} required={Number(row.received) > 0} /></label><label><span className={labelClass}>Manufacturing Date</span><input className={inputClass} type="date" value={row.manufacturing} onChange={(event) => update(item.id, "manufacturing", event.target.value)} required={Number(row.received) + Number(row.rejected) > 0} /></label><label><span className={labelClass}>Expiry Date</span><input className={inputClass} type="date" value={row.expiry} onChange={(event) => update(item.id, "expiry", event.target.value)} required={Number(row.received) + Number(row.rejected) > 0} /></label><label><span className={labelClass}>Warehouse</span><input className={inputClass} value={row.warehouse} onChange={(event) => update(item.id, "warehouse", event.target.value)} required /></label><label><span className={labelClass}>Rack / Location</span><input className={inputClass} value={row.location} onChange={(event) => update(item.id, "location", event.target.value)} required={Number(row.received) > 0} /></label></div></fieldset>; })}</div><div className="flex justify-end"><Button type="submit" variant="primary" icon={<Warehouse className="h-4 w-4" />} disabled={busy}>Post Warehouse Receipt</Button></div></form>;
+  return <form className="grid gap-4" onSubmit={submit}>
+    <label className="max-w-xs"><span className={labelClass}>Receiving Date</span><input className={inputClass} type="date" value={date} max={businessDate()} onChange={(event) => setDate(event.target.value)} required /></label>
+    <datalist id="receiving-bin-locations">{locations.map((location) => <option key={location} value={location} />)}</datalist>
+    <div className="grid gap-3">{record.items.map((item) => {
+      const row = rows[item.id]; const remaining = Decimal.max(0, new Decimal(item.quantity).minus(processed[item.id] ?? 0));
+      return <fieldset className="rounded-md border border-slate-200 p-3" key={item.id} disabled={remaining.lte(0) || busy}>
+        <legend className="px-1 text-sm font-bold text-slate-900">{item.productCode} | {item.productName} <span className="font-normal text-slate-500">({formatNumber(remaining.toFixed(4))} {item.unit} remaining)</span></legend>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {(["received", "rejected"] as const).map((key) => <label key={key}><span className={labelClass}>{key === "received" ? "Received Qty" : "Rejected Qty"}</span><input className={inputClass} type="number" min="0" max={remaining.toFixed(4)} step="0.0001" value={row[key]} onChange={(event) => update(item.id, key, event.target.value)} /></label>)}
+          {(["lot", "batch"] as const).map((key) => <label key={key}><span className={labelClass}>{key === "lot" ? "Lot Number" : "Batch Number"}</span><input className={inputClass} maxLength={200} value={row[key]} onChange={(event) => update(item.id, key, event.target.value)} required={Number(row.received) > 0} /></label>)}
+          {(["manufacturing", "expiry"] as const).map((key) => <label key={key}><span className={labelClass}>{key === "manufacturing" ? "Manufacturing Date" : "Expiry Date"}</span><input className={inputClass} type="date" value={row[key]} onChange={(event) => update(item.id, key, event.target.value)} required={Number(row.received) + Number(row.rejected) > 0} /></label>)}
+          <label><span className={labelClass}>Warehouse</span><input className={inputClass} value={row.warehouse} readOnly={foundationMode} onChange={(event) => update(item.id, "warehouse", event.target.value)} required /></label>
+          <label><span className={labelClass}>BIN / Rack Location</span><input className={inputClass} list="receiving-bin-locations" value={row.location} maxLength={200} onChange={(event) => update(item.id, "location", event.target.value)} required={Number(row.received) > 0} /></label>
+        </div>
+      </fieldset>;
+    })}</div>
+    <div className="flex justify-end"><Button type="submit" variant="primary" icon={<Warehouse className="h-4 w-4" />} disabled={busy}>Post Warehouse Receipt</Button></div>
+  </form>;
 }
 
 function ReopenModal({ busy, onClose, onSubmit }: { busy: boolean; onClose: () => void; onSubmit: (reason: string) => void }) {

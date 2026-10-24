@@ -10,11 +10,13 @@ import { createContext } from "../foundation/context.js";
 import { createFoundationRouter } from "../foundation/router.js";
 import { ImportCaseSchema, LandedCostPreviewSchema, StockBatchSchema, StockMovementSchema, StockSummarySchema, WarehouseReceiptSchema } from "../../src/domains/schemas.js";
 import { businessDate } from "../../src/lib/date.js";
+import { isolatedPeer, localApiRequest } from "../testing/http.js";
 
 test("hosted imports: persisted costing, role boundaries, immutable snapshots and concurrent/idempotent receipts", { skip: process.env.RUN_HOSTED_IMPORT_TESTS !== "true", timeout: 420000 }, async () => {
   const ctx = createContext();
   const second = createContext();
   const suffix = randomUUID();
+  const peer = isolatedPeer(suffix);
   const password = `T!${randomBytes(24).toString("hex")}`;
   const identities: { id: string; authId: string; email: string; token: string }[] = [];
   const servers: ReturnType<ReturnType<typeof express>["listen"]>[] = [];
@@ -38,8 +40,8 @@ test("hosted imports: persisted costing, role boundaries, immutable snapshots an
     const headers = new Headers({ "Content-Type": "application/json" });
     if (token) headers.set("Authorization", `Bearer ${token}`);
     if (key) headers.set("Idempotency-Key", key);
-    const response = await fetch(target + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000) });
-    const json = z.object({ data: z.any(), message: z.string() }).parse(await response.json());
+    const response = await localApiRequest(target + path, peer, method, Object.fromEntries(headers.entries()), body === undefined ? undefined : JSON.stringify(body));
+    const json = z.object({ data: z.any(), message: z.string() }).parse(response.json);
     return { status: response.status, data: json.data, message: json.message };
   }
   async function expect(path: string, token: string, body: unknown, status = 200, method = "POST", key?: string, target?: string) {
@@ -157,8 +159,10 @@ test("hosted imports: persisted costing, role boundaries, immutable snapshots an
     await expect(`/imports/${id}/transition`, admin, { status: "Closed" });
     if (process.env.RUN_BACKEND_BROWSER_TESTS === "true") {
       console.log("Hosted imports: starting browser acceptance checks");
+      const receivingCase = await expect("/imports", admin, { ...payload, lcNumber: `TEST-RECEIVE-UI-${suffix}` }, 201, "POST", `ui-import-${suffix}`);
+      await expect(`/imports/${receivingCase.id}/finalize`, admin, {}, 200, "POST", `ui-finalize-${suffix}`);
       const { operationsBrowserSmoke } = await import("../../scripts/operations-browser-smoke.js");
-      await operationsBrowserSmoke(base, identities[0].email, password, id, identities[2].email);
+      await operationsBrowserSmoke(base, identities[0].email, password, id, identities[2].email, receivingCase.id, peer);
     }
     console.log("Hosted imports passed. Clearly labelled DEV TEST business records remain for audit; test identities are removed.");
   } finally {

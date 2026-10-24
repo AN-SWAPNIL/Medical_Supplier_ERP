@@ -22,7 +22,7 @@ export async function backendBrowserSmoke(apiBase: string, email: string, passwo
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign In", exact: true }).click();
       await page.waitForURL("**/backend", { timeout: 20000 });
-      await page.getByText("PostgreSQL", { exact: true }).waitFor();
+      await page.getByTestId("persistent-dashboard").waitFor();
       assert.equal(await page.locator("body").evaluate((body) => body.scrollWidth <= body.clientWidth + 2), true);
       await page.screenshot({ path: `artifacts/backend/foundation-${name}.png`, fullPage: true });
       await page.getByRole("link", { name: "Profile & Security", exact: true }).click();

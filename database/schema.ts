@@ -3,8 +3,25 @@ import { check, date, index, integer, jsonb, numeric, pgSchema, text, timestamp,
 import type { Capability, Expense, FinancialPositionEntry, ImportCase, ImportCostLine, ImportStatus, LandedCostSnapshot, PrintConfiguration, Quotation, SalesOrder } from "../src/domains/erp.types.js";
 import type { Role, UserPermissionOverride } from "../src/types/index.js";
 import type { PlanData } from "../src/domains/marketing/persistentContracts.js";
+import type { VisitPolicyData, VisitPosition } from "../src/domains/marketing/visitContracts.js";
+import type { WarehouseData, PresetData, DecisionData } from "../src/domains/settings/operationalContracts.js";
 
 export const erp = pgSchema("erp_private");
+export const warehouseSettings = erp.table("warehouse_settings", {
+  id: text("id").primaryKey(), data: jsonb("data").$type<WarehouseData>().notNull(),
+  version: integer("version").notNull().default(1), updatedBy: text("updated_by").references(() => employees.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [check("warehouse_singleton", sql`${t.id}='main' and ${t.data}->>'id'='main' and ${t.data}->>'name'='Main Warehouse' and ${t.data}->>'active'='true'`)]).enableRLS();
+export const costPresets = erp.table("cost_presets", {
+  id: text("id").primaryKey(), data: jsonb("data").$type<PresetData>().notNull(),
+  version: integer("version").notNull().default(1), updatedBy: text("updated_by").notNull().references(() => employees.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [uniqueIndex("cost_preset_name_unique").on(sql`lower(btrim(${t.data}->>'name'))`), check("preset_explicit_allocation", sql`${t.data}->>'requiresExplicitChoice'='true'`)]).enableRLS();
+export const businessDecisions = erp.table("business_decisions", {
+  id: text("id").primaryKey(), data: jsonb("data").$type<DecisionData>().notNull(),
+  version: integer("version").notNull().default(1), updatedBy: text("updated_by").references(() => employees.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}).enableRLS();
 export const employees = erp.table("employees", {
   id: text("id").primaryKey(),
   authUserId: uuid("auth_user_id").unique(),
@@ -55,10 +72,13 @@ export const documents = erp.table("documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   employeeId: text("employee_id").notNull().references(() => employees.id),
   uploadedBy: text("uploaded_by").notNull().references(() => employees.id),
-  purpose: text("purpose").$type<"employee-avatar" | "employee-evidence" | "import-document" | "expense-receipt" | "marketing-evidence">().notNull(),
+  purpose: text("purpose").$type<"employee-avatar" | "employee-evidence" | "import-document" | "expense-receipt" | "marketing-evidence" | "field-visit-evidence">().notNull(),
   importId: text("import_id").references(() => importCases.id),
   expenseId: text("expense_id").unique().references((): AnyPgColumn => expenses.id),
   activityId: text("activity_id").references((): AnyPgColumn => marketingActivities.id),
+  visitAttemptId: text("visit_attempt_id").references((): AnyPgColumn=>fieldVisitAttempts.id),
+  visitId: text("visit_id").unique().references((): AnyPgColumn=>fieldVisits.id),
+  imageInfo: jsonb("image_info").$type<{sha256:string;width:number;height:number}>(),
   documentType: text("document_type").notNull().default("Other"),
   sensitive: boolean("sensitive").notNull().default(true),
   bucket: text("bucket").notNull().default("erp-documents"),
@@ -66,7 +86,7 @@ export const documents = erp.table("documents", {
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
-  status: text("status").$type<"Pending" | "Attached">().notNull().default("Pending"),
+  status: text("status").$type<"Pending" | "Attached" | "Expired">().notNull().default("Pending"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   attachedAt: timestamp("attached_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
@@ -376,3 +396,19 @@ export const marketingTargets = erp.table("marketing_targets", {
 export const marketingScoreRules = erp.table("marketing_score_rules", {
   event: text("event").primaryKey(), label: text("label").notNull(), points: integer("points").notNull(), active: boolean("active").notNull().default(true), version: integer("version").notNull().default(1), updatedBy: text("updated_by").references(() => employees.id), updatedAt: timestamp("updated_at", {withTimezone:true}).notNull().defaultNow()
 }, (t) => [check("score_points", sql`${t.points} between 0 and 1000`)]).enableRLS();
+
+export const fieldVisitPolicies=erp.table("field_visit_policies",{
+  id:text("id").primaryKey(),data:jsonb("data").$type<VisitPolicyData>().notNull(),version:integer("version").notNull().default(1),updatedBy:text("updated_by").references(()=>employees.id),updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().defaultNow()
+},t=>[check("visit_policy_singleton",sql`${t.id}='company'`)]).enableRLS();
+export const customerLocations=erp.table("customer_locations",{
+  id:text("id").primaryKey(),customerId:text("customer_id").notNull().references(()=>customers.id),latitude:numeric("latitude",{precision:10,scale:7}).notNull(),longitude:numeric("longitude",{precision:10,scale:7}).notNull(),source:text("source").notNull(),version:integer("version").notNull(),confirmedBy:text("confirmed_by").notNull().references(()=>employees.id),confirmedAt:timestamp("confirmed_at",{withTimezone:true}).notNull().defaultNow()
+},t=>[uniqueIndex("customer_location_version").on(t.customerId,t.version),check("site_coordinates",sql`${t.latitude} between -90 and 90 and ${t.longitude} between -180 and 180`)]).enableRLS();
+export const fieldVisitAttempts=erp.table("field_visit_attempts",{
+  id:text("id").primaryKey(),employeeId:text("employee_id").notNull().references(()=>employees.id),customerId:text("customer_id").references(()=>customers.id),leadId:text("lead_id").references(()=>marketingLeads.id),subject:text("subject").notNull(),purpose:text("purpose").notNull(),policy:jsonb("policy").$type<{version:number;data:VisitPolicyData}>().notNull(),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),expiresAt:timestamp("expires_at",{withTimezone:true}).notNull(),consumedAt:timestamp("consumed_at",{withTimezone:true})
+},t=>[index("visit_attempt_expiry").on(t.expiresAt),check("attempt_subject",sql`(${t.customerId} is not null)::integer+(${t.leadId} is not null)::integer=1`)]).enableRLS();
+export const fieldVisits=erp.table("field_visits",{
+  id:text("id").primaryKey(),reference:text("reference").notNull().unique(),attemptId:text("attempt_id").notNull().unique().references(()=>fieldVisitAttempts.id),employeeId:text("employee_id").notNull().references(()=>employees.id),snapshot:jsonb("snapshot").$type<EmployeeActivitySnapshot>().notNull(),customerId:text("customer_id").references(()=>customers.id),leadId:text("lead_id").references(()=>marketingLeads.id),subject:text("subject").notNull(),purpose:text("purpose").notNull(),receivedAt:timestamp("received_at",{withTimezone:true}).notNull().defaultNow(),completedAt:timestamp("completed_at",{withTimezone:true}),status:text("status").$type<"CheckedIn"|"Completed"|"Voided">().notNull().default("CheckedIn"),quality:text("quality").$type<"LOCATION_CAPTURED"|"POOR_ACCURACY"|"STALE"|"NO_LOCATION">().notNull(),match:text("match").$type<"NO_REFERENCE"|"APPROX_MATCH"|"OUTSIDE"|"UNCERTAIN"|"NO_LOCATION">().notNull(),review:text("review").$type<"Pending"|"Accepted"|"Rejected">().notNull().default("Pending"),position:jsonb("position").$type<VisitPosition|null>(),distanceMeters:numeric("distance_meters",{precision:14,scale:2}),siteId:text("site_id").references(()=>customerLocations.id),policy:jsonb("policy").$type<{version:number;data:VisitPolicyData}>().notNull(),photoId:uuid("photo_id").unique().references(()=>documents.id),photoMethod:text("photo_method").$type<"IN_APP_CAMERA"|"FILE_SELECTED"|"NONE">().notNull(),locationReason:text("location_reason").notNull().default(""),photoReason:text("photo_reason").notNull().default(""),outcome:text("outcome").notNull().default(""),activityId:text("activity_id").unique().references(()=>marketingActivities.id),version:integer("version").notNull().default(1)
+},t=>[uniqueIndex("visit_one_active_owner").on(t.employeeId).where(sql`${t.status}='CheckedIn'`),index("visit_owner_date").on(t.employeeId,t.receivedAt,t.id),index("visit_customer_date").on(t.customerId,t.receivedAt),index("visit_review_date").on(t.review,t.receivedAt),check("visit_subject",sql`(${t.customerId} is not null)::integer+(${t.leadId} is not null)::integer=1`),check("visit_state",sql`${t.status} in ('CheckedIn','Completed','Voided') and ${t.review} in ('Pending','Accepted','Rejected')`)]).enableRLS();
+export const fieldVisitEvents=erp.table("field_visit_events",{
+  id:text("id").primaryKey(),visitId:text("visit_id").notNull().references(()=>fieldVisits.id),actorId:text("actor_id").notNull().references(()=>employees.id),type:text("type").notNull(),details:jsonb("details").$type<Record<string,unknown>>().notNull(),recordedAt:timestamp("recorded_at",{withTimezone:true}).notNull().defaultNow()
+},t=>[index("visit_event_timeline").on(t.visitId,t.recordedAt,t.id)]).enableRLS();

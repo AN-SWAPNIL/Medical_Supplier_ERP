@@ -9,9 +9,11 @@ import { createLeadRouter } from "./leads.js";
 import { createPlanningRouter } from "./planning.js";
 import { createWorkforceEmployeeRouter, employeeColumns } from "./employees.js";
 import { marketingScope } from "./scope.js";
+import { createVisitRouter } from "./visits.js";
 
 export function createWorkforceRouter(ctx:Context) {
   const router=Router();
+  router.use(createVisitRouter(ctx));
   router.use(createWorkforceEmployeeRouter(ctx)); router.use(createActivityRouter(ctx)); router.use(createLeadRouter(ctx)); router.use(createPlanningRouter(ctx));
   router.get("/workforce/references",async(_req,res)=>{
     const user=identity(res).user; assertAllowed(hasEffectivePermission(user,"marketing"));

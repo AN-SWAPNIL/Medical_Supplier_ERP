@@ -8,7 +8,7 @@ import ResetPasswordPage from "./features/auth/ResetPasswordPage";
 import PublicLayout from "./features/public/PublicLayout";
 import type { PermissionKey } from "./types";
 import BackendWorkspace from "./features/auth/BackendWorkspace";
-import { foundationMode } from "./lib/runtime";
+import { foundationMode, workspacePath } from "./lib/runtime";
 
 const HomePage = lazy(() => import("./features/public/HomePage"));
 const AboutPage = lazy(() => import("./features/public/AboutPage"));
@@ -35,6 +35,8 @@ const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage"));
 const ProfilePage = lazy(() => import("./features/users/ProfilePage"));
 const BackendMastersPage = lazy(() => import("./features/auth/BackendMastersPage"));
 const BackendPrintSettings = lazy(() => import("./features/auth/BackendPrintSettings"));
+const PersistentDashboard = lazy(() => import("./domains/dashboard/PersistentDashboard"));
+const OperationalSettingsPage = lazy(() => import("./domains/settings/OperationalSettingsPage"));
 const SmartInsightsPage = lazy(() => import("./components/ai/SmartInsightsPage"));
 
 const deferred = (element: ReactNode) => (
@@ -51,6 +53,13 @@ function SettingsEntry() {
   const location = useLocation();
   if (new URLSearchParams(location.search).get("view") === "users") return <Navigate to="/app/employees?view=directory" replace />;
   return <RequireSettingsAccess>{deferred(<SettingsPage />)}</RequireSettingsAccess>;
+}
+
+function PersistentWorkspaceAlias() {
+  const { pathname, search, hash } = useLocation();
+  let path = pathname === "/app" || pathname === "/app/dashboard" ? "/backend" : workspacePath(pathname);
+  if (path === "/backend/settings" && new URLSearchParams(search).get("view") === "users") path = "/backend/employees";
+  return <Navigate to={path + search + hash} replace />;
 }
 
 function App() {
@@ -74,6 +83,7 @@ function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         {foundationMode ? <Route path="/backend" element={<BackendWorkspace />}>
+          <Route index element={guarded("dashboard", <PersistentDashboard />)} />
           <Route path="profile" element={deferred(<ProfilePage />)} />
           <Route path="imports" element={guarded("import", <ImportsPage />)} />
           <Route path="imports/new" element={<RequirePermission permission="import" action="create">{deferred(<NewImportPage />)}</RequirePermission>} />
@@ -88,9 +98,10 @@ function App() {
           <Route path="print/:documentType/:id" element={guarded("print", <PrintPage />)} />
           <Route path="settings" element={<RequireAnyPermission permissions={["products", "suppliers", "settings", "accounts"]}>{deferred(<BackendMastersPage />)}</RequireAnyPermission>} />
           <Route path="settings/print" element={guarded("settings", <BackendPrintSettings />)} />
+          <Route path="settings/operations" element={guarded("settings", <OperationalSettingsPage />)} />
           <Route path="*" element={<Navigate to="/backend" replace />} />
         </Route> : null}
-        <Route path="/app" element={foundationMode ? <Navigate to="/backend" replace /> : <AppLayout />}>
+        <Route path="/app" element={foundationMode ? <PersistentWorkspaceAlias /> : <AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={guarded("dashboard", <DashboardPage />)} />
           <Route path="imports" element={guarded("import", <ImportsPage />)} />

@@ -6,7 +6,7 @@
 **Head inspected:** `43fb218c4341f7f3045a5df0fcb647fbdda57a0d` (`feat: add linked sales order lifecycle workspace`)  
 **Existing project plan reviewed:** [`BACKEND_SETUP.md`](https://github.com/AN-SWAPNIL/Medical_Supplier_ERP/blob/dev/BACKEND_SETUP.md)
 
-**Implementation checkpoint, 24 October 2026:** This document records the pre-migration baseline. See `../PRODUCTION_BACKEND_PROGRESS.md` and `../BACKEND_SETUP.md` for verified progress and remaining launch gates. Authentication, import/receiving, FIFO deliveries, invoices, allocated collections, cash/customer journals, expenses/TA-DA, supplier settlements and restricted financial-position sources and company stationery now persist and connect to Sales/Accounts screens, including source-scoped transaction print previews and 53 operational SQL reports with shared CSV/report-print filtering; the complete ERP is not production-ready. Runtime uses Drizzle + `pg` rather than the earlier Postgres.js candidate.
+**Implementation checkpoint, 25 October 2026:** This document records the pre-migration baseline. See `../PRODUCTION_BACKEND_PROGRESS.md` and `../BACKEND_SETUP.md` for verified progress and remaining launch gates. Authentication/MFA, import/receiving, FIFO deliveries, invoices, allocated collections, cash/customer journals, expenses/TA-DA, supplier settlements, restricted financial-position sources, stationery, employees/marketing/field visits, dashboard and operational settings now persist. The 61 supported SQL report read models share CSV/report-print filtering. The public site deliberately uses static published brochure content; dynamic editorial/inquiry management and AI are deferred. The complete ERP is not production-ready. Runtime uses Drizzle + `pg` rather than the earlier Postgres.js candidate.
 
 ## 1. Executive decision
 
@@ -261,7 +261,11 @@ src/domains/          # KEEP existing frontend service boundary and DTOs
 
 Employee/team hierarchy, safe scoped directory/profile/access controls, authenticated manual marketing activities/private evidence, canonical leads/customer conversion, follow-ups, daily/monthly plans, independent plan reviews, targets and score rules now persist. Migrations 0017-0018 were applied only after a destination backup; existing business history was not reset. Submitted/approved history is protected by database triggers and audit.
 
-The persistent report catalogue now has 60 supported SQL read models, including scoped employee activity, performance, lead funnel, follow-up and target reports. Actual commercial records generate scored events; manual notes never fabricate payments or GPS verification. GPS field verification, executive dashboard, public-site persistence, opening reconciliation and production cutover remain unfinished. See `PRODUCTION_BACKEND_PROGRESS.md` for current verified acceptance, not the historical baseline above.
+The persistent report catalogue now has 61 supported SQL read models, including scoped employee activity, performance, lead funnel, follow-up, target and field-visit reports. Update 12 adds event-based check-in, private camera evidence, approved customer site versions, independent review, completion/follow-up and immutable history in migrations 0019-0022. It uses the existing identity/team/upload/report architecture, not a second backend. Actual commercial records generate scored events; manual notes and check-ins never fabricate money or GPS proof, and visit points remain disabled.
+
+The executive dashboard and versioned warehouse/cost-preset/client-decision settings are now connected in migration 0023. The dashboard shares existing report/journal facts, omits unauthorized source fields and distinguishes period financial values from current operational queues. Seven-role desktop/390px checks and actual partial receiving verify the frontend/API boundary.
+
+Field-device HTTPS UAT, approved privacy/retention operations, opening reconciliation, stock corrections and production cutover remain unfinished. Public-site persistence and AI are optional later phases under the latest scope. See `PRODUCTION_BACKEND_PROGRESS.md` for current verified acceptance, not the historical baseline above.
 
 ## 12. Verification / definition of done
 

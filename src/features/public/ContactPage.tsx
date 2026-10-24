@@ -5,6 +5,7 @@ import PublicPageHero from "./components/PublicPageHero";
 import SectionHeading from "./components/SectionHeading";
 import { usePublicMeta } from "./usePublicMeta";
 import { usePublicSettings } from "./usePublicSettings";
+import { foundationMode } from "../../lib/runtime";
 
 export default function ContactPage() {
   const settings = usePublicSettings().data;
@@ -29,7 +30,7 @@ export default function ContactPage() {
                 <a className="flex gap-3 border-b border-slate-200 py-4 hover:text-blue-900" href={`mailto:${settings.email}`}><Mail className="h-5 w-5 shrink-0 text-cyan-700" /><div><h2 className="text-sm font-bold text-slate-950">Email</h2><p className="mt-1 text-sm text-slate-600">{settings.email}</p></div></a>
                 <a className="flex gap-3 py-4 hover:text-blue-900" href={`https://wa.me/${settings.whatsappHref}`} target="_blank" rel="noreferrer"><MessageCircle className="h-5 w-5 shrink-0 text-cyan-700" /><div><h2 className="text-sm font-bold text-slate-950">WhatsApp</h2><p className="mt-1 text-sm text-slate-600">Open a business conversation</p></div></a>
               </div> : <p className="mt-7 text-sm text-slate-500">Contact details are loading.</p>}
-              <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900"><strong>Prototype contact reference:</strong> These values follow the newer 2026 stationery and remain in the client confirmation checklist before final public launch.</div>
+              {!foundationMode ? <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900"><strong>Prototype contact reference:</strong> These values follow the newer 2026 stationery and remain in the client confirmation checklist before final public launch.</div> : null}
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-5 sm:p-7">
               <h2 className="text-2xl font-bold text-slate-950">Business inquiry</h2>
