@@ -59,6 +59,36 @@ button:disabled {
   background: transparent !important;
 }
 
+.letterhead-sheet [class~="bg-white/90"],
+.letterhead-sheet [class~="bg-white"],
+.letterhead-sheet [class~="bg-slate-50"] {
+  background: transparent !important;
+}
+
+.letterhead-sheet {
+  overflow-wrap: anywhere;
+}
+
+.letterhead-sheet {
+  overflow-wrap: anywhere;
+}
+
+.letterhead-sheet table > thead > tr,
+.letterhead-sheet [class~="bg-slate-800"] {
+  background: rgba(30, 41, 59, 0.72);
+  color: #ffffff;
+}
+
+.transaction-print-flow table > thead {
+  display: table-header-group;
+}
+
+.transaction-print-flow tr,
+.transaction-print-flow dl,
+.transaction-print-flow .grid {
+  break-inside: avoid;
+}
+
 @media screen {
   .erp-table-frame > table > thead {
     background: #172554 !important;
@@ -94,6 +124,10 @@ button:disabled {
 }
 
 @media print {
+  .transaction-print-flow table > thead {
+    display: table-row-group;
+  }
+
   html,
   body {
     width: 210mm;
@@ -144,6 +178,17 @@ button:disabled {
     display: block !important;
     gap: 0 !important;
     overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+  }
+
+  .backend-workspace,
+  .backend-content-shell {
+    min-height: 0 !important;
+    width: 210mm !important;
+    max-width: none !important;
+    margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
   }

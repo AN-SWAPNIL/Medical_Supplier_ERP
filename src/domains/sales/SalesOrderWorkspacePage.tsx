@@ -10,7 +10,7 @@ import { useAuthStore } from "../../lib/auth/session";
 import { businessDate } from "../../lib/date";
 import { hasCapability, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { useToastStore } from "../../lib/ui/toast";
-import { formatCurrency, formatNumber } from "../../utils/format";
+import { formatMoney as formatCurrency, formatQuantity as formatNumber } from "../../utils/precise";
 import { ErrorBlock, LoadingBlock, Modal, Panel, TableFrame } from "../components";
 import type { SalesInvoice } from "../erp.types";
 import { inventoryService, salesService } from "../services";
@@ -18,13 +18,15 @@ import { visibleReportCatalog } from "../reports/reportCatalog";
 import OrderReceivingDetailsForm from "./OrderReceivingDetailsForm";
 import { CancelInvoiceForm, InvoiceForm } from "./SalesDocumentForms";
 import { CollectionForm, DeliveryForm } from "./SalesForms";
+import { foundationMode, workspacePath } from "../../lib/runtime";
 
 type Dialog = "delivery" | "invoice" | "collection" | "order" | null;
 
 export default function SalesOrderWorkspacePage() {
   const { orderId = "" } = useParams();
   const user = useAuthStore((state) => state.session?.user);
-  const navigate = useNavigate();
+  const route = useNavigate();
+  const navigate = (path: string) => route(workspacePath(path));
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -41,8 +43,8 @@ export default function SalesOrderWorkspacePage() {
   const mutation = useMutation({
     mutationFn: (task: { run: () => Promise<unknown>; message: string }) => task.run(),
     onSuccess: async (_result, task) => {
-      setDialog(null); setCancelInvoice(undefined);
       await Promise.all(["sales", "inventory", "accounts", "dashboard", "reports", "marketing", "employees"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+      setDialog(null); setCancelInvoice(undefined);
       toast({ kind: "success", title: task.message });
     },
     onError: (error) => toast({ kind: "error", title: "Sales action failed", message: error.message })
@@ -53,7 +55,7 @@ export default function SalesOrderWorkspacePage() {
   const { order, customer, totals, stages } = data;
   const print = (type: string, id: string) => navigate(`/app/print/${type}/${encodeURIComponent(id)}`);
   const ledger = () => navigate(`/app/sales?view=customers&customerId=${encodeURIComponent(order.customerId)}`);
-  const reportAvailable = visibleReportCatalog(user).some((report) => report.id === "sales-order-register");
+  const reportAvailable = user?.role !== "Warehouse Manager" && visibleReportCatalog(user).some((report) => report.id === "sales-order-register");
   const hasRemaining = order.status !== "Cancelled" && data.fulfilment.some((line) => Number(line.remainingToDeliverQty) > 0);
   const invoiceCandidates = data.deliveries.filter((delivery) => delivery.status !== "Draft" && !data.invoices.some((invoice) => invoice.status !== "Cancelled" && invoice.deliveryIds.includes(delivery.id)));
   const steps: LifecycleStep[] = [
@@ -71,7 +73,7 @@ export default function SalesOrderWorkspacePage() {
     <PageHeader eyebrow="Sales order lifecycle" title={order.orderNumber} subtitle={`${order.customerName} | ${order.date} | ${data.salesperson?.name ?? "Sales owner unassigned"}`} actions={<>
       {canPrint && data.financialVisible ? <Button icon={<Printer className="h-4 w-4" />} onClick={() => print("order", order.id)}>Print Order</Button> : null}
       {customer ? <Button icon={<BookOpenText className="h-4 w-4" />} onClick={ledger}>Customer Ledger</Button> : null}
-      {reportAvailable ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports/sales-order-register?from=${order.date}&to=${businessDate()}&filter.order=${encodeURIComponent(order.orderNumber)}`)}>Open Report</Button> : null}
+      {reportAvailable ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports/sales-order-register?from=${order.date}&to=${businessDate()}&${foundationMode ? "order=" + encodeURIComponent(order.id) : "filter.order=" + encodeURIComponent(order.orderNumber)}`)}>Open Report</Button> : null}
       <StatusBadge status={order.status} />
     </>} />
     <LifecycleProgress steps={steps} label="Sales lifecycle" />
@@ -79,26 +81,26 @@ export default function SalesOrderWorkspacePage() {
       ["Order Value", totals.orderValue], ["Delivered Value", totals.deliveredValue], ["Approved Invoice", totals.approvedInvoiceValue], ["Collected", totals.collectedValue], ["Outstanding", totals.outstandingValue]
     ].map(([label, value]) => <div className={`min-w-0 border-l-4 border-cyan-600 bg-white p-3 shadow-sm sm:p-4 ${label === "Outstanding" ? "col-span-2 xl:col-span-1" : ""}`} key={label}><span className="text-xs text-slate-500">{label}</span><strong className={`mt-1 block break-words text-xl ${label === "Outstanding" ? "text-rose-700" : "text-blue-950"}`}>{formatCurrency(value)}</strong></div>)}</section> : null}
     <Panel title="Product fulfilment" subtitle="Quantities from posted deliveries and approved invoices." actions={<div className="flex flex-wrap gap-2">
-      {canEdit ? <Button icon={<Pencil className="h-4 w-4" />} onClick={() => setDialog("order")}>Order Details</Button> : null}
-      {canDispatch && hasRemaining ? <Button variant="primary" icon={<Truck className="h-4 w-4" />} onClick={() => setDialog("delivery")}>New Delivery</Button> : null}
+      {canEdit ? <Button icon={<Pencil className="h-4 w-4" />} disabled={mutation.isPending} onClick={() => setDialog("order")}>Order Details</Button> : null}
+      {canDispatch && hasRemaining ? <Button variant="primary" icon={<Truck className="h-4 w-4" />} disabled={mutation.isPending} onClick={() => setDialog("delivery")}>New Delivery</Button> : null}
     </div>}>
       <Rows headers={["Product", "Ordered", "Delivered", ...(data.financialVisible ? ["Approved Invoiced"] : []), "Remaining to Deliver", ...(data.financialVisible ? ["Delivered Not Invoiced"] : [])]} rows={data.fulfilment.map((line) => [<span><strong className="block text-blue-950">{line.productCode}</strong>{line.productName}</span>, formatNumber(line.orderedQty), formatNumber(line.deliveredQty), ...(data.financialVisible ? [<span>{formatNumber(line.approvedInvoicedQty)}{Number(line.draftInvoicedQty) > 0 ? <small className="block text-amber-700">{formatNumber(line.draftInvoicedQty)} pending approval</small> : null}</span>] : []), formatNumber(line.remainingToDeliverQty), ...(data.financialVisible ? [formatNumber(line.deliveredNotInvoicedQty)] : [])])} />
     </Panel>
     <div className="grid gap-4 lg:grid-cols-2">
       {customer ? <Panel title="Customer"><dl className="grid grid-cols-2 gap-4 p-4 text-sm"><Info label="Name" value={customer.name} /><Info label="Current Due (All Orders)" value={formatCurrency(customer.currentDue)} /><Info label="Credit Limit" value={formatCurrency(customer.creditLimit)} /><Info label="Payment Terms" value={customer.paymentTerms} /></dl></Panel> : null}
-      <Panel title="Salesperson & order context"><dl className="grid grid-cols-2 gap-4 p-4 text-sm"><Info label="Salesperson" value={data.salesperson?.name ?? order.ownerId} /><Info label="Territory" value={data.salesperson?.territory ?? "Unassigned"} /><Info label="Requested Delivery" value={order.requestedDeliveryDate ?? "Not specified"} /><Info label="Delivery Instruction" value={order.deliveryInstruction} /></dl>{visibleReportCatalog(user).some((entry) => entry.id === "employee-activity") && data.salesperson ? <div className="px-4 pb-4"><Button icon={<UserRound className="h-4 w-4" />} onClick={() => navigate(`/app/reports/employee-activity?employeeId=${encodeURIComponent(data.salesperson!.id)}`)}>Employee Activity Report</Button></div> : null}</Panel>
+      <Panel title="Salesperson & order context"><dl className="grid grid-cols-2 gap-4 p-4 text-sm"><Info label="Salesperson" value={data.salesperson?.name ?? order.ownerId} /><Info label="Territory" value={data.salesperson?.territory ?? "Unassigned"} /><Info label="Requested Delivery" value={order.requestedDeliveryDate ?? "Not specified"} /><Info label="Delivery Instruction" value={order.deliveryInstruction} /></dl>{!foundationMode && visibleReportCatalog(user).some((entry) => entry.id === "employee-activity") && data.salesperson ? <div className="px-4 pb-4"><Button icon={<UserRound className="h-4 w-4" />} onClick={() => navigate(`/app/reports/employee-activity?employeeId=${encodeURIComponent(data.salesperson!.id)}`)}>Employee Activity Report</Button></div> : null}</Panel>
     </div>
     {data.financialVisible ? <Panel title="Linked quotation"><Rows headers={["Quotation", "Date", "Value", "Status", "Print"]} rows={data.quotation ? [[data.quotation.quotationNumber, data.quotation.date, formatCurrency(data.quotation.total), <StatusBadge status={data.quotation.status} />, printAction("quotation", data.quotation.id, data.quotation.quotationNumber)]] : []} empty="Direct order; no quotation is linked." /></Panel> : null}
     <Panel title="Delivery challans" subtitle="Posting a challan dispatches the actual batches from inventory."><Rows headers={["Challan / Date", "Product / Batch", "Quantity", "Status", "Print"]} rows={data.deliveries.map((delivery) => [<span><strong className="block">{delivery.challanNumber}</strong>{delivery.date}</span>, <div className="grid gap-1">{delivery.lines.map((line) => <span key={line.id}>{line.productCode} | {line.batchNumber} | {formatNumber(line.quantity)}</span>)}</div>, formatNumber(delivery.lines.reduce((sum, line) => sum + Number(line.quantity), 0)), <StatusBadge status={delivery.status} />, printAction("challan", delivery.id, delivery.challanNumber)])} empty="No challan has been created for this order." /></Panel>
     {data.financialVisible ? <>
-      <Panel title="Sales invoices" subtitle="Drafts do not change receivables. Approval posts customer and order due." actions={canCreateInvoice && invoiceCandidates.length ? <Button variant="primary" icon={<ReceiptText className="h-4 w-4" />} onClick={() => setDialog("invoice")}>Create Invoice</Button> : undefined}>
+      <Panel title="Sales invoices" subtitle="Drafts do not change receivables. Approval posts customer and order due." actions={canCreateInvoice && invoiceCandidates.length ? <Button variant="primary" icon={<ReceiptText className="h-4 w-4" />} disabled={mutation.isPending} onClick={() => setDialog("invoice")}>Create Invoice</Button> : undefined}>
         <Rows headers={["Invoice / Date", "Challans", "Amount", "Status", "Actions"]} rows={data.invoices.map((invoice) => [<span><strong className="block">{invoice.invoiceNumber}</strong>{invoice.date}</span>, invoice.deliveryIds.map((id) => data.deliveries.find((delivery) => delivery.id === id)?.challanNumber ?? id).join(", "), formatCurrency(invoice.total), <StatusBadge status={invoice.status} />, <div className="flex gap-1">
           {printAction("invoice", invoice.id, invoice.invoiceNumber)}
           {canApprove && invoice.status === "Draft" ? <Button icon={<CheckCircle2 className="h-4 w-4" />} disabled={mutation.isPending} onClick={() => mutation.mutate({ run: () => salesService.approveInvoice(invoice.id), message: "Invoice approved and receivable posted" })}>Approve</Button> : null}
-          {canApprove && invoice.status !== "Cancelled" ? <Button variant="danger" title={data.collections.some((collection) => collection.invoiceId === invoice.id) ? "A posted collection must be reversed before cancellation." : "Cancel this invoice with a reason"} disabled={mutation.isPending || data.collections.some((collection) => collection.invoiceId === invoice.id)} onClick={() => setCancelInvoice(invoice)}>Cancel</Button> : null}
+          {canApprove && invoice.status !== "Cancelled" ? <Button variant="danger" title={data.collections.some((collection) => collection.status === "Posted" && (collection.invoiceId === invoice.id || collection.allocations?.some((allocation) => allocation.invoiceId === invoice.id))) ? "A posted collection must be reversed before cancellation." : "Cancel this invoice with a reason"} disabled={mutation.isPending || data.collections.some((collection) => collection.status === "Posted" && (collection.invoiceId === invoice.id || collection.allocations?.some((allocation) => allocation.invoiceId === invoice.id)))} onClick={() => setCancelInvoice(invoice)}>Cancel</Button> : null}
         </div>])} empty="No invoice exists for this order." />
       </Panel>
-      <Panel title="Collections" subtitle="Only posted receipts linked to this order or its invoices count toward the collected total." actions={canPost && customer && Number(totals?.outstandingValue) > 0 ? <Button variant="primary" icon={<Banknote className="h-4 w-4" />} onClick={() => setDialog("collection")}>Record Collection</Button> : undefined}>
+      <Panel title="Collections" subtitle="Only posted receipts linked to this order or its invoices count toward the collected total." actions={canPost && customer && Number(totals?.outstandingValue) > 0 ? <Button variant="primary" icon={<Banknote className="h-4 w-4" />} disabled={mutation.isPending} onClick={() => setDialog("collection")}>Record Collection</Button> : undefined}>
         <Rows headers={["Receipt / Date", "Invoice", "Payment Mode", "Reference", "Amount", "Print"]} rows={data.collections.map((collection) => [<span><strong className="block">{collection.receiptNumber}</strong>{collection.date}</span>, data.invoices.find((invoice) => invoice.id === collection.invoiceId)?.invoiceNumber ?? "Order collection", collection.paymentMode, collection.referenceNumber ?? "-", formatCurrency(collection.amount), printAction("receipt", collection.id, collection.receiptNumber)])} empty="No payment is linked to this order." />
       </Panel>
     </> : null}

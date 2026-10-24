@@ -18,9 +18,13 @@ function persistSession(session: Session | null) {
   saveSession(session);
 }
 
+let endingSession: Promise<unknown> | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: readSession(),
   async login(email, password) {
+    // Let the old logout clear its cookies before a new sign-in sets replacement cookies.
+    await endingSession;
     const response = await apiClient.login(email, password);
     persistSession(response.data);
     set({ session: response.data });
@@ -29,7 +33,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const current = get().session;
     if (!current) return;
     const response = await apiClient.me();
-    if (get().session?.user.id !== current.user.id) return;
+    if (get().session?.token !== current.token) return;
     persistSession(response.data);
     set({ session: response.data });
   },
@@ -41,7 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   logout() {
     const current = get().session;
-    if (foundationMode && current) void fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", Authorization: `Bearer ${current.token}` }, body: "{}" }).catch(() => {});
+    if (foundationMode && current) endingSession = fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", keepalive: true, signal: AbortSignal.timeout(10000), headers: { "Content-Type": "application/json", Authorization: `Bearer ${current.token}` }, body: "{}" }).catch(() => {}).finally(() => { endingSession = null; });
     persistSession(null);
     set({ session: null });
   },

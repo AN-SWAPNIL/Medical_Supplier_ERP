@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import postgres from "postgres";
+import { connectDatabase } from "../database/client.ts";
+import { sql } from "drizzle-orm";
 import { createClient } from "@supabase/supabase-js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -98,26 +99,26 @@ try {
   record("PASS", "Storage API", "Bucket listing accepted");
   for (const [name, expectedPublic] of [["erp-documents", false], ["website-media", true]]) {
     const bucket = data.find((entry) => entry.name === name);
-    record(!bucket ? "WARN" : bucket.public === expectedPublic ? "PASS" : "FAIL", `Storage ${name}`, !bucket ? "Not created yet; foundation setup can create it" : bucket.public === expectedPublic ? "Visibility correct; write/read policies still require implementation" : "Incorrect bucket visibility");
+    record(!bucket ? "WARN" : bucket.public === expectedPublic ? "PASS" : "FAIL", `Storage ${name}`, !bucket ? "Not created yet; foundation setup can create it" : bucket.public === expectedPublic ? "Visibility correct; this read-only check does not certify domain file authorization" : "Incorrect bucket visibility");
   }
 } catch (error) {
   record("FAIL", "Storage API", safeError(error));
 }
 
 for (const name of ["DATABASE_URL", "DATABASE_MIGRATION_URL"]) {
-  let sql;
+  let connection;
   try {
     const url = new URL(process.env[name]);
     if (!["postgres:", "postgresql:"].includes(url.protocol) || url.hash || !url.password) throw new Error();
-    sql = postgres(url.href, { max: 1, prepare: false, ssl: "require", connect_timeout: 10, idle_timeout: 1, connection: { statement_timeout: 10000 } });
-    await sql.begin("read only", async (tx) => {
-      await tx`select 1 as connected`;
-    });
+    connection = connectDatabase(url.href);
+    await connection.db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 as connected`);
+    }, { accessMode: "read only" });
     record("PASS", name, `TLS connection and read-only transaction succeeded on port ${url.port || "5432"}`);
   } catch (error) {
     record("FAIL", name, safeError(error));
   } finally {
-    if (sql) await sql.end({ timeout: 2 });
+    if (connection) await connection.client.end();
   }
 }
 

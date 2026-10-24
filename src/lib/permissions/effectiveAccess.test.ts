@@ -90,6 +90,7 @@ test("delegated employee managers can manage lower roles but not self or adminis
   assert.equal(canManageTargetUser(manager, manager), false);
   assert.equal(canManageTargetUser(manager, user({ id: "owner", role: "Super Admin" })), false);
   assert.equal(canManageTargetUser(manager, user({ id: "peer", role: "Sales Manager" })), false);
+  assert.equal(canManageTargetUser({ ...manager, permissionOverrides: [...manager.permissionOverrides!, {permission:"users",action:"view",effect:"DENY"}] }, user({id:"employee",role:"Sales Executive"})), false);
 });
 
 test("access authority cannot be propagated by a non-Super-Admin", () => {
@@ -112,7 +113,8 @@ test("employee hub composes directory, access and team-management authority", ()
   assert.equal(canAccessEmployeeHub(lifecycleManager), true);
   assert.equal(canAccessSettings(lifecycleManager), false, "users:view alone must not expose generic Settings");
   assert.equal(canManageUserAccess(accessManager), true);
-  assert.equal(canAccessEmployeeHub(accessManager), true);
+  assert.equal(canAccessEmployeeHub(accessManager), false, "A capability alone cannot grant module view access");
+  assert.equal(canAccessEmployeeHub(user({ role: "Super Admin", permissionOverrides: [{permission:"users",action:"view",effect:"DENY"},{permission:"marketing",action:"view",effect:"DENY"}] })), false);
   assert.equal(canViewManagedEmployeeActivity(salesManager), true);
   assert.equal(canAccessEmployeeHub(salesManager), true);
   assert.equal(canViewManagedEmployeeActivity(salesExecutive), false);

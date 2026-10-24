@@ -6,6 +6,7 @@ import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import { ApiRequestError } from "../../lib/api/client";
 import { canAccessEmployeeHub, canAccessSettings, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import type { PermissionAction, PermissionKey } from "../../types";
+import { foundationMode } from "../../lib/runtime";
 
 export function ProtectedRoute() {
   const session = useAuthStore((state) => state.session);
@@ -112,8 +113,8 @@ export function AccessDenied({ permission }: { permission?: PermissionKey }) {
         Sign in with an authorized user. Role defaults, personal exceptions and sensitive capabilities are controlled in Employees.
       </p>
       <div className="mt-5 flex justify-center gap-2">
-        <Button variant="primary" onClick={() => navigate("/app/dashboard")}>
-          Go to dashboard
+        <Button variant="primary" onClick={() => navigate(foundationMode ? "/backend" : "/app/dashboard")}>
+          Go to overview
         </Button>
         <Button onClick={() => navigate("/login")}>Switch user</Button>
       </div>

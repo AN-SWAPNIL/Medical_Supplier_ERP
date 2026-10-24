@@ -64,6 +64,6 @@ async function main() {
       }
     }
     console.log("Foundation bootstrap complete. Existing business records were not imported or overwritten.");
-  } finally { await ctx.client.end({ timeout: 3 }); }
+  } finally { await ctx.client.end(); }
 }
 main().catch(() => { console.error("Bootstrap did not finish. Existing records retained; inspect configuration and private artifacts before retrying. No credentials printed."); process.exitCode = 1; });

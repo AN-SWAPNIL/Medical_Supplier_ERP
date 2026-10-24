@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { auditEvents, employees, sessions } from "../../database/schema.js";
 import { canAssignRole, canGrantCapability, canGrantPermission, canManageEmployees, canManageTargetUser, canManageUserAccess, hasEffectivePermission, normalizePermissionOverrides } from "../../src/lib/permissions/effectiveAccess.js";
 import { accessSchema, inviteSchema, profileSchema } from "./contracts.js";
-import { audit, identity, toUser, type Context } from "./context.js";
+import { audit, identity, rateLimit, toUser, type Context } from "./context.js";
 import { assertAllowed, HttpError } from "./errors.js";
+import { deliverInvitation } from "./invitations.js";
+import { lockActor } from "../operations/common.js";
 
 export function createEmployeeRouter(ctx: Context) {
   const router = Router();
@@ -32,6 +34,17 @@ export function createEmployeeRouter(ctx: Context) {
     res.json({ success: true, data: rows.map((row) => ({ ...toUser(row), version: row.version })), message: "Employees loaded", meta: { page, pageSize: 100 } });
   });
 
+  router.get("/employees/directory", async (req, res) => {
+    const user = identity(res).user;
+    const companyScope = hasEffectivePermission(user, "users") || hasEffectivePermission(user, "accounts");
+    assertAllowed(companyScope || hasEffectivePermission(user, "marketing"));
+    const rows = await ctx.db.select().from(employees).where(companyScope ? undefined : eq(employees.id, user.id)).orderBy(asc(employees.name), asc(employees.id));
+    const activeOnly = req.query.status === "Active";
+    const search = String(req.query.search ?? "").slice(0, 200).toLowerCase();
+    const data = rows.filter((row) => (!activeOnly || row.status === "Active") && `${row.name} ${row.employeeCode} ${row.title}`.toLowerCase().includes(search)).map((row) => ({ id: row.id, name: row.name, title: row.title, employeeCode: row.employeeCode, department: row.department, territory: row.territory, phone: row.phone, status: row.status }));
+    res.json({ success: true, data, message: "Employee reference directory loaded without access or login fields" });
+  });
+
   router.post("/employees/invite", async (req, res) => {
     const input = inviteSchema.parse(req.body);
     const actor = identity(res);
@@ -45,21 +58,22 @@ export function createEmployeeRouter(ctx: Context) {
       await audit(tx, current.id, "Employee invitation reserved", "Employee", row.id, { role: row.role });
       return row;
     });
-    const sent = await sendInvitation(row.id);
+    const sent = await sendInvitation(row.id, actor);
     res.status(sent ? 201 : 202).json({ success: true, data: { id: row.id, invitationSent: sent }, message: sent ? "Employee invited" : "Employee saved as Pending; invitation delivery needs retry/configuration." });
   });
 
-  async function sendInvitation(employeeId: string) {
+  async function sendInvitation(employeeId: string, actor: ReturnType<typeof identity>) {
     return ctx.db.transaction(async (tx) => {
+      const current = await lockActor(tx, actor, "users", "create");
       const [row] = await tx.select().from(employees).where(eq(employees.id, employeeId)).for("update");
       if (!row || row.status !== "Pending") throw new HttpError(409, "Only Pending employees can be invited.");
-      if (row.authUserId) throw new HttpError(409, "Invitation already issued. Use the provider's recovery flow for a replacement link.");
-      const { data, error } = await ctx.admin.auth.admin.inviteUserByEmail(row.email, { redirectTo: `${ctx.config.origin}/reset-password`, data: { name: row.name } });
-      if (error || !data.user) {
+      assertAllowed(canManageEmployees(current, "create") && canAssignRole(current, row.role));
+      const delivery = await deliverInvitation(ctx, row);
+      if (!delivery.sent || !delivery.authUserId) {
         await audit(tx, null, "Invitation delivery failed", "Employee", row.id);
         return false;
       }
-      await tx.update(employees).set({ authUserId: data.user.id, updatedAt: new Date() }).where(eq(employees.id, row.id));
+      await tx.update(employees).set({ authUserId: delivery.authUserId, updatedAt: new Date() }).where(eq(employees.id, row.id));
       await audit(tx, null, "Invitation sent", "Employee", row.id);
       return true;
     });
@@ -68,7 +82,8 @@ export function createEmployeeRouter(ctx: Context) {
   router.post("/employees/:id/invite", async (req, res) => {
     const [row] = await ctx.db.select().from(employees).where(eq(employees.id, String(req.params.id)));
     assertAllowed(row && canManageEmployees(identity(res).user, "create") && canAssignRole(identity(res).user, row.role));
-    const sent = await sendInvitation(row.id);
+    await rateLimit(ctx, `invite-retry:${row.id}`, 5, 3600);
+    const sent = await sendInvitation(row.id, identity(res));
     res.status(sent ? 200 : 202).json({ success: true, data: { id: row.id, invitationSent: sent }, message: sent ? "Invitation sent" : "Invitation delivery failed; Pending employee preserved." });
   });
 
@@ -85,6 +100,7 @@ export function createEmployeeRouter(ctx: Context) {
       assertAllowed(canManageTargetUser(current, toUser(target)) && canAssignRole(current, input.role));
       assertAllowed(input.capabilities.every((capability) => canGrantCapability(current, capability)) && input.permissionOverrides.every((override) => canGrantPermission(current, override.permission, override.action, override.effect)));
       if (target.version !== input.version) throw new HttpError(409, "Access changed since this record was opened. Reload before saving.");
+      if (target.status === "Pending") throw new HttpError(409,"Pending employees must complete verified invitation acceptance before access activation.");
       const [row] = await tx.update(employees).set({ role: input.role, status: input.status, capabilities: [...new Set(input.capabilities)], permissionOverrides: normalizePermissionOverrides(input.permissionOverrides), version: target.version + 1, updatedAt: new Date() }).where(eq(employees.id, target.id)).returning();
       await tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.employeeId, target.id));
       await audit(tx, current.id, "Employee access changed", "Employee", target.id, { reason: input.reason, before: { role: target.role, status: target.status, capabilities: target.capabilities, permissionOverrides: target.permissionOverrides }, after: { role: row.role, status: row.status, capabilities: row.capabilities, permissionOverrides: row.permissionOverrides } });

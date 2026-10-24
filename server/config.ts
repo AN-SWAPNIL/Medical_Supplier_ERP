@@ -1,5 +1,6 @@
 import { loadEnvFile } from "node:process";
 import { z } from "zod";
+import { resolveBackendMode } from "./runtime-mode.js";
 
 try { loadEnvFile(); } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -24,8 +25,5 @@ export function backendConfig() {
 }
 
 export function isFoundationMode() {
-  const mode = process.env.ERP_BACKEND_MODE ?? "mock";
-  if (!["mock", "foundation"].includes(mode)) throw new Error("Invalid ERP_BACKEND_MODE");
-  if (mode === "foundation" && (process.env.DEMO_MODE === "true" || process.env.VITE_DEMO_MODE === "true")) throw new Error("Foundation mode cannot enable demo identities");
-  return mode === "foundation";
+  return resolveBackendMode(process.env) === "foundation";
 }

@@ -3,6 +3,7 @@ import SalesReferenceLink from "../sales/SalesReferenceLink";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarClock, FileBarChart, PackageSearch, Search, Settings, Warehouse } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { foundationMode, workspacePath } from "../../lib/runtime";
 import Button from "../../components/ui/Button";
 import AIRecommendationCard from "../../components/ai/AIRecommendationCard";
 import PageHeader from "../../components/ui/PageHeader";
@@ -10,7 +11,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import { ErrorBlock, LoadingBlock, Panel, ProductThumb, Segmented, TableFrame, inputClass } from "../components";
 import { aiService, inventoryService } from "../services";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
-import { hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import { hasCapability, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
 import { formatCurrency, formatNumber } from "../../utils/format";
 
 type View = "stock" | "batches" | "movements";
@@ -18,14 +19,15 @@ type View = "stock" | "batches" | "movements";
 export default function InventoryPage() {
   const [view, setView] = useState<View>("stock");
   const [search, setSearch] = useState("");
-  const navigate = useNavigate();
+  const route = useNavigate();
+  const navigate = (path: string) => route(workspacePath(path));
   const role = useEffectiveRole();
   const user = useAuthStore((state) => state.session?.user);
   const canViewReports = hasEffectivePermission(user, "reports", "view");
   const stockQuery = useQuery({ queryKey: ["inventory", "stock"], queryFn: inventoryService.stock });
   const batchQuery = useQuery({ queryKey: ["inventory", "batches"], queryFn: inventoryService.batches });
   const movementQuery = useQuery({ queryKey: ["inventory", "movements"], queryFn: inventoryService.movements });
-  const recommendationsQuery = useQuery({ queryKey: ["ai", "inventory", role], queryFn: () => aiService.recommendations({ route: "/app/inventory", entityType: "inventory" }) });
+  const recommendationsQuery = useQuery({ queryKey: ["ai", "inventory", role], queryFn: () => aiService.recommendations({ route: "/app/inventory", entityType: "inventory" }), enabled: !foundationMode });
   const loading = stockQuery.isLoading || batchQuery.isLoading || movementQuery.isLoading;
   const error = stockQuery.error ?? batchQuery.error ?? movementQuery.error;
 
@@ -39,7 +41,7 @@ export default function InventoryPage() {
 
   const totalUnits = stock.reduce((sum, row) => sum + Number(row.availableQuantity), 0);
   const expiring = batches.filter((batch) => batch.expiryStatus !== "Normal").length;
-  const hasValuation = stock.some((row) => row.inventoryValue !== undefined);
+  const hasValuation = hasCapability(user, "view_sensitive_cost") && stock.some((row) => row.inventoryValue !== undefined);
   const valuation = stock.reduce((sum, row) => sum + Number(row.inventoryValue ?? 0), 0);
 
   return (
@@ -51,8 +53,8 @@ export default function InventoryPage() {
         actions={
           <>
             {canViewReports ? <Button icon={<FileBarChart className="h-4 w-4" />} onClick={() => navigate(`/app/reports/${view === "movements" ? "stock-movement" : view === "batches" ? "expiry-report" : "stock-summary"}`)}>Open Report</Button> : null}
-            {hasEffectivePermission(user, "inventory", "post") && hasEffectivePermission(user, "import", "view") ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Receive Finalized Import</Button> : null}
-            {hasEffectivePermission(user, "products", "view") ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate("/app/settings?view=products")}>Product Master</Button> : null}
+            {hasEffectivePermission(user, "inventory", "post") && hasEffectivePermission(user, "import", "view") ? <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate(workspacePath("/app/imports"))}>Receive Finalized Import</Button> : null}
+            {hasEffectivePermission(user, "products", "view") ? <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate(workspacePath("/app/settings?view=products"))}>Product Master</Button> : null}
           </>
         }
       />

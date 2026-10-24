@@ -10,6 +10,7 @@ import { bearer, createContext, digest, toUser } from "./context.js";
 import { createFoundationRouter } from "./router.js";
 import { accessSchema, profileSchema, uploadSchema } from "./contracts.js";
 import { matchesFileSignature } from "./documents.js";
+import { deliverInvitation } from "./invitations.js";
 
 test("bearer identity never falls back to role or user headers", () => {
   const req = { get: () => undefined, headers: { "x-user-id": "u-super", "x-role": "Super Admin" } } as unknown as Request;
@@ -35,9 +36,36 @@ test("profile changes cannot smuggle role/access fields and access changes requi
 });
 
 test("database employee projection does not expose identity IDs or session data", () => {
-  const row = { id: "emp-1", authUserId: randomUUID(), name: "Test Employee", email: "test@example.invalid", role: "Accounts", status: "Active", title: "", department: "", phone: "", territory: "", employeeCode: "T-1", permissionOverrides: [], capabilities: [], version: 1, createdAt: new Date(), updatedAt: new Date() } as typeof employees.$inferSelect;
+  const row = { id: "emp-1", authUserId: randomUUID(), name: "Test Employee", email: "test@example.invalid", role: "Accounts", status: "Active", title: "", department: "", phone: "", territory: "", employeeCode: "T-1", permissionOverrides: [], capabilities: [], managerId: null, version: 1, createdAt: new Date(), updatedAt: new Date() } as typeof employees.$inferSelect;
   assert.equal("authUserId" in toUser(row), false);
   assert.equal("version" in toUser(row), false);
+});
+
+test("expired employee invitations can be retried without changing their linked identity", async () => {
+  let confirmed = false;
+  let invites = 0;
+  let recoveries = 0;
+  let mismatchedEmail = false;
+  let deliveryFails = false;
+  const ctx = {
+    config: { origin: "https://example.invalid" },
+    admin: { auth: { admin: {
+      getUserById: async () => ({ data: { user: { id: "same", email: mismatchedEmail ? "other@example.invalid" : "one@example.invalid", email_confirmed_at: confirmed ? "2026-10-24" : null } }, error: null }),
+      inviteUserByEmail: async () => { invites++; return { data: { user: { id: "same" } }, error: deliveryFails ? new Error("Mail unavailable") : null }; }
+    } } },
+    publicClient: () => ({ auth: { resetPasswordForEmail: async () => { recoveries++; return { error: null }; } } })
+  } as unknown as Parameters<typeof deliverInvitation>[0];
+  const employee = { email: "one@example.invalid", name: "One", authUserId: "same" };
+  assert.deepEqual(await deliverInvitation(ctx, employee), { sent: true, authUserId: "same" });
+  assert.equal(invites, 1);
+  confirmed = true;
+  assert.deepEqual(await deliverInvitation(ctx, employee), { sent: true, authUserId: "same" });
+  assert.equal(recoveries, 1);
+  mismatchedEmail = true;
+  await assert.rejects(deliverInvitation(ctx, employee), /administrator review/);
+  assert.equal(invites, 1);
+  deliveryFails = true;
+  assert.deepEqual(await deliverInvitation(ctx, { ...employee, authUserId: null }), { sent: false, authUserId: null });
 });
 
 test("hosted foundation: real auth, persisted profiles, access revocation, private storage and append-only audit", { skip: process.env.RUN_HOSTED_BACKEND_TESTS !== "true", timeout: 180000 }, async () => {
@@ -135,10 +163,10 @@ test("hosted foundation: real auth, persisted profiles, access revocation, priva
     assert.equal((await call(`/employees/${created[1].employeeId}/access`, { method: "PATCH", token: adminToken, body: access })).response.status, 200);
     assert.equal((await call("/me", { token: resetLogin.body.data.token })).response.status, 401);
     assert.equal((await call(`/employees/${created[1].employeeId}/access`, { method: "PATCH", token: adminToken, body: access })).response.status, 409);
-    const [privileges] = await ctx.client`select has_schema_privilege('anon', 'erp_private', 'usage') as anon, has_schema_privilege('authenticated', 'erp_private', 'usage') as authenticated`;
+    const { rows: [privileges] } = await ctx.client.query("select has_schema_privilege('anon', 'erp_private', 'usage') as anon, has_schema_privilege('authenticated', 'erp_private', 'usage') as authenticated");
     assert.equal(privileges.anon, false);
     assert.equal(privileges.authenticated, false);
-    await assert.rejects(ctx.client`update erp_private.audit_events set action = 'tampered' where false`, { code: "55000" });
+    await assert.rejects(ctx.client.query("update erp_private.audit_events set action = 'tampered' where false"), { code: "55000" });
     assert.equal((await call("/auth/logout", { method: "POST", token: adminToken, body: {} })).response.status, 200);
     assert.equal((await call("/me", { token: adminToken })).response.status, 401);
     if (process.env.RUN_BACKEND_BROWSER_TESTS === "true") {
@@ -160,6 +188,6 @@ test("hosted foundation: real auth, persisted profiles, access revocation, priva
         });
       } finally { await ctx.admin.auth.admin.deleteUser(record.authId); }
     }
-    await ctx.client.end({ timeout: 3 });
+    await ctx.client.end();
   }
 });

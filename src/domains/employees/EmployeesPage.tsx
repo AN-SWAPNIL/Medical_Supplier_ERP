@@ -12,10 +12,16 @@ import { LoadingBlock, Segmented } from "../components";
 import EmployeeAccessWorkspace from "./EmployeeAccessWorkspace";
 import EmployeeActivityPerformance from "./EmployeeActivityPerformance";
 import EmployeeDirectory from "./EmployeeDirectory";
+import { foundationMode } from "../../lib/runtime";
+import PersistentEmployeesPage from "./PersistentEmployeesPage";
 
 type View = "directory" | "access" | "field-team" | "activity";
 
 export default function EmployeesPage() {
+  return foundationMode ? <PersistentEmployeesPage /> : <LegacyEmployeesPage />;
+}
+
+function LegacyEmployeesPage() {
   const actor = useAuthStore((state) => state.session?.user);
   const [params, setParams] = useSearchParams();
   const requested = params.get("view") as View | null;

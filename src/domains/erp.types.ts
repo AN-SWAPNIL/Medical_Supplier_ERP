@@ -80,7 +80,9 @@ export type Supplier = {
   active: boolean;
 };
 
-export type SupplierSettlement = {
+export type PostedReversal = { reversalReason?: string; reversalDate?: string; reversedAt?: string; reversedByUserId?: string };
+
+export type SupplierSettlement = PostedReversal & {
   id: string;
   date: string;
   supplierId: string;
@@ -99,7 +101,7 @@ export type SupplierSettlement = {
   createdAt: string;
 };
 
-export type FinancialPositionEntry = {
+export type FinancialPositionEntry = PostedReversal & {
   id: string;
   asOfDate: string;
   category: "Owner Capital" | "Fixed Assets" | "Accumulated Depreciation" | "Statutory Payables" | "Other Receivables" | "Other Payables" | "Opening Retained Earnings";
@@ -192,6 +194,7 @@ export type LandedCostProductResult = {
   additionalPerUnitBdt: DecimalString;
   finalTotalBdt: DecimalString;
   finalPerUnitBdt: DecimalString;
+  authoritativeUnitCostBdt?: DecimalString;
   components: CostAllocation[];
 };
 
@@ -323,6 +326,7 @@ export type StockMovement = {
 
 export type Customer = {
   id: string;
+  version?: number;
   name: string;
   type: "Hospital" | "Clinic" | "Dealer" | "Pharmacy" | "Other";
   contactPerson: string;
@@ -354,6 +358,7 @@ export type SalesLine = {
 
 export type Quotation = {
   id: string;
+  version?: number;
   quotationNumber: string;
   leadId?: string;
   date: string;
@@ -378,6 +383,7 @@ export type Quotation = {
 
 export type SalesOrder = {
   id: string;
+  version?: number;
   orderNumber: string;
   quotationId?: string;
   date: string;
@@ -432,6 +438,7 @@ export type Delivery = {
 
 export type SalesInvoice = {
   id: string;
+  version?: number;
   invoiceNumber: string;
   orderId?: string;
   deliveryIds: string[];
@@ -471,6 +478,9 @@ export type Collection = {
   postedByUserId?: string;
   postedAt?: string;
   status: "Posted" | "Reversed";
+  reversalReason?: string;
+  receiptAmount?: DecimalString;
+  allocations?: Array<{ entryId: string; orderId?: string; invoiceId?: string; amount: DecimalString }>;
 };
 
 export type SalesOrderWorkspace = {
@@ -501,7 +511,7 @@ export type SalesOrderWorkspace = {
   };
 };
 
-export type Expense = {
+export type Expense = PostedReversal & {
   id: string;
   date: string;
   categoryId: string;
@@ -529,6 +539,7 @@ export type Expense = {
 
 export type CashBankAccount = {
   id: string;
+  version?: number;
   name: string;
   type: "Cash" | "Bank" | "Mobile Banking";
   accountNumber?: string;
@@ -538,12 +549,13 @@ export type CashBankAccount = {
 
 export type AccountTransaction = {
   id: string;
+  reversalOfId?: string;
   date: string;
   accountId: string;
   accountName: string;
   direction: "In" | "Out";
   amount: DecimalString;
-  sourceType: "Collection" | "Expense" | "Import Cost" | "Opening Balance" | "Advance" | "Company Loan" | "Manual Authorized";
+  sourceType: "Collection" | "Expense" | "Supplier Payment" | "Import Cost" | "Opening Balance" | "Advance" | "Company Loan" | "Manual Authorized";
   sourceId: string;
   description: string;
   partyId?: string;
@@ -710,10 +722,23 @@ export type PrintIdentity = {
 };
 
 export type PrintConfiguration = {
+  version?: number;
   identities: PrintIdentity[];
   defaultIdentityId: PrintIdentity["id"];
   defaultLetterheadMode: "Digital" | "Preprinted";
 };
+
+export type PrintRecordReferences = { order?: string; invoice?: string; deliveries?: string[] };
+
+export type TransactionPrintPayload = (
+  | { kind: "quotation"; record: Quotation }
+  | { kind: "order"; record: SalesOrder }
+  | { kind: "challan"; record: Delivery; financialVisible: boolean }
+  | { kind: "receipt"; record: Collection }
+  | { kind: "invoice"; record: SalesInvoice }
+  | { kind: "voucher"; record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER"; reversalReference?: string }
+  | { kind: "import-cost"; record: ImportCase }
+) & { references?: PrintRecordReferences };
 
 export type EmployeeDirectoryEntry = SalespersonEmployee & {
   employeeCode: string;

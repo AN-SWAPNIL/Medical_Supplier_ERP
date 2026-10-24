@@ -12,10 +12,14 @@ import {
   Users
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/ui/PageHeader";
 import { useAuthStore } from "../../lib/auth/session";
-import { reportCategories, reportSearchText, visibleReportCatalog, type ReportCategoryId } from "./reportCatalog";
+import { foundationMode, workspacePath } from "../../lib/runtime";
+import { reportService } from "../services";
+import { ErrorBlock, LoadingBlock } from "../components";
+import { reportCategories, visibleReportCatalog, type ReportCategoryId } from "./reportCatalog";
 
 const categoryIcons = {
   sales: ShoppingCart,
@@ -40,22 +44,25 @@ export default function ReportsPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [search, setSearch] = useState("");
-  const catalog = useMemo(() => visibleReportCatalog(user), [user]);
+  const savedCatalogue = useQuery({ queryKey: ["reports", "catalogue"], queryFn: reportService.catalogue, enabled: foundationMode });
+  const catalog = useMemo(() => foundationMode ? savedCatalogue.data ?? [] : visibleReportCatalog(user), [user, savedCatalogue.data]);
   const normalizedSearch = search.trim().toLowerCase();
-  const visible = normalizedSearch ? catalog.filter((report) => reportSearchText(report).includes(normalizedSearch)) : catalog;
+  const visible = normalizedSearch ? catalog.filter((report) => [report.title, report.description, report.category, ...report.keywords].join(" ").toLowerCase().includes(normalizedSearch)) : catalog;
 
   useEffect(() => {
     const reportId = legacyReport(params);
-    if (!reportId || !catalog.some((report) => report.id === reportId || report.tableId === reportId)) return;
+    if (!reportId || !catalog.some((report) => report.id === reportId)) return;
     const next = new URLSearchParams(params);
     next.delete("view");
     next.delete("category");
     next.delete("report");
     next.delete("table");
-    navigate({ pathname: `/app/reports/${reportId}`, search: next.toString() ? `?${next}` : "" }, { replace: true });
+    navigate({ pathname: workspacePath(`/app/reports/${reportId}`), search: next.toString() ? `?${next}` : "" }, { replace: true });
   }, [catalog, navigate, params]);
 
-  const openReport = (reportId: string) => navigate(`/app/reports/${reportId}`);
+  const openReport = (reportId: string) => navigate(workspacePath(`/app/reports/${reportId}`));
+  if (foundationMode && savedCatalogue.isLoading) return <LoadingBlock label="Loading authorized reports" />;
+  if (foundationMode && savedCatalogue.isError) return <ErrorBlock error={savedCatalogue.error} />;
 
   return (
     <div className="grid gap-5" data-testid="report-catalogue">
@@ -97,6 +104,7 @@ export default function ReportsPage() {
                 <button
                   className="group flex min-h-32 flex-col border border-slate-200 bg-white p-4 text-left transition hover:border-cyan-400 hover:bg-cyan-50/40 hover:shadow-sm"
                   type="button"
+                  disabled={"available" in report && !report.available}
                   onClick={() => openReport(report.id)}
                   key={report.id}
                 >
@@ -106,8 +114,9 @@ export default function ReportsPage() {
                   <strong className="text-sm text-blue-950">{report.title}</strong>
                   <span className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{report.description}</span>
                   <span className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3 text-xs font-bold text-cyan-800">
-                    View report <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                    {"available" in report && !report.available ? "Source migration pending" : "View report"} <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
                   </span>
+                  {"pendingReason" in report && report.pendingReason ? <span className="mt-2 text-xs font-normal leading-5 text-amber-800">{report.pendingReason}</span> : null}
                 </button>
               ))}
             </div>

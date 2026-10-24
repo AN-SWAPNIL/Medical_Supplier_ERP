@@ -62,11 +62,11 @@ export function canViewManagedEmployeeActivity(user: User | null | undefined) {
 }
 
 export function canAccessEmployeeHub(user: User | null | undefined) {
-  return canViewEmployeeDirectory(user) || canManageUserAccess(user) || canViewManagedEmployeeActivity(user);
+  return canViewEmployeeDirectory(user) || canViewManagedEmployeeActivity(user);
 }
 
 export function canManageEmployees(user: User | null | undefined, action: Extract<PermissionAction, "view" | "create" | "edit">) {
-  return hasEffectivePermission(user, "users", action) && (user?.role === "Super Admin" || hasCapability(user, "manage_users"));
+  return hasEffectivePermission(user, "users", "view") && hasEffectivePermission(user, "users", action) && (user?.role === "Super Admin" || hasCapability(user, "manage_users"));
 }
 
 export function canManageTargetUser(actor: User, target: User) {

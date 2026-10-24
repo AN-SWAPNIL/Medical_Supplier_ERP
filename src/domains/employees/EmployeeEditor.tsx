@@ -15,7 +15,7 @@ import { roles } from "../../types";
 import { inputClass, labelClass } from "../components";
 import type { Capability } from "../erp.types";
 
-const capabilityOptions: ReadonlyArray<readonly [Capability, string]> = [
+export const capabilityOptions: ReadonlyArray<readonly [Capability, string]> = [
   ["view_sensitive_cost", "View sensitive import cost"],
   ["edit_sensitive_cost", "Edit sensitive import cost"],
   ["finalize_landed_cost", "Finalize landed cost"],

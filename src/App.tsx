@@ -33,6 +33,8 @@ const EmployeesPage = lazy(() => import("./domains/employees/EmployeesPage"));
 const SettingsPage = lazy(() => import("./domains/settings/SettingsPage"));
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage"));
 const ProfilePage = lazy(() => import("./features/users/ProfilePage"));
+const BackendMastersPage = lazy(() => import("./features/auth/BackendMastersPage"));
+const BackendPrintSettings = lazy(() => import("./features/auth/BackendPrintSettings"));
 const SmartInsightsPage = lazy(() => import("./components/ai/SmartInsightsPage"));
 
 const deferred = (element: ReactNode) => (
@@ -73,6 +75,20 @@ function App() {
       <Route element={<ProtectedRoute />}>
         {foundationMode ? <Route path="/backend" element={<BackendWorkspace />}>
           <Route path="profile" element={deferred(<ProfilePage />)} />
+          <Route path="imports" element={guarded("import", <ImportsPage />)} />
+          <Route path="imports/new" element={<RequirePermission permission="import" action="create">{deferred(<NewImportPage />)}</RequirePermission>} />
+          <Route path="imports/:importId" element={guarded("import", <ImportWorkspacePage />)} />
+          <Route path="inventory" element={guarded("inventory", <InventoryPage />)} />
+          <Route path="sales" element={<RequireAnyPermission permissions={["sales", "marketing"]}>{deferred(<SalesPage />)}</RequireAnyPermission>} />
+          <Route path="employees" element={<RequireEmployeeHubAccess>{deferred(<EmployeesPage />)}</RequireEmployeeHubAccess>} />
+          <Route path="sales/orders/:orderId" element={guarded("sales", <SalesOrderWorkspacePage />)} />
+          <Route path="accounts" element={guarded("accounts", <AccountsPage />)} />
+          <Route path="reports" element={guarded("reports", <ReportsPage />)} />
+          <Route path="reports/:reportId" element={guarded("reports", <ReportDetailPage />)} />
+          <Route path="print/:documentType/:id" element={guarded("print", <PrintPage />)} />
+          <Route path="settings" element={<RequireAnyPermission permissions={["products", "suppliers", "settings", "accounts"]}>{deferred(<BackendMastersPage />)}</RequireAnyPermission>} />
+          <Route path="settings/print" element={guarded("settings", <BackendPrintSettings />)} />
+          <Route path="*" element={<Navigate to="/backend" replace />} />
         </Route> : null}
         <Route path="/app" element={foundationMode ? <Navigate to="/backend" replace /> : <AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />

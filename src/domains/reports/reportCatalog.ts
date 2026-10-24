@@ -1,6 +1,6 @@
-import type { Capability } from "../erp.types";
-import type { PermissionAction, PermissionKey, User } from "../../types";
-import { hasCapability, hasEffectivePermission } from "../../lib/permissions/effectiveAccess";
+import type { Capability } from "../erp.types.js";
+import type { PermissionAction, PermissionKey, User } from "../../types/index.js";
+import { hasCapability, hasEffectivePermission } from "../../lib/permissions/effectiveAccess.js";
 
 export type ReportCategoryId = "sales" | "customers" | "suppliers" | "inventory" | "accounts" | "employees" | "controls";
 export type ReportSourceGroup = "sales" | "inventory" | "imports" | "expenses" | "employees" | "controls";

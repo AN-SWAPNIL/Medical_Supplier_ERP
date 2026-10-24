@@ -6,6 +6,8 @@
 **Head inspected:** `43fb218c4341f7f3045a5df0fcb647fbdda57a0d` (`feat: add linked sales order lifecycle workspace`)  
 **Existing project plan reviewed:** [`BACKEND_SETUP.md`](https://github.com/AN-SWAPNIL/Medical_Supplier_ERP/blob/dev/BACKEND_SETUP.md)
 
+**Implementation checkpoint, 24 October 2026:** This document records the pre-migration baseline. See `../PRODUCTION_BACKEND_PROGRESS.md` and `../BACKEND_SETUP.md` for verified progress and remaining launch gates. Authentication, import/receiving, FIFO deliveries, invoices, allocated collections, cash/customer journals, expenses/TA-DA, supplier settlements and restricted financial-position sources and company stationery now persist and connect to Sales/Accounts screens, including source-scoped transaction print previews and 53 operational SQL reports with shared CSV/report-print filtering; the complete ERP is not production-ready. Runtime uses Drizzle + `pg` rather than the earlier Postgres.js candidate.
+
 ## 1. Executive decision
 
 **Keep the current TypeScript/Express business API and React/Vite frontend. Replace the in-memory backend with managed PostgreSQL, verified authentication and private object storage.** Initially retain the existing single Vercel frontend/API deployment (on a commercial-appropriate plan), and use **Supabase PostgreSQL + Supabase Auth + Supabase Storage** with **Drizzle ORM** for incremental database migration. A separate always-on backend host is optional, not a prerequisite.
@@ -254,6 +256,12 @@ src/domains/          # KEEP existing frontend service boundary and DTOs
 - Verify restore of DB backup and retrieval of stored documents.
 - Deploy staging then production; confirm rollback and break-glass admin procedure.
 - Turn off demo endpoints and demo login in production.
+
+### Workforce Implementation Checkpoint (24 October 2026)
+
+Employee/team hierarchy, safe scoped directory/profile/access controls, authenticated manual marketing activities/private evidence, canonical leads/customer conversion, follow-ups, daily/monthly plans, independent plan reviews, targets and score rules now persist. Migrations 0017-0018 were applied only after a destination backup; existing business history was not reset. Submitted/approved history is protected by database triggers and audit.
+
+The persistent report catalogue now has 60 supported SQL read models, including scoped employee activity, performance, lead funnel, follow-up and target reports. Actual commercial records generate scored events; manual notes never fabricate payments or GPS verification. GPS field verification, executive dashboard, public-site persistence, opening reconciliation and production cutover remain unfinished. See `PRODUCTION_BACKEND_PROGRESS.md` for current verified acceptance, not the historical baseline above.
 
 ## 12. Verification / definition of done
 

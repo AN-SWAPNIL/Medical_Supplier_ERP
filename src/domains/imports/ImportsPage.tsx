@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { workspacePath } from "../../lib/runtime";
 import PageHeader from "../../components/ui/PageHeader";
 import Button from "../../components/ui/Button";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
@@ -55,7 +56,7 @@ export default function ImportsPage() {
         eyebrow="Import operations"
         title="Imports"
         subtitle="One connected record from PI and LC/TT through shipment, cost allocation, finalization and warehouse receipt."
-        actions={canCreate ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => navigate("/app/imports/new")}>New Import</Button> : undefined}
+        actions={canCreate ? <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => navigate(workspacePath("/app/imports/new"))}>New Import</Button> : undefined}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -106,7 +107,7 @@ export default function ImportsPage() {
                       {canDelete && ["Draft", "PI Received", "Cancelled"].includes(record.status) && !record.snapshot ? (
                         <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDeleteId(record.id)} aria-label="Delete import" title="Delete import" />
                       ) : null}
-                      <Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => navigate("/app/imports/" + record.id)}>Open</Button>
+                      <Button variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => navigate(workspacePath("/app/imports/" + record.id))}>Open</Button>
                     </div>
                   </td>
                 </tr>

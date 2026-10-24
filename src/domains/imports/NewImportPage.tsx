@@ -8,6 +8,7 @@ import { ErrorBlock, LoadingBlock, Panel, ProductThumb, inputClass, labelClass, 
 import { importService, settingsService } from "../services";
 import { useToastStore } from "../../lib/ui/toast";
 import { businessDate } from "../../lib/date";
+import { workspacePath } from "../../lib/runtime";
 
 type DraftLine = { id: string; productId: string; quantity: string };
 
@@ -63,7 +64,7 @@ export default function NewImportPage() {
     },
     onSuccess: (record) => {
       pushToast({ kind: "success", title: "Draft import created", message: `${record.draftReference} is ready for PI and LC/TT continuation.` });
-      navigate(`/app/imports/${record.id}`);
+      navigate(workspacePath(`/app/imports/${record.id}`));
     },
     onError: (error) => pushToast({ kind: "error", title: "Could not create draft import", message: error instanceof Error ? error.message : undefined })
   });
@@ -80,7 +81,7 @@ export default function NewImportPage() {
         eyebrow="PO → Supplier → PI → LC / TT"
         title="Create draft import"
         subtitle="Start with the purchase commitment. PI, payment mode, bank reference, shipment details and costing are added progressively to this same record."
-        actions={<Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/app/imports")}>Back to Register</Button>}
+        actions={<Button icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(workspacePath("/app/imports"))}>Back to Register</Button>}
       />
       <Panel title="Purchase order header" subtitle="The system generates an IMP reference immediately; no PI or LC decision is required yet.">
         <form className="grid gap-5 p-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
@@ -111,7 +112,7 @@ export default function NewImportPage() {
           </section>
 
           <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-            <Button type="button" onClick={() => navigate("/app/imports")}>Cancel</Button>
+            <Button type="button" onClick={() => navigate(workspacePath("/app/imports"))}>Cancel</Button>
             <Button type="submit" variant="primary" icon={<Save className="h-4 w-4" />} disabled={mutation.isPending}>{mutation.isPending ? "Creating..." : "Create Draft Import"}</Button>
           </div>
         </form>

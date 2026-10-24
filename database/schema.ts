@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import type { Capability } from "../src/domains/erp.types.js";
+import { check, date, index, integer, jsonb, numeric, pgSchema, text, timestamp, uniqueIndex, uuid, boolean, type AnyPgColumn } from "drizzle-orm/pg-core";
+import type { Capability, Expense, FinancialPositionEntry, ImportCase, ImportCostLine, ImportStatus, LandedCostSnapshot, PrintConfiguration, Quotation, SalesOrder } from "../src/domains/erp.types.js";
 import type { Role, UserPermissionOverride } from "../src/types/index.js";
+import type { PlanData } from "../src/domains/marketing/persistentContracts.js";
 
 export const erp = pgSchema("erp_private");
 export const employees = erp.table("employees", {
@@ -16,6 +17,7 @@ export const employees = erp.table("employees", {
   phone: text("phone").notNull().default(""),
   territory: text("territory").notNull().default(""),
   employeeCode: text("employee_code").notNull().unique(),
+  managerId: text("manager_id").references((): AnyPgColumn => employees.id),
   capabilities: jsonb("capabilities").$type<Capability[]>().notNull().default([]),
   permissionOverrides: jsonb("permission_overrides").$type<UserPermissionOverride[]>().notNull().default([]),
   version: integer("version").notNull().default(1),
@@ -23,6 +25,7 @@ export const employees = erp.table("employees", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (t) => [
   uniqueIndex("employee_email_lower_unique").on(sql`lower(${t.email})`),
+  index("employee_manager_idx").on(t.managerId, t.id),
   check("employee_role", sql`${t.role} in ('Super Admin','Managing Director','Accounts','Import Officer','Warehouse Manager','Sales Manager','Sales Executive')`),
   check("employee_status", sql`${t.status} in ('Active','Pending','Inactive')`),
   check("employee_json_arrays", sql`jsonb_typeof(${t.capabilities}) = 'array' and jsonb_typeof(${t.permissionOverrides}) = 'array'`)
@@ -36,7 +39,7 @@ export const auditEvents = erp.table("audit_events", {
   entityId: text("entity_id").notNull(),
   details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-}, (t) => [index("audit_entity_created_idx").on(t.entityType, t.entityId, t.createdAt)]);
+}, (t) => [index("audit_entity_created_idx").on(t.entityType, t.entityId, t.createdAt), index("audit_created_idx").on(t.createdAt, t.id)]);
 
 export const sessions = erp.table("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -52,7 +55,12 @@ export const documents = erp.table("documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   employeeId: text("employee_id").notNull().references(() => employees.id),
   uploadedBy: text("uploaded_by").notNull().references(() => employees.id),
-  purpose: text("purpose").$type<"employee-avatar" | "employee-evidence">().notNull(),
+  purpose: text("purpose").$type<"employee-avatar" | "employee-evidence" | "import-document" | "expense-receipt" | "marketing-evidence">().notNull(),
+  importId: text("import_id").references(() => importCases.id),
+  expenseId: text("expense_id").unique().references((): AnyPgColumn => expenses.id),
+  activityId: text("activity_id").references((): AnyPgColumn => marketingActivities.id),
+  documentType: text("document_type").notNull().default("Other"),
+  sensitive: boolean("sensitive").notNull().default(true),
   bucket: text("bucket").notNull().default("erp-documents"),
   objectPath: text("object_path").notNull().unique(),
   fileName: text("file_name").notNull(),
@@ -69,3 +77,302 @@ export const rateLimits = erp.table("rate_limits", {
   count: integer("count").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull()
 });
+
+export const printConfigurations = erp.table("print_configurations", {
+  id: text("id").primaryKey(),
+  data: jsonb("data").$type<Omit<PrintConfiguration, "version">>().notNull(),
+  version: integer("version").notNull().default(1),
+  updatedBy: text("updated_by").references(() => employees.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [check("print_configuration_singleton", sql`${t.id} = 'company'`), check("print_configuration_version", sql`${t.version} > 0`), check("print_configuration_object", sql`jsonb_typeof(${t.data}) = 'object'`)]).enableRLS();
+
+export const products = erp.table("products", {
+  id: text("id").primaryKey(), code: text("code").notNull(), name: text("name").notNull(),
+  family: text("family").notNull(), variant: text("variant").notNull(), unit: text("unit").notNull(),
+  hsCode: text("hs_code").notNull().default(""), imageUrl: text("image_url").notNull().default(""),
+  standardSalePrice: numeric("standard_sale_price", { precision: 24, scale: 2 }).notNull().default("0"),
+  active: boolean("active").notNull().default(true)
+}, (t) => [uniqueIndex("product_code_lower_unique").on(sql`lower(${t.code})`), check("product_price_positive", sql`${t.standardSalePrice} >= 0`)]).enableRLS();
+
+export const suppliers = erp.table("suppliers", {
+  id: text("id").primaryKey(), name: text("name").notNull(), country: text("country").notNull(),
+  contactPerson: text("contact_person").notNull().default(""), phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""), paymentTerms: text("payment_terms").notNull().default(""),
+  active: boolean("active").notNull().default(true)
+}).enableRLS();
+
+export const documentNumbers = erp.table("document_numbers", {
+  key: text("key").primaryKey(), value: integer("value").notNull()
+}).enableRLS();
+
+export type CommercialFields = Pick<ImportCase, "poNumber" | "poDate" | "piNumber" | "piDate" | "paymentMode" | "lcNumber" | "lcAmount" | "lcOpenDate" | "lcExpiryDate" | "ttReference" | "ttAmount" | "ttDate" | "bank" | "currency" | "exchangeRate" | "rateDate" | "rateSource" | "expectedShipmentDate" | "commercialInvoiceNumber" | "commercialInvoiceDate" | "productionStatus" | "productionFollowUpNote" | "blNumber" | "containerNumber" | "containerType" | "vesselName" | "etd" | "eta" | "notes">;
+export const importCases = erp.table("import_cases", {
+  id: text("id").primaryKey(), draftReference: text("draft_reference").notNull().unique(),
+  supplierId: text("supplier_id").notNull().references(() => suppliers.id), supplierName: text("supplier_name").notNull(),
+  commercial: jsonb("commercial").$type<CommercialFields>().notNull(),
+  status: text("status").$type<ImportStatus>().notNull().default("Draft"),
+  currentSnapshotVersion: integer("current_snapshot_version"),
+  createdBy: text("created_by").notNull().references(() => employees.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("import_supplier_created_idx").on(t.supplierId, t.createdAt), uniqueIndex("import_lc_lower_unique").on(sql`nullif(lower(btrim(${t.commercial}->>'lcNumber')), '')`), check("import_status", sql`${t.status} in ('Draft','PI Received','LC/TT Opened','In Production','Shipped','At Port','Costing','Cost Finalized','Partially Received','Received','Closed','Cancelled')`)]).enableRLS();
+
+export const importItems = erp.table("import_items", {
+  id: text("id").primaryKey(), importId: text("import_id").notNull().references(() => importCases.id),
+  productId: text("product_id").notNull().references(() => products.id), productCode: text("product_code").notNull(), productName: text("product_name").notNull(), unit: text("unit").notNull(),
+  quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull(), currency: text("currency").notNull(),
+  fobUnitForeign: numeric("fob_unit_foreign", { precision: 18, scale: 6 }).notNull(), exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6 }).notNull(),
+  fobTotalBdt: numeric("fob_total_bdt", { precision: 24, scale: 2 }).notNull(),
+  cbmPerCarton: numeric("cbm_per_carton", { precision: 18, scale: 8 }).notNull(), cartonCount: numeric("carton_count", { precision: 18, scale: 4 }).notNull(), totalCbm: numeric("total_cbm", { precision: 18, scale: 8 }).notNull(),
+  cbmMode: text("cbm_mode").$type<"CALCULATED" | "MANUAL">().notNull(), hsCode: text("hs_code").notNull().default("")
+}, (t) => [index("import_item_case_idx").on(t.importId), check("import_item_nonnegative", sql`${t.quantity} > 0 and ${t.fobUnitForeign} >= 0 and ${t.exchangeRate} >= 0 and ${t.fobTotalBdt} >= 0 and ${t.totalCbm} >= 0 and ${t.cartonCount} >= 0 and ${t.cbmPerCarton} >= 0`)]).enableRLS();
+
+export const importCosts = erp.table("import_cost_lines", {
+  id: text("id").primaryKey(), importId: text("import_id").notNull().references(() => importCases.id),
+  amountForeign: numeric("amount_foreign", { precision: 24, scale: 6 }).notNull(), exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6 }).notNull(),
+  amountBdt: numeric("amount_bdt", { precision: 24, scale: 2 }).notNull(),
+  data: jsonb("data").$type<Omit<ImportCostLine, "amountForeign" | "exchangeRate" | "amountBdt">>().notNull()
+}, (t) => [index("cost_import_idx").on(t.importId)]).enableRLS();
+
+export const landedSnapshots = erp.table("landed_cost_snapshots", {
+  id: text("id").primaryKey(), importId: text("import_id").notNull().references(() => importCases.id),
+  version: integer("version").notNull(), data: jsonb("data").$type<LandedCostSnapshot>().notNull(),
+  totalProductValueBdt: numeric("total_product_value_bdt", { precision: 24, scale: 2 }).notNull(),
+  totalAdditionalCostBdt: numeric("total_additional_cost_bdt", { precision: 24, scale: 2 }).notNull(),
+  totalShipmentCostBdt: numeric("total_shipment_cost_bdt", { precision: 24, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [uniqueIndex("snapshot_case_version_unique").on(t.importId, t.version)]).enableRLS();
+
+export const warehouseReceipts = erp.table("warehouse_receipts", {
+  id: text("id").primaryKey(), importId: text("import_id").notNull().references(() => importCases.id),
+  snapshotId: text("snapshot_id").notNull().references(() => landedSnapshots.id),
+  receiptNumber: text("receipt_number").notNull().unique(), receivedDate: date("received_date").notNull(),
+  receivedBy: text("received_by").notNull().references(() => employees.id), receivedByName: text("received_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("receipt_import_idx").on(t.importId)]).enableRLS();
+
+export const receiptLines = erp.table("receipt_lines", {
+  id: text("id").primaryKey(), receiptId: text("receipt_id").notNull().references(() => warehouseReceipts.id),
+  importItemId: text("import_item_id").notNull().references(() => importItems.id),
+  quantityReceived: numeric("quantity_received", { precision: 18, scale: 4 }).notNull(), quantityRejected: numeric("quantity_rejected", { precision: 18, scale: 4 }).notNull(),
+  lotNumber: text("lot_number").notNull(), batchNumber: text("batch_number").notNull(),
+  manufacturingDate: date("manufacturing_date"), expiryDate: date("expiry_date"),
+  warehouse: text("warehouse").notNull(), location: text("location").notNull(),
+  landedCostPerUnit: numeric("landed_cost_per_unit", { precision: 28, scale: 10 }).notNull(),
+  inventoryValueBdt: numeric("inventory_value_bdt", { precision: 24, scale: 2 }).notNull()
+}, (t) => [index("receipt_line_item_idx").on(t.importItemId), check("receipt_quantity", sql`${t.quantityReceived} >= 0 and ${t.quantityRejected} >= 0 and ${t.quantityReceived} + ${t.quantityRejected} > 0`)]).enableRLS();
+
+export const stockBatches = erp.table("stock_batches", {
+  id: text("id").primaryKey(), productId: text("product_id").notNull().references(() => products.id), receiptLineId: text("receipt_line_id").notNull().unique().references(() => receiptLines.id),
+  sourceImportId: text("source_import_id").notNull().references(() => importCases.id), sourceReference: text("source_reference").notNull(),
+  lotNumber: text("lot_number").notNull(), batchNumber: text("batch_number").notNull(),
+  manufacturingDate: date("manufacturing_date").notNull(), expiryDate: date("expiry_date").notNull(), receivedDate: date("received_date").notNull(),
+  quantityReceived: numeric("quantity_received", { precision: 18, scale: 4 }).notNull(), quantityAvailable: numeric("quantity_available", { precision: 18, scale: 4 }).notNull(),
+  landedCostPerUnit: numeric("landed_cost_per_unit", { precision: 28, scale: 10 }).notNull(),
+  receivedValueBdt: numeric("received_value_bdt", { precision: 24, scale: 2 }).notNull(), availableValueBdt: numeric("available_value_bdt", { precision: 24, scale: 2 }).notNull(),
+  warehouse: text("warehouse").notNull(), location: text("location").notNull()
+}, (t) => [uniqueIndex("batch_number_lower_unique").on(sql`lower(${t.batchNumber})`), index("batch_fifo_idx").on(t.productId, t.receivedDate, t.id), check("batch_integrity", sql`${t.quantityReceived} > 0 and ${t.quantityAvailable} >= 0 and ${t.quantityAvailable} <= ${t.quantityReceived} and ${t.availableValueBdt} >= 0 and ${t.expiryDate} > ${t.manufacturingDate}`)]).enableRLS();
+
+export const stockMovements = erp.table("stock_movements", {
+  id: text("id").primaryKey(), batchId: text("batch_id").notNull().references(() => stockBatches.id),
+  type: text("type").$type<"Receive" | "Dispatch" | "Return" | "Adjustment">().notNull(),
+  quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull(), valueBdt: numeric("value_bdt", { precision: 24, scale: 2 }).notNull(),
+  date: date("date").notNull(), reference: text("reference").notNull(),
+  createdBy: text("created_by").notNull().references(() => employees.id), createdByName: text("created_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("movement_batch_idx").on(t.batchId, t.date), index("movement_date_idx").on(t.date, t.id), check("movement_quantity", sql`${t.quantity} > 0`)]).enableRLS();
+
+export const postingKeys = erp.table("posting_keys", {
+  id: text("id").primaryKey(), requestHash: text("request_hash").notNull(), resourceId: text("resource_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}).enableRLS();
+
+export const customers = erp.table("customers", {
+  id: text("id").primaryKey(), name: text("name").notNull(),
+  type: text("type").$type<"Hospital" | "Clinic" | "Dealer" | "Pharmacy" | "Other">().notNull(),
+  contactPerson: text("contact_person").notNull().default(""), phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""), address: text("address").notNull().default(""), territory: text("territory").notNull().default(""),
+  assignedSalesUserId: text("assigned_sales_user_id").references(() => employees.id),
+  paymentTerms: text("payment_terms").notNull().default(""), creditLimit: numeric("credit_limit", { precision: 24, scale: 2 }).notNull().default("0"),
+  active: boolean("active").notNull().default(true), version: integer("version").notNull().default(1),
+  createdBy: text("created_by").notNull().references(() => employees.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("customer_owner_idx").on(t.assignedSalesUserId, t.id), check("customer_credit_limit", sql`${t.creditLimit} >= 0`), check("customer_type", sql`${t.type} in ('Hospital','Clinic','Dealer','Pharmacy','Other')`)]).enableRLS();
+
+type CustomerSnapshot = Pick<Quotation, "customerName" | "customerAddressSnapshot" | "customerPhoneSnapshot" | "customerContactSnapshot">;
+export const quotations = erp.table("quotations", {
+  id: text("id").primaryKey(), quotationNumber: text("quotation_number").notNull().unique(), date: date("date").notNull(),
+  customerId: text("customer_id").notNull().references(() => customers.id), ownerId: text("owner_id").notNull().references(() => employees.id),
+  snapshot: jsonb("snapshot").$type<CustomerSnapshot>().notNull(),
+  status: text("status").$type<Quotation["status"]>().notNull().default("Draft"), archived: boolean("archived").notNull().default(false),
+  validityDays: integer("validity_days").notNull(), paymentTerms: text("payment_terms").notNull(), remarks: text("remarks").notNull().default(""),
+  subtotal: numeric("subtotal", { precision: 24, scale: 2 }).notNull(), discountTotal: numeric("discount_total", { precision: 24, scale: 2 }).notNull(), total: numeric("total", { precision: 24, scale: 2 }).notNull(),
+  createdByUserId: text("created_by_user_id").notNull().references(() => employees.id), version: integer("version").notNull().default(1),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("quotation_owner_date_idx").on(t.ownerId, t.date), check("quotation_status", sql`${t.status} in ('Draft','Sent','Accepted','Rejected','Converted')`), check("quotation_totals", sql`${t.subtotal} >= 0 and ${t.discountTotal} >= 0 and ${t.total} = ${t.subtotal} - ${t.discountTotal} and ${t.total} >= 0`)]).enableRLS();
+
+function salesLineColumns() {
+  return { id: text("id").primaryKey(), position: integer("position").notNull(), productId: text("product_id").notNull().references(() => products.id),
+    productCode: text("product_code").notNull(), productName: text("product_name").notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 4 }).notNull(), unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    discount: numeric("discount", { precision: 24, scale: 2 }).notNull(), lineTotal: numeric("line_total", { precision: 24, scale: 2 }).notNull() };
+}
+export const quotationLines = erp.table("quotation_lines", {
+  ...salesLineColumns(), quotationId: text("quotation_id").notNull().references(() => quotations.id)
+}, (t) => [uniqueIndex("quotation_product_unique").on(t.quotationId, t.productId), check("quotation_line_integrity", sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discount} >= 0 and ${t.lineTotal} = round(${t.quantity} * ${t.unitPrice}, 2) - ${t.discount} and ${t.lineTotal} >= 0`)]).enableRLS();
+
+export type OrderInstructions = Pick<SalesOrder, "paymentConditions" | "deliveryInstruction" | "paymentConfirmation" | "paymentReference" | "paymentDate" | "requestedDeliveryDate" | "orderReceivedByName" | "orderReceivedByDesignation" | "orderGivenBy" | "headOfSalesSignoff" | "coeSignoff" | "mdSignoff">;
+export const salesOrders = erp.table("sales_orders", {
+  id: text("id").primaryKey(), orderNumber: text("order_number").notNull().unique(), quotationId: text("quotation_id").unique().references(() => quotations.id),
+  date: date("date").notNull(), customerId: text("customer_id").notNull().references(() => customers.id), ownerId: text("owner_id").notNull().references(() => employees.id),
+  snapshot: jsonb("snapshot").$type<CustomerSnapshot>().notNull(), instructions: jsonb("instructions").$type<OrderInstructions>().notNull(),
+  status: text("status").$type<SalesOrder["status"]>().notNull().default("Placed"), total: numeric("total", { precision: 24, scale: 2 }).notNull(),
+  version: integer("version").notNull().default(1), createdByUserId: text("created_by_user_id").notNull().references(() => employees.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("order_owner_date_idx").on(t.ownerId, t.date), check("order_status", sql`${t.status} in ('Placed','Ready','Partially Delivered','Delivered','Cancelled')`), check("order_total", sql`${t.total} >= 0`)]).enableRLS();
+
+export const orderLines = erp.table("order_lines", {
+  ...salesLineColumns(), orderId: text("order_id").notNull().references(() => salesOrders.id)
+}, (t) => [uniqueIndex("order_product_unique").on(t.orderId, t.productId), check("order_line_integrity", sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discount} >= 0 and ${t.lineTotal} = round(${t.quantity} * ${t.unitPrice}, 2) - ${t.discount} and ${t.lineTotal} >= 0`)]).enableRLS();
+
+export const customerEntries = erp.table("customer_entries", {
+  id: text("id").primaryKey(), customerId: text("customer_id").notNull().references(() => customers.id), orderId: text("order_id").references(() => salesOrders.id),
+  date: date("date").notNull(), type: text("type").$type<"Opening Due" | "Invoice" | "Collection" | "Reversal">().notNull(),
+  sourceId: text("source_id").notNull(), reference: text("reference").notNull(),
+  invoiceId: text("invoice_id").references(() => salesInvoices.id), collectionId: text("collection_id").references(() => collections.id),
+  debit: numeric("debit", { precision: 24, scale: 2 }).notNull().default("0"), credit: numeric("credit", { precision: 24, scale: 2 }).notNull().default("0"),
+  remarks: text("remarks").notNull().default(""), createdBy: text("created_by").notNull().references(() => employees.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("customer_ledger_date_idx").on(t.customerId, t.date, t.createdAt), index("customer_journal_date_idx").on(t.date, t.id), index("customer_journal_collection_idx").on(t.collectionId, t.date), uniqueIndex("customer_entry_source_unique").on(t.type, t.sourceId), check("customer_entry_amount", sql`(${t.debit} > 0 and ${t.credit} = 0) or (${t.credit} > 0 and ${t.debit} = 0)`)]).enableRLS();
+
+export const deliveries = erp.table("deliveries", {
+  id: text("id").primaryKey(), challanNumber: text("challan_number").notNull().unique(), orderId: text("order_id").notNull().references(() => salesOrders.id),
+  customerId: text("customer_id").notNull().references(() => customers.id), customerName: text("customer_name").notNull(), ownerId: text("owner_id").notNull().references(() => employees.id),
+  date: date("date").notNull(), remarks: text("remarks").notNull().default(""), receiverName: text("receiver_name").notNull().default(""), overrideReason: text("override_reason").notNull().default(""),
+  dispatchedBy: text("dispatched_by").notNull().references(() => employees.id), postedAt: timestamp("posted_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("delivery_order_date_idx").on(t.orderId, t.date)]).enableRLS();
+
+export const deliveryLines = erp.table("delivery_lines", {
+  ...salesLineColumns(), deliveryId: text("delivery_id").notNull().references(() => deliveries.id),
+  orderLineId: text("order_line_id").notNull().references(() => orderLines.id),
+  batchId: text("batch_id").notNull().references(() => stockBatches.id), batchNumber: text("batch_number").notNull(),
+  stockMovementId: text("stock_movement_id").notNull().unique().references(() => stockMovements.id),
+  costBdt: numeric("cost_bdt", { precision: 24, scale: 2 }).notNull()
+}, (t) => [index("delivery_line_order_idx").on(t.orderLineId), check("delivery_line_values", sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discount} >= 0 and ${t.lineTotal} >= 0 and ${t.costBdt} >= 0`)]).enableRLS();
+
+export const salesInvoices = erp.table("sales_invoices", {
+  id: text("id").primaryKey(), invoiceNumber: text("invoice_number").notNull().unique(), orderId: text("order_id").notNull().references(() => salesOrders.id),
+  customerId: text("customer_id").notNull().references(() => customers.id), ownerId: text("owner_id").notNull().references(() => employees.id), snapshot: jsonb("snapshot").$type<CustomerSnapshot>().notNull(),
+  date: date("date").notNull(), status: text("status").$type<"Draft" | "Approved" | "Cancelled">().notNull().default("Draft"), remarks: text("remarks").notNull().default(""),
+  subtotal: numeric("subtotal", { precision: 24, scale: 2 }).notNull(), discountTotal: numeric("discount_total", { precision: 24, scale: 2 }).notNull(), total: numeric("total", { precision: 24, scale: 2 }).notNull(),
+  version: integer("version").notNull().default(1), createdBy: text("created_by").notNull().references(() => employees.id),
+  approvedBy: text("approved_by").references(() => employees.id), approvedAt: timestamp("approved_at", { withTimezone: true }),
+  cancelledBy: text("cancelled_by").references(() => employees.id), cancelledAt: timestamp("cancelled_at", { withTimezone: true }), cancellationReason: text("cancellation_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("invoice_customer_date_idx").on(t.customerId, t.date), index("invoice_order_idx").on(t.orderId), index("invoice_owner_date_idx").on(t.ownerId, t.date), index("invoice_date_idx").on(t.date, t.id), check("invoice_status", sql`${t.status} in ('Draft','Approved','Cancelled')`), check("invoice_totals", sql`${t.subtotal} >= 0 and ${t.discountTotal} >= 0 and ${t.total} = ${t.subtotal} - ${t.discountTotal} and ${t.total} >= 0`)]).enableRLS();
+
+export const invoiceDeliveries = erp.table("invoice_deliveries", {
+  invoiceId: text("invoice_id").notNull().references(() => salesInvoices.id), deliveryId: text("delivery_id").notNull().references(() => deliveries.id),
+  active: boolean("active").notNull().default(true)
+}, (t) => [uniqueIndex("invoice_delivery_pair_unique").on(t.invoiceId, t.deliveryId), uniqueIndex("delivery_active_invoice_unique").on(t.deliveryId).where(sql`${t.active}`)]).enableRLS();
+
+export const invoiceLines = erp.table("invoice_lines", {
+  ...salesLineColumns(), invoiceId: text("invoice_id").notNull().references(() => salesInvoices.id), deliveryLineId: text("delivery_line_id").notNull().references(() => deliveryLines.id)
+}, (t) => [index("invoice_lines_parent_idx").on(t.invoiceId), uniqueIndex("invoice_delivery_line_unique").on(t.invoiceId, t.deliveryLineId), check("invoice_line_values", sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discount} >= 0 and ${t.lineTotal} >= 0`)]).enableRLS();
+
+export const cashAccounts = erp.table("cash_accounts", {
+  id: text("id").primaryKey(), name: text("name").notNull(), type: text("type").$type<"Cash" | "Bank" | "Mobile Banking">().notNull(), accountNumber: text("account_number").notNull().default(""),
+  active: boolean("active").notNull().default(true), version: integer("version").notNull().default(1), createdBy: text("created_by").notNull().references(() => employees.id)
+}, (t) => [uniqueIndex("cash_account_name_unique").on(sql`lower(${t.name})`), check("cash_account_type", sql`${t.type} in ('Cash','Bank','Mobile Banking')`)]).enableRLS();
+
+export const collections = erp.table("collections", {
+  id: text("id").primaryKey(), receiptNumber: text("receipt_number").notNull().unique(), customerId: text("customer_id").notNull().references(() => customers.id), customerName: text("customer_name").notNull(),
+  orderId: text("order_id").references(() => salesOrders.id), invoiceId: text("invoice_id").references(() => salesInvoices.id), ownerId: text("owner_id").notNull().references(() => employees.id),
+  date: date("date").notNull(), amount: numeric("amount", { precision: 24, scale: 2 }).notNull(), paymentMode: text("payment_mode").$type<"Cash" | "bKash" | "Bank Transfer" | "Cheque">().notNull(),
+  accountId: text("account_id").notNull().references(() => cashAccounts.id), referenceNumber: text("reference_number").notNull().default(""), remarks: text("remarks").notNull().default(""),
+  status: text("status").$type<"Posted" | "Reversed">().notNull().default("Posted"), postedBy: text("posted_by").notNull().references(() => employees.id), postedAt: timestamp("posted_at", { withTimezone: true }).notNull().defaultNow(),
+  reversedBy: text("reversed_by").references(() => employees.id), reversedAt: timestamp("reversed_at", { withTimezone: true }), reversalReason: text("reversal_reason")
+}, (t) => [index("collection_customer_date_idx").on(t.customerId, t.date), check("collection_amount", sql`${t.amount} > 0`), check("collection_status", sql`${t.status} in ('Posted','Reversed')`), check("collection_payment_mode", sql`${t.paymentMode} in ('Cash','bKash','Bank Transfer','Cheque')`)]).enableRLS();
+
+export const collectionAllocations = erp.table("collection_allocations", {
+  id: text("id").primaryKey(), collectionId: text("collection_id").notNull().references(() => collections.id), receivableEntryId: text("receivable_entry_id").notNull().references(() => customerEntries.id),
+  amount: numeric("amount", { precision: 24, scale: 2 }).notNull()
+}, (t) => [uniqueIndex("collection_entry_unique").on(t.collectionId, t.receivableEntryId), index("allocation_receivable_idx").on(t.receivableEntryId), check("allocation_positive", sql`${t.amount} > 0`)]).enableRLS();
+
+export const accountTransactions = erp.table("account_transactions", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull().references(() => cashAccounts.id), accountName: text("account_name").notNull(), date: date("date").notNull(),
+  direction: text("direction").$type<"In" | "Out">().notNull(), amount: numeric("amount", { precision: 24, scale: 2 }).notNull(),
+  sourceType: text("source_type").$type<"Collection" | "Expense" | "Supplier Payment" | "Import Cost" | "Opening Balance" | "Advance" | "Company Loan" | "Manual Authorized">().notNull(), sourceId: text("source_id").notNull(),
+  collectionId: text("collection_id").references(() => collections.id), reversalOfId: text("reversal_of_id").unique().references((): AnyPgColumn => accountTransactions.id),
+  description: text("description").notNull(), partyId: text("party_id"), partyName: text("party_name"), reference: text("reference"), remarks: text("remarks"), voucherNumber: text("voucher_number").notNull().unique(),
+  createdByUserId: text("created_by_user_id").notNull().references(() => employees.id), createdByName: text("created_by_name").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("account_transaction_date_idx").on(t.accountId, t.date, t.createdAt), index("account_journal_date_idx").on(t.date, t.id), uniqueIndex("account_source_unique").on(t.sourceType, t.sourceId), check("account_transaction_values", sql`${t.amount} > 0 and ${t.direction} in ('In','Out')`)]).enableRLS();
+
+export const expenseCategories = erp.table("expense_categories", {
+  id: text("id").primaryKey(), name: text("name").notNull(), active: boolean("active").notNull().default(true), version: integer("version").notNull().default(1)
+}, (t) => [uniqueIndex("expense_category_name_unique").on(sql`lower(btrim(${t.name}))`)]).enableRLS();
+
+function reversalColumns() {
+  return { status: text("status").$type<"Posted" | "Reversed">().notNull().default("Posted"), reversedBy: text("reversed_by").references(() => employees.id), reversedAt: timestamp("reversed_at", { withTimezone: true }), reversalDate: date("reversal_date"), reversalReason: text("reversal_reason") };
+}
+export type ExpenseAttribution = Pick<Expense, "expenseForId" | "expenseForName" | "employee" | "employeeCode" | "designation" | "department">;
+export const expenses = erp.table("expenses", {
+  id: text("id").primaryKey(), date: date("date").notNull(), categoryId: text("category_id").notNull().references(() => expenseCategories.id), categoryName: text("category_name").notNull(),
+  subtype: text("subtype").$type<"General" | "TA/DA">().notNull(), amount: numeric("amount", { precision: 24, scale: 2 }).notNull(),
+  paidFromAccountId: text("paid_from_account_id").notNull().references(() => cashAccounts.id), transactionId: text("transaction_id").notNull().unique().references(() => accountTransactions.id),
+  expenseFor: text("expense_for").$type<Expense["expenseFor"]>().notNull(), employeeId: text("employee_id").references(() => employees.id), attribution: jsonb("attribution").$type<ExpenseAttribution>().notNull(),
+  taAmount: numeric("ta_amount", { precision: 24, scale: 2 }), daAmount: numeric("da_amount", { precision: 24, scale: 2 }), remarks: text("remarks").notNull(),
+  enteredByUserId: text("entered_by_user_id").notNull().references(() => employees.id), enteredByName: text("entered_by_name").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), ...reversalColumns()
+}, (t) => [index("expense_date_idx").on(t.date, t.id), check("expense_amount", sql`${t.amount} > 0 and ((${t.subtype} = 'General' and ${t.taAmount} is null and ${t.daAmount} is null) or (${t.subtype} = 'TA/DA' and ${t.expenseFor} = 'Employee' and ${t.taAmount} is not null and ${t.daAmount} is not null and ${t.taAmount} >= 0 and ${t.daAmount} >= 0 and ${t.amount} = ${t.taAmount} + ${t.daAmount}))`), check("expense_employee", sql`(${t.expenseFor} = 'Employee' and ${t.employeeId} is not null) or (${t.expenseFor} in ('Office','Warehouse','Company / General') and ${t.employeeId} is null)`), check("expense_status", sql`${t.status} in ('Posted','Reversed')`)]).enableRLS();
+
+export const supplierSettlements = erp.table("supplier_settlements", {
+  id: text("id").primaryKey(), date: date("date").notNull(), supplierId: text("supplier_id").notNull().references(() => suppliers.id), supplierName: text("supplier_name").notNull(),
+  importId: text("import_id").references(() => importCases.id), reference: text("reference").notNull(), entryType: text("entry_type").$type<"Obligation" | "Payment">().notNull(), amount: numeric("amount", { precision: 24, scale: 2 }).notNull(),
+  accountId: text("account_id").references(() => cashAccounts.id), accountName: text("account_name"), transactionId: text("transaction_id").unique().references(() => accountTransactions.id),
+  paymentReference: text("payment_reference").notNull().default(""), notes: text("notes").notNull().default(""),
+  createdByUserId: text("created_by_user_id").notNull().references(() => employees.id), createdByName: text("created_by_name").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), ...reversalColumns()
+}, (t) => [index("supplier_settlement_date_idx").on(t.supplierId, t.date, t.id), index("supplier_journal_date_idx").on(t.date, t.id), check("supplier_settlement_values", sql`${t.amount} > 0 and ((${t.entryType} = 'Payment' and ${t.accountId} is not null and ${t.transactionId} is not null) or (${t.entryType} = 'Obligation' and ${t.accountId} is null and ${t.transactionId} is null))`), check("supplier_settlement_status", sql`${t.status} in ('Posted','Reversed')`)]).enableRLS();
+
+export const financialPositionEntries = erp.table("financial_position_entries", {
+  id: text("id").primaryKey(), asOfDate: date("as_of_date").notNull(), category: text("category").$type<FinancialPositionEntry["category"]>().notNull(), label: text("label").notNull(), amount: numeric("amount", { precision: 24, scale: 2 }).notNull(), reference: text("reference").notNull(), notes: text("notes").notNull().default(""),
+  createdByUserId: text("created_by_user_id").notNull().references(() => employees.id), createdByName: text("created_by_name").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), ...reversalColumns()
+}, (t) => [index("position_as_of_idx").on(t.asOfDate, t.id), check("position_amount", sql`${t.amount} > 0`), check("position_category", sql`${t.category} in ('Owner Capital','Fixed Assets','Accumulated Depreciation','Statutory Payables','Other Receivables','Other Payables','Opening Retained Earnings')`), check("position_status", sql`${t.status} in ('Posted','Reversed')`)]).enableRLS();
+
+export const marketingLeads = erp.table("marketing_leads", {
+  id: text("id").primaryKey(), reference: text("reference").notNull().unique(), assignedTo: text("assigned_to").notNull().references(() => employees.id),
+  organization: text("organization").notNull(), organizationType: text("organization_type").notNull(), contact: text("contact").notNull(), phone: text("phone").notNull(), email: text("email").notNull().default(""), address: text("address").notNull().default(""), source: text("source").notNull(),
+  stage: text("stage").notNull().default("NEW"), notes: text("notes").notNull().default(""), lostReason: text("lost_reason").notNull().default(""), nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),
+  customerId: text("customer_id").unique().references(() => customers.id), qualifiedAt: timestamp("qualified_at", { withTimezone: true }), convertedAt: timestamp("converted_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1), createdBy: text("created_by").notNull().references(() => employees.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("lead_owner_created_idx").on(t.assignedTo, t.createdAt), check("lead_stage", sql`${t.stage} in ('NEW','CONTACTED','INTERESTED','PRESENTATION','SAMPLE','NEGOTIATION','LOST')`), check("lead_conversion", sql`(${t.customerId} is null) = (${t.convertedAt} is null)`), check("lead_lost_reason", sql`${t.stage} <> 'LOST' or length(btrim(${t.lostReason})) >= 5`)]).enableRLS();
+
+export const leadProducts = erp.table("lead_products", { leadId: text("lead_id").notNull().references(() => marketingLeads.id), productId: text("product_id").notNull().references(() => products.id) }, (t) => [uniqueIndex("lead_product_unique").on(t.leadId,t.productId)]).enableRLS();
+
+export type EmployeeActivitySnapshot = { name: string; employeeCode: string; title: string; department: string; territory: string };
+export const marketingActivities = erp.table("marketing_activities", {
+  id: text("id").primaryKey(), reference: text("reference").notNull().unique(), employeeId: text("employee_id").notNull().references(() => employees.id), snapshot: jsonb("snapshot").$type<EmployeeActivitySnapshot>().notNull(),
+  type: text("type").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  status: text("status").$type<"Draft"|"Submitted"|"Voided">().notNull().default("Draft"), leadId: text("lead_id").references(() => marketingLeads.id), customerId: text("customer_id").references(() => customers.id), subject: text("subject").notNull().default(""),
+  purpose: text("purpose").notNull(), remarks: text("remarks").notNull().default(""), nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),
+  voidedAt: timestamp("voided_at", { withTimezone: true }), voidedBy: text("voided_by").references(() => employees.id), voidReason: text("void_reason"), version: integer("version").notNull().default(1), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("activity_employee_date_idx").on(t.employeeId,t.occurredAt,t.id), index("activity_date_idx").on(t.occurredAt,t.id), check("activity_status", sql`${t.status} in ('Draft','Submitted','Voided')`), check("activity_subject", sql`not (${t.customerId} is not null and ${t.leadId} is not null)`), check("activity_submission", sql`${t.status} <> 'Submitted' or ${t.submittedAt} is not null`)]).enableRLS();
+
+export const activityProducts = erp.table("activity_products", { activityId: text("activity_id").notNull().references(() => marketingActivities.id), productId: text("product_id").notNull().references(() => products.id) }, (t) => [uniqueIndex("activity_product_unique").on(t.activityId,t.productId)]).enableRLS();
+
+export const marketingFollowUps = erp.table("marketing_follow_ups", {
+  id: text("id").primaryKey(), assignedTo: text("assigned_to").notNull().references(() => employees.id), leadId: text("lead_id").references(() => marketingLeads.id), customerId: text("customer_id").references(() => customers.id), subject: text("subject").notNull(),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(), purpose: text("purpose").notNull(), status: text("status").$type<"Pending"|"Completed"|"Cancelled">().notNull().default("Pending"), outcome: text("outcome").notNull().default(""),
+  completedAt: timestamp("completed_at", { withTimezone: true }), successorId: text("successor_id").unique().references((): AnyPgColumn => marketingFollowUps.id), version: integer("version").notNull().default(1), createdBy: text("created_by").notNull().references(() => employees.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [index("follow_up_owner_due_idx").on(t.assignedTo,t.dueAt,t.id), check("follow_up_status", sql`${t.status} in ('Pending','Completed','Cancelled')`), check("follow_up_subject", sql`(${t.customerId} is not null)::integer + (${t.leadId} is not null)::integer = 1`), check("follow_up_completion", sql`${t.status} <> 'Completed' or (${t.completedAt} is not null and length(btrim(${t.outcome})) >= 3)`)]).enableRLS();
+
+export const marketingPlans = erp.table("marketing_plans", {
+  id: text("id").primaryKey(), employeeId: text("employee_id").notNull().references(() => employees.id), kind: text("kind").$type<"Daily"|"Monthly">().notNull(), period: date("period").notNull(),
+  status: text("status").$type<"Draft"|"Submitted"|"Approved"|"Rejected">().notNull().default("Draft"), data: jsonb("data").$type<PlanData>().notNull(), reviewedBy: text("reviewed_by").references(() => employees.id), reviewReason: text("review_reason").notNull().default(""), version: integer("version").notNull().default(1), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [uniqueIndex("plan_owner_period_unique").on(t.employeeId,t.kind,t.period), check("plan_kind", sql`${t.kind} in ('Daily','Monthly')`), check("plan_status", sql`${t.status} in ('Draft','Submitted','Approved','Rejected')`), check("plan_month", sql`${t.kind} <> 'Monthly' or extract(day from ${t.period}) = 1`)]).enableRLS();
+
+export const marketingTargets = erp.table("marketing_targets", {
+  id: text("id").primaryKey(), employeeId: text("employee_id").notNull().references(() => employees.id), month: date("month").notNull(), sales: numeric("sales", { precision:24,scale:2 }).notNull(), collections: numeric("collections", { precision:24,scale:2 }).notNull(), customers: integer("customers").notNull(), activities: integer("activities").notNull(), visits: integer("visits").notNull(), version: integer("version").notNull().default(1), updatedBy: text("updated_by").notNull().references(() => employees.id), updatedAt: timestamp("updated_at", { withTimezone:true }).notNull().defaultNow()
+}, (t) => [uniqueIndex("target_owner_month_unique").on(t.employeeId,t.month), check("target_values", sql`${t.sales} >= 0 and ${t.collections} >= 0 and ${t.customers} >= 0 and ${t.activities} >= 0 and ${t.visits} >= 0 and extract(day from ${t.month}) = 1`)]).enableRLS();
+
+export const marketingScoreRules = erp.table("marketing_score_rules", {
+  event: text("event").primaryKey(), label: text("label").notNull(), points: integer("points").notNull(), active: boolean("active").notNull().default(true), version: integer("version").notNull().default(1), updatedBy: text("updated_by").references(() => employees.id), updatedAt: timestamp("updated_at", {withTimezone:true}).notNull().defaultNow()
+}, (t) => [check("score_points", sql`${t.points} between 0 and 1000`)]).enableRLS();

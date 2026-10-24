@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Ruler, Stamp } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Decimal } from "decimal.js";
+import { foundationMode } from "../../lib/runtime";
 import Button from "../../components/ui/Button";
 import { useAuthStore, useEffectiveRole } from "../../lib/auth/session";
 import type { Role, User } from "../../types";
@@ -16,6 +18,7 @@ import type {
   ImportCase,
   MarketingReportData,
   PrintIdentity,
+  PrintRecordReferences,
   Quotation,
   ReportData,
   SalesOrder,
@@ -23,7 +26,7 @@ import type {
   SalespersonPerformanceData,
   SalespersonPerformanceDetail
 } from "../erp.types";
-import { formatCurrency, formatNumber } from "../../utils/format";
+import { formatMoney as formatCurrency, formatQuantity as formatNumber } from "../../utils/precise";
 import {
   employeeReportTitle,
   filterEmployeeReportActivities,
@@ -31,6 +34,9 @@ import {
   type EmployeeReportKind
 } from "../employees/employeeReports";
 import { LetterheadSheet, letterheadModeOptions, printModeFromConfiguration, type LetterheadMode } from "./LetterheadPrint";
+import TransactionPrintSheets from "./TransactionPrintSheets";
+import PersistentReportContent from "./PersistentReportContent";
+import type { PersistentReport, PersistentReportQuery } from "../reports/persistentContracts";
 import {
   auditEventsReportTable,
   buildEmployeeLetterheadPages,
@@ -40,18 +46,20 @@ import {
 } from "./ReportPrintContent";
 import { filterReportRows, readReportFilters, reportFilterLabels } from "../reports/reportFilters";
 
-type PrintPayload =
+type PrintPayload = (
+  | { kind: "persistent-report"; report: PersistentReport }
   | { kind: "quotation"; record: Quotation }
   | { kind: "order"; record: SalesOrder }
-  | { kind: "challan"; record: Delivery }
+  | { kind: "challan"; record: Delivery; financialVisible?: boolean }
   | { kind: "receipt"; record: Collection }
   | { kind: "invoice"; record: SalesInvoice }
-  | { kind: "voucher"; record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER" }
+  | { kind: "voucher"; record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER"; reversalReference?: string }
   | { kind: "import-cost"; record: ImportCase }
   | { kind: "employee-performance"; record: SalespersonPerformanceDetail }
   | { kind: "employee-activity"; snapshot: EmployeeMarketingSnapshot }
   | { kind: "marketing-analysis"; report: MarketingReportData }
-  | { kind: "operational-report"; report: ReportData; performance?: SalespersonPerformanceData; audit: AuditEvent[] };
+  | { kind: "operational-report"; report: ReportData; performance?: SalespersonPerformanceData; audit: AuditEvent[] }
+) & { references?: PrintRecordReferences };
 
 type PrintPresentation = {
   title: string;
@@ -70,11 +78,13 @@ export default function PrintPage() {
   const role = useEffectiveRole();
   const [mode, setMode] = useState<LetterheadMode | "">("");
   const [identityId, setIdentityId] = useState("");
+  const [printReady, setPrintReady] = useState(false);
   const queryString = searchParams.toString();
   const configQuery = useQuery({ queryKey: ["print", "configuration"], queryFn: printService.configuration });
   const recordQuery = useQuery({
     queryKey: ["print", documentType, id, queryString, user?.id],
     queryFn: async (): Promise<PrintPayload> => {
+      if (foundationMode) return documentType === "report" ? { kind: "persistent-report", report: await reportService.print(id, Object.fromEntries(searchParams) as PersistentReportQuery) } : printService.record(documentType, id);
       if (documentType === "quotation") return { kind: "quotation", record: find(await salesService.quotations(), id) };
       if (documentType === "order") return { kind: "order", record: find(await salesService.orders(), id) };
       if (documentType === "challan") return { kind: "challan", record: find(await salesService.deliveries(), id) };
@@ -122,13 +132,13 @@ export default function PrintPage() {
     }
   });
 
-  if (configQuery.isLoading || recordQuery.isLoading) return <LoadingBlock label="Preparing calibrated A4 print view" />;
-  if (configQuery.isError || recordQuery.isError || !recordQuery.data || !configQuery.data || !user) return <ErrorBlock error={configQuery.error ?? recordQuery.error ?? new Error("Your session is unavailable. Sign in again before printing.")} />;
   const config = configQuery.data;
   const payload = recordQuery.data;
-  const identity = config.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config.identities[0];
+  const identity = config?.identities.find((entry) => entry.id === (identityId || config.defaultIdentityId)) ?? config?.identities[0];
+  const presentation = useMemo(() => payload && user && identity ? buildPresentation(payload, searchParams, user, role, identity) : null, [payload, searchParams, user, role, identity]);
+  if (configQuery.isLoading || recordQuery.isLoading) return <LoadingBlock label="Preparing calibrated A4 print view" />;
+  if (configQuery.isError || recordQuery.isError || !payload || !config || !identity || !user || !presentation) return <ErrorBlock error={configQuery.error ?? recordQuery.error ?? new Error("Your session is unavailable. Sign in again before printing.")} />;
   const effectiveMode = printModeFromConfiguration(config, mode);
-  const presentation = buildPresentation(payload, searchParams, user, role, identity);
 
   return (
     <>
@@ -138,11 +148,11 @@ export default function PrintPage() {
           <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><Stamp className="h-4 w-4" /><select aria-label="Print identity" className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm" value={identity.id} onChange={(event) => setIdentityId(event.target.value)}>{config.identities.map((entry) => <option value={entry.id} key={entry.id}>{entry.displayName}</option>)}</select></label>
           <Segmented value={effectiveMode} onChange={setMode} ariaLabel="Letterhead artwork" options={letterheadModeOptions} />
         </div>
-        <Button variant="primary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button>
+        <Button variant="primary" disabled={foundationMode && !printReady} icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print / Save PDF</Button>
       </div>
 
       <div className="print-preview grid gap-4 overflow-x-auto rounded-md bg-slate-200 p-3 sm:p-6">
-        {(presentation.pages ?? [presentation.content]).map((page, index, pages) => <LetterheadSheet
+        {foundationMode ? <TransactionPrintSheets identity={identity} mode={effectiveMode} title={presentation.title} subtitle={presentation.subtitle} reference={presentation.reference} date={presentation.date} reportLayout={payload.kind === "persistent-report"} onReady={setPrintReady}>{presentation.content}</TransactionPrintSheets> : (presentation.pages ?? [presentation.content]).map((page, index, pages) => <LetterheadSheet
           identity={identity}
           mode={effectiveMode}
           title={presentation.title}
@@ -175,12 +185,13 @@ function requiredPeriod(params: URLSearchParams) {
 }
 
 function buildPresentation(payload: PrintPayload, params: URLSearchParams, user: User, role: Role, identity: PrintIdentity): PrintPresentation {
-  if (payload.kind === "quotation") return { title: "QUOTATION", reference: payload.record.quotationNumber, date: payload.record.date, content: <QuotationDocument record={payload.record} /> };
-  if (payload.kind === "order") return { title: "ORDER RECEIVING SHEET", reference: payload.record.orderNumber, date: payload.record.date, content: <OrderReceivingSheet record={payload.record} identity={identity} /> };
-  if (payload.kind === "challan") return { title: "DELIVERY CHALLAN", reference: payload.record.challanNumber, date: payload.record.date, content: <ChallanDocument record={payload.record} /> };
-  if (payload.kind === "receipt") return { title: "MONEY RECEIPT", reference: payload.record.receiptNumber, date: payload.record.date, content: <ReceiptDocument record={payload.record} /> };
-  if (payload.kind === "invoice") return { title: "SALES INVOICE", reference: payload.record.invoiceNumber, date: payload.record.date, content: <InvoiceDocument record={payload.record} /> };
-  if (payload.kind === "voucher") return { title: payload.voucherType, reference: payload.record.voucherNumber ?? payload.record.id, date: payload.record.date, content: <VoucherDocument record={payload.record} voucherType={payload.voucherType} /> };
+  if (payload.kind === "persistent-report") return { title: payload.report.title.toUpperCase(), subtitle: `${role} | ${payload.report.grouping}`, reference: `RPT-${payload.report.to.replaceAll("-", "")}`, date: `${payload.report.from} to ${payload.report.to}`, content: <PersistentReportContent report={payload.report} /> };
+  if (payload.kind === "quotation") return { title: "QUOTATION", subtitle: payload.record.status, reference: payload.record.quotationNumber, date: payload.record.date, content: <QuotationDocument record={payload.record} /> };
+  if (payload.kind === "order") return { title: "ORDER RECEIVING SHEET", subtitle: payload.record.status, reference: payload.record.orderNumber, date: payload.record.date, content: <OrderReceivingSheet record={payload.record} identity={identity} /> };
+  if (payload.kind === "challan") return { title: "DELIVERY CHALLAN", reference: payload.record.challanNumber, date: payload.record.date, content: <ChallanDocument record={payload.record} financialVisible={payload.financialVisible !== false} /> };
+  if (payload.kind === "receipt") return { title: "MONEY RECEIPT", subtitle: payload.record.status, reference: payload.record.receiptNumber, date: payload.record.date, content: <ReceiptDocument record={payload.record} references={payload.references} /> };
+  if (payload.kind === "invoice") return { title: "SALES INVOICE", subtitle: payload.record.status, reference: payload.record.invoiceNumber, date: payload.record.date, content: <InvoiceDocument record={payload.record} references={payload.references} /> };
+  if (payload.kind === "voucher") return { title: payload.voucherType, subtitle: payload.reversalReference ? `REVERSED by ${payload.reversalReference}` : payload.record.reversalOfId ? "Reversal entry" : undefined, reference: payload.record.voucherNumber ?? payload.record.id, date: payload.record.date, content: <VoucherDocument record={payload.record} voucherType={payload.voucherType} /> };
   if (payload.kind === "import-cost") return { title: "IMPORT LANDED COST", reference: payload.record.primaryReference, date: payload.record.snapshot?.finalizedAt.slice(0, 10) ?? "", content: <ImportCostDocument record={payload.record} /> };
   if (payload.kind === "employee-performance") return { title: "SALES EMPLOYEE PERFORMANCE REPORT", reference: payload.record.employee.name, date: "Selected period", content: <EmployeePerformanceDocument record={payload.record} from={params.get("from") ?? ""} to={params.get("to") ?? ""} /> };
 
@@ -281,8 +292,31 @@ function CustomerBlock({ name, address, phone, contact, terms }: { name: string;
 
 type PrintableLine = { id: string; productCode: string; productName: string; quantity: string; unitPrice: string; discount: string; lineTotal: string; batchNumber?: string };
 
-function LinesTable({ lines, showBatch = false, simple = false }: { lines: PrintableLine[]; showBatch?: boolean; simple?: boolean }) {
-  return <table className="w-full table-fixed border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="w-7 border border-blue-950 px-2 py-2 text-left">#</th><th className="border border-blue-950 px-2 py-2 text-left">Particulars</th>{showBatch ? <th className="w-24 border border-blue-950 px-2 py-2 text-left">Batch</th> : null}<th className="w-20 border border-blue-950 px-2 py-2 text-right">Qty in Pcs</th><th className="w-24 border border-blue-950 px-2 py-2 text-right">Unit Price</th>{!simple ? <th className="w-20 border border-blue-950 px-2 py-2 text-right">Discount</th> : null}<th className="w-24 border border-blue-950 px-2 py-2 text-right">Total Value</th></tr></thead><tbody>{lines.map((line, index) => <tr key={`${line.id}-${line.batchNumber ?? "line"}`}><td className="border border-slate-400 px-2 py-2">{index + 1}</td><td className="border border-slate-400 px-2 py-2"><strong>{line.productName}</strong><span className="ml-2 text-slate-500">{line.productCode}</span></td>{showBatch ? <td className="border border-slate-400 px-2 py-2">{line.batchNumber}</td> : null}<td className="border border-slate-400 px-2 py-2 text-right">{formatNumber(line.quantity)}</td><td className="border border-slate-400 px-2 py-2 text-right">{formatCurrency(line.unitPrice)}</td>{!simple ? <td className="border border-slate-400 px-2 py-2 text-right">{formatCurrency(line.discount)}</td> : null}<td className="border border-slate-400 px-2 py-2 text-right font-bold">{formatCurrency(line.lineTotal)}</td></tr>)}</tbody></table>;
+function LinesTable({ lines, showBatch = false, simple = false, showPrices = true }: { lines: PrintableLine[]; showBatch?: boolean; simple?: boolean; showPrices?: boolean }) {
+  return <table className="w-full table-fixed border-collapse text-[9px]">
+    <thead><tr className="bg-blue-950 text-white">
+      <th className="w-[5%] border border-blue-950 px-1 py-2 text-left">#</th>
+      <th className="border border-blue-950 px-2 py-2 text-left">Particulars</th>
+      {showBatch ? <th className="w-[17%] border border-blue-950 px-2 py-2 text-left">Batch</th> : null}
+      <th className="w-[10%] border border-blue-950 px-1 py-2 text-right">Qty</th>
+      {showPrices ? <>
+        <th className="w-[16%] border border-blue-950 px-1 py-2 text-right">Unit Price</th>
+        {!simple ? <th className="w-[13%] border border-blue-950 px-1 py-2 text-right">Discount</th> : null}
+        <th className="w-[18%] border border-blue-950 px-1 py-2 text-right">Total Value</th>
+      </> : null}
+    </tr></thead>
+    <tbody>{lines.map((line, index) => <tr key={`${line.id}-${line.batchNumber ?? "line"}`}>
+      <td className="border border-slate-400 px-1 py-2">{index + 1}</td>
+      <td className="break-words border border-slate-400 px-2 py-2"><strong>{line.productName}</strong><span className="block text-slate-500">{line.productCode}</span></td>
+      {showBatch ? <td className="break-words border border-slate-400 px-2 py-2">{line.batchNumber}</td> : null}
+      <td className="border border-slate-400 px-1 py-2 text-right">{formatNumber(line.quantity)}</td>
+      {showPrices ? <>
+        <td className="break-words border border-slate-400 px-1 py-2 text-right">{formatCurrency(line.unitPrice)}</td>
+        {!simple ? <td className="break-words border border-slate-400 px-1 py-2 text-right">{formatCurrency(line.discount)}</td> : null}
+        <td className="break-words border border-slate-400 px-1 py-2 text-right font-bold">{formatCurrency(line.lineTotal)}</td>
+      </> : null}
+    </tr>)}</tbody>
+  </table>;
 }
 
 function Totals({ subtotal, discount, total }: { subtotal: string; discount: string; total: string }) {
@@ -294,21 +328,22 @@ function QuotationDocument({ record }: { record: Quotation }) {
 }
 
 function OrderReceivingSheet({ record, identity }: { record: SalesOrder; identity: PrintIdentity }) {
-  const discount = record.lines.reduce((sum, line) => sum + Number(line.discount), 0).toFixed(2);
-  const subtotal = record.lines.reduce((sum, line) => sum + Number(line.quantity) * Number(line.unitPrice), 0).toFixed(2);
-  return <div className="text-[10px]"><div className="mb-3 grid grid-cols-2 gap-4"><div><b className="text-blue-950">LED TRACKERS</b><strong className="block text-[12px]">MIPRO Healthcare Corporation</strong></div><div className="text-right"><b>Order No:</b> {record.orderNumber}<br /><b>Date:</b> {record.date}</div></div><LinesTable lines={record.lines} simple /><Totals subtotal={subtotal} discount={discount} total={record.total} /><section className="mt-4 border border-slate-500"><div className="min-h-14 border-b border-slate-400 p-2"><b>Customer&apos;s Address & Phone Number:</b><p className="mt-1">{record.customerName} | {record.customerAddressSnapshot ?? "-"} | {record.customerPhoneSnapshot ?? "-"}</p></div><div className="min-h-20 p-2"><b>Payment Conditions:</b><p className="mt-1 whitespace-pre-wrap">{record.paymentConditions}</p><p className="mt-3">Payment made to: <b>{identity.displayName}</b> | Ref: {record.paymentReference ?? "........................"} | Date: {record.paymentDate ?? "................"}</p></div><div className="grid grid-cols-2 border-t border-slate-400"><div className="p-2"><b>Demand Received by:</b><p>Name: {record.orderReceivedByName ?? ""}</p><p>Designation: {record.orderReceivedByDesignation ?? ""}</p></div><div className="border-l border-slate-400 p-2 text-right"><b>Order Given by: (Seal & Sign)</b><p className="mt-3">{record.orderGivenBy ?? ""}</p></div></div></section><section className="mt-4 border border-slate-500"><div className="bg-slate-800 py-1.5 text-center font-bold text-white">Office Use Only</div><div className="grid min-h-20 grid-cols-2 gap-2 p-2"><div><p>Order No.: {record.orderNumber}</p><p className="mt-2">Payment Confirmation: {record.paymentConfirmation ?? "Pending"}</p><p className="mt-2">Delivery Date: {record.requestedDeliveryDate ?? "Pending"}</p></div><div className="text-right">Date: {record.date}</div></div><div className="grid grid-cols-3 border-t border-slate-400 p-2 text-center"><span>Head of Sales<br />{record.headOfSalesSignoff ?? ""}</span><span>COE<br />{record.coeSignoff ?? ""}</span><span>Managing Director<br />{record.mdSignoff ?? ""}</span></div></section><p className="mt-3 text-[9px] text-slate-600"><b>Delivery instruction:</b> {record.deliveryInstruction}</p></div>;
+  const Money = Decimal.clone({ precision: 48 });
+  const discount = record.lines.reduce((sum, line) => sum.plus(line.discount), new Money(0)).toFixed(2);
+  const subtotal = record.lines.reduce((sum, line) => sum.plus(line.lineTotal).plus(line.discount), new Money(0)).toFixed(2);
+  return <div className="text-[10px]"><div className="mb-3 grid grid-cols-2 gap-4"><div><strong className="block text-[12px]">{identity.companyName}</strong></div><div className="text-right"><b>Order No:</b> {record.orderNumber}<br /><b>Date:</b> {record.date}</div></div><LinesTable lines={record.lines} simple /><Totals subtotal={subtotal} discount={discount} total={record.total} /><section className="mt-4 border border-slate-500"><div className="min-h-14 border-b border-slate-400 p-2"><b>Customer&apos;s Address & Phone Number:</b><p className="mt-1">{record.customerName} | {record.customerAddressSnapshot ?? "-"} | {record.customerPhoneSnapshot ?? "-"}</p></div><div className="min-h-20 p-2"><b>Payment Conditions:</b><p className="mt-1 whitespace-pre-wrap">{record.paymentConditions}</p><p className="mt-3">Payment made to: <b>{identity.displayName}</b> | Ref: {record.paymentReference ?? "........................"} | Date: {record.paymentDate ?? "................"}</p></div><div className="grid grid-cols-2 border-t border-slate-400"><div className="p-2"><b>Demand Received by:</b><p>Name: {record.orderReceivedByName ?? ""}</p><p>Designation: {record.orderReceivedByDesignation ?? ""}</p></div><div className="border-l border-slate-400 p-2 text-right"><b>Order Given by: (Seal & Sign)</b><p className="mt-3">{record.orderGivenBy ?? ""}</p></div></div></section><section className="mt-4 border border-slate-500"><div className="bg-slate-800 py-1.5 text-center font-bold text-white">Office Use Only</div><div className="grid min-h-20 grid-cols-2 gap-2 p-2"><div><p>Order No.: {record.orderNumber}</p><p className="mt-2">Payment Confirmation: {record.paymentConfirmation ?? "Pending"}</p><p className="mt-2">Delivery Date: {record.requestedDeliveryDate ?? "Pending"}</p></div><div className="text-right">Date: {record.date}</div></div><div className="grid grid-cols-3 border-t border-slate-400 p-2 text-center"><span>Head of Sales<br />{record.headOfSalesSignoff ?? ""}</span><span>COE<br />{record.coeSignoff ?? ""}</span><span>Managing Director<br />{record.mdSignoff ?? ""}</span></div></section><p className="mt-3 text-[9px] text-slate-600"><b>Delivery instruction:</b> {record.deliveryInstruction}</p></div>;
 }
 
-function ChallanDocument({ record }: { record: Delivery }) {
-  return <><CustomerBlock name={record.customerName} /><LinesTable lines={record.lines} showBatch simple /><div className="mt-5 grid gap-1 text-[10px] text-slate-700"><p><strong>Receiver:</strong> {record.receiverName ?? "-"}</p><p><strong>Remarks:</strong> {record.remarks || "-"}</p></div><SignatureRow labels={["Prepared By", "Receiver Seal & Signature", "Authorized By"]} /></>;
+function ChallanDocument({ record, financialVisible }: { record: Delivery; financialVisible: boolean }) {
+  return <><CustomerBlock name={record.customerName} /><LinesTable lines={record.lines} showBatch simple showPrices={financialVisible} /><div className="mt-5 grid gap-1 text-[10px] text-slate-700"><p><strong>Receiver:</strong> {record.receiverName ?? "-"}</p><p><strong>Remarks:</strong> {record.remarks || "-"}</p></div><SignatureRow labels={["Prepared By", "Receiver Seal & Signature", "Authorized By"]} /></>;
 }
 
-function ReceiptDocument({ record }: { record: Collection }) {
-  return <><CustomerBlock name={record.customerName} /><div className="border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-xs text-slate-600">via {record.paymentMode}</span></div><dl className="mt-5 grid gap-3 text-[10px] sm:grid-cols-2"><div><dt className="text-slate-500">Invoice / Order Reference</dt><dd className="font-semibold">{record.invoiceId ?? record.orderId ?? "Customer ledger"}</dd></div><div><dt className="text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl><SignatureRow labels={["Received From", "Accounts", "Authorized Signatory"]} /></>;
+function ReceiptDocument({ record, references }: { record: Collection; references?: PrintRecordReferences }) {
+  return <><CustomerBlock name={record.customerName} /><div className="border-2 border-blue-950 bg-white/90 p-6 text-center"><span className="text-[9px] font-bold uppercase text-slate-500">Amount Received</span><strong className="mt-2 block text-3xl text-blue-950">{formatCurrency(record.amount)}</strong><span className="mt-2 block text-xs text-slate-600">via {record.paymentMode}</span></div><dl className="mt-5 grid gap-3 text-[10px] sm:grid-cols-2"><div><dt className="text-slate-500">Invoice / Order Reference</dt><dd className="font-semibold">{references?.invoice ?? references?.order ?? (foundationMode ? "Customer ledger" : record.invoiceId ?? record.orderId ?? "Customer ledger")}</dd></div><div><dt className="text-slate-500">Payment Reference</dt><dd className="font-semibold">{record.referenceNumber ?? "-"}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Remarks</dt><dd className="font-semibold">{record.remarks ?? "-"}</dd></div></dl>{record.status === "Reversed" ? <p className="mt-4 text-xs font-bold">REVERSED: {record.reversalReason}</p> : null}<SignatureRow labels={["Received From", "Accounts", "Authorized Signatory"]} /></>;
 }
 
-function InvoiceDocument({ record }: { record: SalesInvoice }) {
-  return <><CustomerBlock name={record.customerName} address={record.customerAddressSnapshot} phone={record.customerPhoneSnapshot} contact={record.customerContactSnapshot} /><div className="mb-3 grid grid-cols-2 gap-4 border border-slate-300 bg-white/90 p-3 text-[9px]"><div><span className="text-slate-500">Order reference</span><strong className="block">{record.orderId ?? "-"}</strong></div><div className="text-right"><span className="text-slate-500">Delivery reference(s)</span><strong className="block">{record.deliveryIds.join(", ")}</strong></div></div><LinesTable lines={record.lines} /><Totals subtotal={record.subtotal} discount={record.discountTotal} total={record.total} /><p className="mt-4 text-[9px] text-slate-600"><b>Status:</b> {record.status} | <b>Remarks:</b> {record.remarks ?? "-"}</p><SignatureRow labels={["Prepared By", "Accounts", "Authorized Signatory"]} /></>;
+function InvoiceDocument({ record, references }: { record: SalesInvoice; references?: PrintRecordReferences }) {
+  return <><CustomerBlock name={record.customerName} address={record.customerAddressSnapshot} phone={record.customerPhoneSnapshot} contact={record.customerContactSnapshot} /><div className="mb-3 grid grid-cols-2 gap-4 border border-slate-300 bg-white/90 p-3 text-[9px]"><div><span className="text-slate-500">Order reference</span><strong className="block">{references?.order ?? (foundationMode ? "-" : record.orderId ?? "-")}</strong></div><div className="text-right"><span className="text-slate-500">Delivery reference(s)</span><strong className="block">{references?.deliveries?.join(", ") ?? (foundationMode ? "-" : record.deliveryIds.join(", "))}</strong></div></div><LinesTable lines={record.lines} /><Totals subtotal={record.subtotal} discount={record.discountTotal} total={record.total} /><p className="mt-4 text-[9px] text-slate-600"><b>Status:</b> {record.status} | <b>Remarks:</b> {record.remarks ?? "-"}</p><SignatureRow labels={["Prepared By", "Accounts", "Authorized Signatory"]} /></>;
 }
 
 function VoucherDocument({ record, voucherType }: { record: AccountTransaction; voucherType: "DEBIT VOUCHER" | "CREDIT VOUCHER" }) {
@@ -318,7 +353,7 @@ function VoucherDocument({ record, voucherType }: { record: AccountTransaction; 
 function ImportCostDocument({ record }: { record: ImportCase }) {
   const snapshot = record.snapshot;
   if (!snapshot) return <p className="border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">No finalized landed-cost snapshot is available.</p>;
-  return <><div className="mb-4 grid gap-2 text-[10px] sm:grid-cols-3"><div><span className="text-slate-500">Supplier</span><strong className="block">{record.supplierName}</strong></div><div><span className="text-slate-500">PO / PI</span><strong className="block">{record.poNumber} / {record.piNumber ?? "-"}</strong></div><div><span className="text-slate-500">Snapshot</span><strong className="block">Version {snapshot.version} | Immutable</strong></div></div><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="px-2 py-2 text-left">Product</th><th className="px-2 py-2 text-right">Qty</th><th className="px-2 py-2 text-right">FOB / unit</th><th className="px-2 py-2 text-right">Import cost / unit</th><th className="px-2 py-2 text-right">Landed / unit</th><th className="px-2 py-2 text-right">Total</th></tr></thead><tbody>{snapshot.products.map((product) => <tr className="border-b border-slate-300" key={product.importItemId}><td className="px-2 py-2"><strong>{product.productName}</strong><span className="block text-slate-500">{product.productCode}</span></td><td className="px-2 py-2 text-right">{formatNumber(product.quantity)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.fobPerUnitBdt)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.additionalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalTotalBdt)}</td></tr>)}</tbody></table><Totals subtotal={snapshot.totalProductValueBdt} discount="0" total={snapshot.totalShipmentCostBdt} /><p className="mt-4 text-[9px] text-slate-600">Additional allocated import cost: {formatCurrency(snapshot.totalAdditionalCostBdt)}. Customs duty values are final assessed product amounts, not ERP-generated tax formulas.</p><SignatureRow labels={["Prepared By", "Checked By", "Authorized Owner"]} /></>;
+  return <><div className="mb-4 grid gap-2 text-[10px] sm:grid-cols-3"><div><span className="text-slate-500">Supplier</span><strong className="block">{record.supplierName}</strong></div><div><span className="text-slate-500">PO / PI</span><strong className="block">{record.poNumber} / {record.piNumber ?? "-"}</strong></div><div><span className="text-slate-500">Snapshot</span><strong className="block">Version {snapshot.version} | Immutable</strong></div></div><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-blue-950 text-white"><th className="px-2 py-2 text-left">Product</th><th className="px-2 py-2 text-right">Qty</th><th className="px-2 py-2 text-right">FOB / unit</th><th className="px-2 py-2 text-right">Import cost / unit</th><th className="px-2 py-2 text-right">Landed / unit</th><th className="px-2 py-2 text-right">Total</th></tr></thead><tbody>{snapshot.products.map((product) => <tr className="border-b border-slate-300" key={product.importItemId}><td className="px-2 py-2"><strong>{product.productName}</strong><span className="block text-slate-500">{product.productCode}</span></td><td className="px-2 py-2 text-right">{formatNumber(product.quantity)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.fobPerUnitBdt)}</td><td className="px-2 py-2 text-right">{formatCurrency(product.additionalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalPerUnitBdt)}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(product.finalTotalBdt)}</td></tr>)}</tbody></table><dl className="ml-auto mt-3 grid w-64 gap-1 text-[10px]"><div className="flex justify-between"><dt>FOB value (BDT)</dt><dd>{formatCurrency(snapshot.totalProductValueBdt)}</dd></div><div className="flex justify-between"><dt>Additional import costs</dt><dd>{formatCurrency(snapshot.totalAdditionalCostBdt)}</dd></div><div className="flex justify-between border-t-2 border-blue-950 pt-2 text-xs font-bold"><dt>Final landed total</dt><dd>{formatCurrency(snapshot.totalShipmentCostBdt)}</dd></div></dl><p className="mt-4 text-[9px] text-slate-600">Additional allocated import cost: {formatCurrency(snapshot.totalAdditionalCostBdt)}. Customs duty values are final assessed product amounts, not ERP-generated tax formulas.</p><SignatureRow labels={["Prepared By", "Checked By", "Authorized Owner"]} /></>;
 }
 
 function EmployeePerformanceDocument({ record, from, to }: { record: SalespersonPerformanceDetail; from: string; to: string }) {

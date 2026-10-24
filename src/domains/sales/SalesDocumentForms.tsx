@@ -28,10 +28,10 @@ export function InvoiceForm({ deliveries, invoices, orders, initialDeliveryIds =
   </form>;
 }
 
-export function CancelInvoiceForm({ busy, onSubmit }: { busy: boolean; onSubmit: (reason: string) => void }) {
+export function CancelInvoiceForm({ busy, onSubmit, submitLabel = "Cancel Invoice" }: { busy: boolean; onSubmit: (reason: string) => void; submitLabel?: string }) {
   const [reason, setReason] = useState("");
   return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}>
     <label><span className={labelClass}>Cancellation Reason</span><textarea className={textareaClass} required minLength={5} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-    <div className="flex justify-end"><Button type="submit" variant="danger" disabled={busy || reason.trim().length < 5}>Cancel Invoice</Button></div>
+    <div className="flex justify-end"><Button type="submit" variant="danger" disabled={busy || reason.trim().length < 5}>{submitLabel}</Button></div>
   </form>;
 }

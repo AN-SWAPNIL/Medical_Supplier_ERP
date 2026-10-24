@@ -31,6 +31,18 @@ test("invoice-only collections resolve once and exclude reversed receipts", () =
   assert.equal(workspace.stages.collection, "Paid");
 });
 
+test("customer-level receipts count only their actual allocation to this order", () => {
+  const data = records();
+  data.collections = [{ ...data.collections[0], id: "multi-order", customerId: data.order.customerId, orderId: undefined, invoiceId: undefined, amount: "1000.00", allocations: [
+    { entryId: "one", orderId: data.order.id, invoiceId: "inv-2", amount: "250.01" },
+    { entryId: "two", orderId: "other-order", amount: "749.99" }
+  ] }];
+  const result = buildSalesOrderWorkspace(data);
+  assert.equal(result.totals?.collectedValue, "250.01");
+  assert.equal(result.collections[0].amount, "250.01");
+  assert.equal(result.collections[0].receiptAmount, "1000.00");
+});
+
 test("partial quantities, draft coverage and cancelled invoices have separate lifecycle effects", () => {
   const data = records();
   data.deliveries = data.deliveries.filter((entry) => entry.orderId === data.order.id);
@@ -86,4 +98,13 @@ test("warehouse projection strips every financial value without changing authori
   assert.equal(restricted.order.lines[0].unitPrice, "Restricted");
   assert.equal(restricted.deliveries[0].lines[0].lineTotal, "Restricted");
   assert.equal(result.order.total, "85200.00");
+});
+
+test("workspace totals preserve poisha near the database money precision", () => {
+  const data = records(); const invoice = data.invoices.find((entry) => entry.orderId === data.order.id)!;
+  invoice.total = "9999999999999999999999.99"; invoice.status = "Approved";
+  data.invoices = [invoice];
+  data.collections = [{ ...data.collections[0], orderId: data.order.id, invoiceId: invoice.id, amount: "0.01", status: "Posted" }];
+  const result = buildSalesOrderWorkspace(data);
+  assert.equal(result.totals?.outstandingValue, "9999999999999999999999.98");
 });

@@ -9,8 +9,8 @@ async function main() {
   try {
     const { data, error } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (error) throw new Error("Cannot inspect test identities");
-    // Reserved exclusively for foundation.test.ts; never match employee/company addresses.
-    const temporary = data.users.filter((user) => /^backend-(admin|sales)-[a-f0-9-]{36}@example\.invalid$/.test(user.email ?? ""));
+    // Reserved exclusively for hosted test suites; never match employee/company addresses.
+    const temporary = data.users.filter((user) => /^backend-(admin|sales|super-admin|import-officer|warehouse-manager|sales-executive|accounts|managing-director|sales-manager)-[a-f0-9-]{36}@example\.invalid$/.test(user.email ?? ""));
     console.log("Temporary hosted integration identities found:", temporary.length);
     if (!apply || !temporary.length) return;
     try {
@@ -26,6 +26,6 @@ async function main() {
       if (error) throw new Error("Temporary test identity deletion failed");
     }
     console.log("Temporary Auth identities removed. Existing employees/business records unchanged.");
-  } finally { await ctx.client.end({ timeout: 3 }); }
+  } finally { await ctx.client.end(); }
 }
 main().catch(() => { console.error("Test cleanup could not finish; credentials and identities withheld."); process.exitCode = 1; });
