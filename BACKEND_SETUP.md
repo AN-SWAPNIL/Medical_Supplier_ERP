@@ -1,6 +1,6 @@
 # MIPRO ERP Production Backend Setup
 
-Updated: 25 October 2026.
+Updated: 28 October 2026.
 
 Authentication, imports/receiving, sales/money, operating finance, employees/marketing/field visits, transaction printing, supported operational reports, the dashboard and operational settings are installed in the hosted development project. The public website is deliberately static in foundation mode; AI is deferred. The full ERP business-data migration is not complete. This guide refines `files/MIPRO_ERP_Production_Backend_Architecture_Analysis_and_Roadmap.md`.
 
@@ -44,6 +44,20 @@ Next: field-device/privacy/retention acceptance, approved Balance Sheet/opening 
 - Old supported `/app/*` links redirect to their matching `/backend/*` workspace while preserving record IDs, report query filters and print destinations.
 
 ## Authenticator And Release Security
+
+### Hosted Auth And SMTP Audit: 28 October
+
+- Account holder configured Gmail SMTP. Read-only Supabase CLI inspection confirms SMTP enabled at `smtp.gmail.com:465`, configured sender/username/name, 30 emails per hour and a one-minute resend interval. App Password values were not displayed or changed. These settings do not prove actual inbox delivery.
+- Hosted Site URL is `http://localhost:5178`. Exact recovery redirects for localhost ports 5178 and 5173 are already allowed. Public signup is disabled, email/password and email confirmation are enabled, minimum password length is 12, and TOTP enrollment/verification are enabled. No correction or rate-limit increase was needed.
+- Invitation/recovery template subjects were inspected through CLI metadata. This CLI audit did not expose the HTML template bodies; do not claim that branding, confirmation-link markup, email rendering or delivery are fully verified. Complete those checks with an authorized inbox test/provider template inspection.
+- The running local helper reports `mode=foundation` and `database=connected` at `http://localhost:5178`. The real hosted foundation suite passes all six tests, including recovery exchange/password reset, revoked access and private-file authorization. It uses reserved temporary identities and generated recovery links, not SMTP inbox delivery.
+- A fresh administrator setup/recovery link was issued through the backup-first bootstrap and saved only under ignored `artifacts/private/`. Existing administrator credentials/role and buckets were preserved. The account holder must open their own link, choose their password and enroll their own authenticator; the agent does not perform these ownership steps.
+- Before sending an actual invitation/recovery email, confirm a controlled recipient. A new employee invitation needs a distinct authorized address; an existing administrator can receive a recovery email. Do not invent a Gmail alias or send test mail to an unapproved address.
+- Account holder subsequently authorized the address matching `SUPER_ADMIN_EMAIL` and confirmed localhost:5178 only. Its existing Super Admin identity was unverified, so one setup invitation was reissued using the existing invitation service. The provider accepted the send; identity/role/password were preserved and the request was audited. Inbox receipt, template rendering, link acceptance and personal MFA enrollment still require the account holder's confirmation. Use the newest invitation, not an older generated link.
+- Two Active Super Admin employee records currently exist. Neither was created, promoted or disabled by this acceptance test. Review authorized administrator ownership before staging; changing a bootstrap email variable is not an account-transfer procedure.
+- A staging origin/project has not been selected or configured. Keep the current localhost setup until the account holder confirms the stable staging URL. Do not push the localhost-oriented repository Auth configuration over staging or alter the live demo implicitly.
+
+SMTP configuration, Auth endpoint integration, provider send acceptance, actual inbox/link acceptance and deployed staging acceptance are separate checks. The first three are now verified; the final two remain pending. No hosted Auth settings, email templates, rate limits or deployment values were changed during this audit.
 
 - Profile & Security contains real Supabase TOTP enrollment, challenge, verification and explained removal. Setup requires the current password; the private QR/key appears only to its owner during setup. Never share it or place it in logs.
 - In production/Vercel, Super Admin, Managing Director, Accounts and anyone with `manage_user_access` must verify an authenticator before business API access. Local development is optional unless `ERP_REQUIRE_MFA=true`; anyone who enrolls a verified factor must still verify it locally.

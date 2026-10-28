@@ -1,6 +1,6 @@
 # Production Backend Progress
 
-Updated: 25 October 2026. Target: the complete existing ERP, not just authentication.
+Updated: 28 October 2026. Target: the complete existing ERP, not just authentication.
 
 ## Verified Foundation
 
@@ -91,7 +91,7 @@ Final local regression: 88 tests pass; twelve hosted suites are opt-in/skipped b
 
 No new provider settings, environment values, Docker or manual database migration are needed to keep developing this increment. The following actions are still required at their relevant launch/acceptance stage:
 
-1. Before email acceptance testing, configure a verified SMTP sender in Supabase and accept your own administrator setup link privately. Do not send passwords or links in chat.
+1. Gmail SMTP is configured and was verified read-only on 28 October, along with the existing localhost Site URL/redirects, invitation-only signup and TOTP flags. The hosted authentication/recovery suite passes all six tests. After the account holder authorized the configured administrator recipient and localhost-only testing, one setup invitation was reissued for its existing unverified Super Admin identity; the provider accepted it without changing identity, role or password. Actual inbox delivery, HTML rendering, invitation acceptance and personal MFA remain unverified. Use the newest invitation privately and review the two existing Active Super Admin records before staging. Do not send passwords, App Passwords or setup links in chat.
 2. Before production, rotate the exposed development credentials, establish company-owned accounts/billing, and create isolated production credentials/project. Do not put production secrets on arbitrary preview branches.
 3. Supply the available source export and have the client approve opening stock, customer/supplier balances, cash/bank and rejected-goods treatment.
 4. Approve exact production/staging URLs, enroll privileged accounts in their own authenticators, and confirm deployment environment values, backup retention and recovery ownership. Nothing has been deployed or changed in your provider environment automatically.
